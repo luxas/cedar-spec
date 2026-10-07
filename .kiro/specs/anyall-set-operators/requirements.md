@@ -78,7 +78,8 @@ and its Lean `Cedar/Spec` + `Cedar/SymCC` counterparts unless stated.
 
 1.1 WHEN the `anyall` feature is enabled AND a policy contains `E.all(P)` or `E.any(P)`
 where `E` is an expression and `P` is a predicate, THEN the parser SHALL accept it and
-produce the corresponding AST node (`ExprKind::All` / lowered form; see design).
+produce an `ExprKind::All` node — directly for `.all`, and for `.any` via the builder's
+`!E.all(!P)` lowering (there is no `ExprKind::Any`; see design).
 
 1.2 WHEN a predicate `P` refers to the current set element, THEN the author SHALL write
 the element as the reserved keyword `it`, and the parser SHALL bind `it` to that element.
@@ -155,9 +156,10 @@ represented and printed via `!(e1 < e2)`.
 4.2 WHEN a policy containing `.all` / `.any` is converted through EST (JSON) and back, and
 through protobuf and back, THEN the result SHALL round-trip losslessly.
 
-4.3 WHEN `.any(P)` is parsed, lowered to `!.all(!P)`, and pretty-printed, THEN the printed
-form SHALL be a valid policy that re-parses to a shape-equal AST (surface-form stability is
-a design choice recorded in design.md, not a hard requirement if lowering is lossy).
+4.3 WHEN `.any(P)` is lowered (by `ExprBuilder::any` to `!.all(!P)`, at the same layer as
+`>`/`>=` — NOT in the parser) and pretty-printed, THEN the printed form SHALL be a valid
+policy that re-parses to a shape-equal AST (surface-form stability is a design choice
+recorded in design.md, not a hard requirement if lowering is lossy).
 
 ### 5. Analyzability
 

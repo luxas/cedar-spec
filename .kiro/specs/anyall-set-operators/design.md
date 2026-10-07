@@ -6,9 +6,16 @@ enum/variant names below are the actual ones in the repo as of this writing.
 ## Design decisions (summary)
 
 1. **New AST node for the universal quantifier only.** Add `All(PredExpr)` as the single
-   new expression form. `any` is lowered to `!s.all(!p)`, exactly as `e1 >= e2` is defined
-   as `!(e1 < e2)` — so only one node, one evaluator arm, one compiler arm, and one set of
-   proofs are needed.
+   new expression form. `any` has **no AST node**: it lowers to `!s.all(!p)` at the
+   **`ExprBuilder` layer** — the same layer at which `>` and `>=` are defined. In the real
+   code `ExprBuilder::greatereq` is a default trait method `self.not(self.less(e1, e2))` and
+   `ExprBuilder::greater` is `self.not(self.lesseq(e1, e2))`; there is no `BinaryOp::Greater`
+   / `GreaterEq`, so `>`/`>=` never exist as AST nodes past the builder. `any` follows that
+   precedent exactly: `ExprBuilder::any(expr, pred)` := `self.not(self.all(expr, pred.negate()))`.
+   Because every surface (the parser's CST→AST, the EST builder, the PST builder, and all
+   programmatic construction) goes through an `ExprBuilder` impl, the lowering happens **once**
+   in the trait and all callers inherit it — it is NOT done in the parser. Result: only one
+   node, one evaluator arm, one compiler arm, and one set of proofs.
 2. **`PredExpr` is a restricted, set-free `Expr`.** It is an `Expr` *without* the quantifier
    node, *without* set literals/`Set`, and *without* the `Set`-valued `Literal`; it adds a
    `Item` form denoting the current set element (surface keyword `it`). Set-free is the
@@ -111,11 +118,16 @@ Rationale for excluded forms:
 ### Construction / lowering
 
 - `ExprBuilder` gains `#[cfg(feature = "anyall")]` methods `all(expr, pred)` and
-  `any(expr, pred)`. `any` lowers immediately to `All { expr, pred: !pred }` wrapped in a
-  `UnaryApp { op: Not, .. }`, mirroring how `greatereq`/`greater` build on `less`/`lesseq`.
-- CST→AST (`parser`) gains an `anyall`-gated production for the `.all( … )` / `.any( … )`
-  access form and binds `it` → `PredExprKind::Item`. The validity checks for 1.4/1.5/1.6
-  (no nesting, set-free, `it` only inside a predicate) run here and in `Expr::try_validate`.
+  `any(expr, pred)`. `any` is a **default trait method** that lowers to
+  `self.not(self.all(expr, pred.negate()))` — i.e. `All { expr, pred: !pred }` wrapped in a
+  `UnaryApp { op: Not, .. }` — mirroring exactly how `greatereq`/`greater` are default methods
+  built on `less`/`lesseq`. This is the one place lowering happens; it is NOT in the parser.
+- CST→AST (`parser/cst_to_ast.rs`) gains an `anyall`-gated production for the `.all( … )` /
+  `.any( … )` access form that simply **calls `builder.all(..)` / `builder.any(..)`** (just as
+  the relational-op arm calls `builder.greatereq(..)` / `builder.greater(..)` at
+  `cst_to_ast.rs:2321-2322`) and binds `it` → `PredExprKind::Item`. The parser does not itself
+  construct the negation. The validity checks for 1.4/1.5/1.6 (no nesting, set-free, `it` only
+  inside a predicate) run here and in `Expr::try_validate`.
 - The `Display`/EST path: because AST→EST is lossless and infallible today (`into_expr::<est::Builder>()`),
   the EST builder gains a matching `All` form, and the pretty-printer emits `expr.all(pred)`.
   `any` prints as the lowered `!expr.all(!pred)` (acceptable per requirement 4.3), OR we keep

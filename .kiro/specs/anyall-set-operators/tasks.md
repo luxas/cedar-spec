@@ -45,10 +45,12 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 - **T1.2 Add `ExprKind::All { expr, pred }` under `#[cfg(feature = "anyall")]`.**
   Extend every exhaustive match on `ExprKind` with a flag-gated arm: `variant_order`,
   `try_type_of` (→ `Some(Type::Bool)`), `subexpressions`, `eq_shape`, `hash_shape`,
-  `cmp_shape`, `substitute_general`, `try_into_expr`. Add `ExprBuilder::all` / `::any`
-  (the latter lowering to `!expr.all(!pred)`).
+  `cmp_shape`, `substitute_general`, `try_into_expr`. Add `ExprBuilder::all` and a default
+  `ExprBuilder::any` method that lowers to `self.not(self.all(expr, pred.negate()))` — the
+  same layer and pattern as the existing `greatereq`/`greater` default methods (`>`/`>=` have
+  no AST node; neither does `any`).
   _Green check:_ core builds + unit tests pass with and without `anyall`.
-  _Satisfies:_ 2.3 (lowering), 4.1 (shape machinery), design Surface 1.
+  _Satisfies:_ 2.3 (lowering at the builder layer), 4.1 (shape machinery), design Surface 1.
 
 ## Phase 2 — Lean spec node + evaluator, gated
 
@@ -62,7 +64,11 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 - **T2.2 Add `Expr.all` constructor + `evaluate` arm + `PredExpr.instantiate` + `evalAll`.**
   `Cedar/Spec/Expr.lean` (constructor), `Cedar/Spec/Evaluator.lean` (`evalAll`, instantiation,
   new `.all` match arm; type-error when receiver is not a set; deterministic
-  `quantifierError` fold; empty-set ⇒ `true`). `any` desugars to `.not (.all e p.negate)`.
+  `quantifierError` fold; empty-set ⇒ `true`). **Lean has NO `any`**: just as the Lean
+  `BinaryOp` has `less`/`lessEq` but no `greater`/`greaterEq` (because the Rust `ExprBuilder`
+  already lowered `>`/`>=` before the AST crosses into Lean via DRT), the Lean spec receives
+  only `all`. There is therefore no `any` desugaring arm in `Evaluator.lean` — the single
+  `all` evaluator arm is all that is needed.
   _Green check:_ `lake build Cedar`; add Lean spec unit tests for 2.1/2.2/2.5/2.7.
   _Satisfies:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7.
 
@@ -92,7 +98,10 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 ## Phase 4 — Rust surface syntax + roundtrip, gated
 
 - **T4.1 Parser: CST→AST for `.all( … )` / `.any( … )` and the `it` keyword (gated).**
-  Add the access-form production and bind `it` → `PredExprKind::Item`; `.any` lowers on parse.
+  Add the access-form production and bind `it` → `PredExprKind::Item`; the production **calls
+  `builder.all(..)` / `builder.any(..)`** (the builder does the `any`→`!all(!p)` lowering, as
+  the relational arm calls `builder.greatereq(..)` at `cst_to_ast.rs:2321`). The parser does
+  not construct the negation itself.
   Keep `it` an ordinary identifier when the flag is off (1.3).
   _Green check:_ core parser tests with and without `anyall`.
   _Satisfies:_ 1.1, 1.2, 1.3, 2.3.
