@@ -27,6 +27,14 @@ enum/variant names below are the actual ones in the repo as of this writing.
    error, the whole quantifier yields one bounded, iteration-order-independent error.
 5. **Everything is behind the `anyall` feature flag** on all three surfaces; the default
    build is unchanged.
+6. **Illegal states unrepresentable (nesting + set terms).** The predicate type `PredExpr`
+   has no `All` variant and no full-`Expr` child, so a **nested quantifier is impossible to
+   construct** at the AST and Lean layers — the compiler/type-checker refuses it, not a
+   runtime validator. The EST gets the same guarantee via a parallel `PredExprNoExt`. Set
+   literals are excluded the same way. The residual operator side-conditions (no
+   `Contains`/`…`/`IsEmpty` ops in a predicate) stay as smart-constructor checks, and the
+   intentionally-permissive PST catches nesting at **PST→AST**. See
+   [Nested quantifiers are structurally impossible](#nested-quantifiers-are-structurally-impossible-make-illegal-states-unrepresentable).
 
 ---
 
@@ -114,6 +122,58 @@ Rationale for excluded forms:
 - `Contains` / `ContainsAll` / `ContainsAny` / `IsEmpty`: excluded by construction-time
   validation on `BinaryApp` / `UnaryApp` — these take or produce set terms.
 - `All`: absent from `PredExprKind`, so nesting is unrepresentable.
+
+### Nested quantifiers are structurally impossible (make illegal states unrepresentable)
+
+The "no nested quantifiers" invariant (req 1.4) is enforced **by the type, not by a runtime
+check** — the predicate of a quantifier has type `PredExpr`, and `PredExprKind` has **no `All`
+variant and no variant whose child is a full `Expr`**. Every recursive child of a `PredExpr`
+is itself a `PredExpr`. So `ExprKind::All { expr, pred: Arc<PredExpr> }` cannot transitively
+contain another `All`: there is no path in the type through which an `All` could appear below
+the top one. A nested quantifier is a value the compiler will not let you construct — not a
+value the validator rejects after the fact. This is the standard "parse, don't validate" /
+illegal-states-unrepresentable discipline.
+
+What this does and does not cover, per surface:
+
+- **AST (`cedar-policy-core::ast`): YES, fully structural for nesting.** `All.pred : PredExpr`,
+  `PredExpr` has no `All`, no `Set`, no set-valued `Literal`. Nesting and set-literals are
+  unrepresentable. The *remaining* restrictions that are NOT yet pure-structural are the
+  operator side-conditions — `BinaryApp.op ∉ {Contains, ContainsAll, ContainsAny}` and
+  `UnaryApp.op ≠ IsEmpty` — because `PredExprKind` reuses the shared `BinaryOp`/`UnaryOp`
+  enums. Those are enforced by **smart constructors** on `PredExpr` (the only public way to
+  build one; the fields are private), so an out-of-fragment op is rejected at construction. To
+  make *those* structural too would require split op enums (`PredBinaryOp` without the set
+  ops), which the design judges not worth the duplication — nesting and set terms, the
+  analyzability-critical parts, are already structural. (Open to revisiting; see note below.)
+
+- **Lean spec: YES, same shape.** `inductive PredExpr` has no `all` constructor and every child
+  is a `PredExpr`, so a nested quantifier is not a well-formed term of the type. The op
+  side-conditions are likewise maintained by the (Rust-side) constructor before the AST is
+  handed to Lean via DRT; the Lean type additionally cannot *name* `all` inside a `PredExpr`.
+
+- **EST (`cedar-policy-core::est`): needs a parallel restricted type to get the same guarantee.**
+  The EST `Expr` is a **separate, flatter enum** (`ExprNoExt` has first-class `Greater`,
+  `GreaterEq`, `Contains`, `ContainsAll`, `ContainsAny`, `IsEmpty`, `Set`, and will gain an
+  `All`), and its children are `Arc<Expr>`, not a restricted type. If we add `All { expr, pred }`
+  to the EST with `pred: Arc<Expr>`, nesting becomes representable again at the EST layer. To
+  keep the invariant structural end-to-end, the EST must mirror the AST: a `PredExprNoExt`
+  (EST's restricted predicate type) with no `All`/`Set` and `PredExpr`-typed children, so
+  `All.pred: Arc<est::PredExpr>`. AST→EST and EST→AST then map `PredExpr ↔ est::PredExpr`
+  directly and the round-trip cannot smuggle in a nested quantifier.
+
+- **PST (`cedar-policy-core::pst`): best-effort, not structural.** The PST is the *lossless
+  surface syntax* layer and is intentionally permissive (it can represent syntactically
+  well-formed but semantically invalid policies — that is its job for good error messages). A
+  nested `.all(...all...)` is *syntactically* expressible there, so the PST cannot and should
+  not make it unrepresentable; it is rejected at **PST→AST** (`pst/ast_conversions.rs`), which
+  is the first layer with the typed `PredExpr`. This is the same place other semantic
+  restrictions are caught, so it is consistent, not a special case.
+
+**Net:** nesting and set-literals are made structurally impossible at the AST, Lean, and
+(with a `PredExprNoExt`) EST layers — the layers that carry a *typed* tree. The op
+side-conditions and the inherently-untyped PST surface are enforced by smart
+constructors / the PST→AST gate. This is recorded as **design decision #6** below.
 
 ### Construction / lowering
 

@@ -88,9 +88,13 @@ the element as the reserved keyword `it`, and the parser SHALL bind `it` to that
 `.any(` and SHALL treat `it` as an ordinary identifier exactly as today (no behavior
 change in the default build).
 
-1.4 WHEN a predicate `P` contains a nested `.all` / `.any`, THEN the parser (or a
-post-parse well-formedness check) SHALL reject it: nested quantifiers are disallowed for
-performance and analyzability.
+1.4 Nested `.all` / `.any` SHALL be **structurally impossible** in every typed tree: a
+quantifier's predicate has type `PredExpr` (AST / Lean) or `PredExprNoExt` (EST), which has no
+quantifier variant and no full-`Expr` child, so a nested quantifier cannot be constructed —
+this is enforced by the type, not a runtime check. WHEN nested quantifiers appear in the
+*untyped* surface syntax (PST / CST), THEN the PST→AST conversion SHALL reject them (the first
+layer at which the typed `PredExpr` exists). Nested quantifiers are disallowed for performance
+and analyzability.
 
 1.5 WHEN a predicate `P` contains a set term — a set literal, or any sub-expression whose
 value type is Set (including `it` used where `it` is itself a set, and the set operators

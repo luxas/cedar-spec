@@ -107,10 +107,14 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   _Satisfies:_ 1.1, 1.2, 1.3, 2.3.
 
 - **T4.2 EST (JSON) + `Display` pretty-printer (gated).**
-  Extend `est::Builder` with the `All` form so AST→EST stays lossless/infallible; emit
-  `expr.all(pred)` (and `any` as its lowered `!expr.all(!pred)`). AST↔EST↔text roundtrip tests.
+  Add an EST `All { expr, pred }` form AND a parallel restricted EST predicate type
+  `PredExprNoExt` (no `All`, no `Set`, `PredExpr`-typed children) so the EST layer makes nested
+  quantifiers structurally unrepresentable, mirroring the AST. Extend `est::Builder` so AST→EST
+  stays lossless/infallible and maps `ast::PredExpr ↔ est::PredExpr` directly; emit
+  `expr.all(pred)` (and `any` as its lowered `!expr.all(!pred)`). AST↔EST↔text roundtrip tests,
+  including a test that the round-trip cannot introduce a nested quantifier.
   _Green check:_ core roundtrip tests with `anyall`.
-  _Satisfies:_ 4.1, 4.3.
+  _Satisfies:_ 1.4 (structural, EST layer), 4.1, 4.3.
 
 - **T4.3 Protobuf schema + round-trip (gated).**
   Add the `All` message to the protobuf schema and the encode/decode mapping; round-trip test.
