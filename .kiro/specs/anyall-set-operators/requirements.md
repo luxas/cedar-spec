@@ -88,13 +88,15 @@ the element as the reserved keyword `it`, and the parser SHALL bind `it` to that
 `.any(` and SHALL treat `it` as an ordinary identifier exactly as today (no behavior
 change in the default build).
 
-1.4 Nested `.all` / `.any` SHALL be **structurally impossible** in every typed tree: a
-quantifier's predicate has type `PredExpr` (AST / Lean) or `PredExprNoExt` (EST), which has no
-quantifier variant and no full-`Expr` child, so a nested quantifier cannot be constructed —
-this is enforced by the type, not a runtime check. WHEN nested quantifiers appear in the
-*untyped* surface syntax (PST / CST), THEN the PST→AST conversion SHALL reject them (the first
-layer at which the typed `PredExpr` exists). Nested quantifiers are disallowed for performance
-and analyzability.
+1.4 Nested `.all` / `.any` SHALL be **structurally impossible in the typed AST and Lean
+trees**: a quantifier's predicate has type `PredExpr`, which has no quantifier variant and no
+full-`Expr` child, so a nested quantifier cannot be constructed — enforced by the type, not a
+runtime check. The EST and PST layers stay simple for the initial implementation (their
+`any`/`all` carry a full `Expr` inner), so WHEN nested quantifiers appear in the EST/PST/CST,
+THEN the EST→AST / PST→AST conversion SHALL reject them (the first layer with the typed
+`PredExpr`). Nested quantifiers are disallowed for performance and analyzability. (A restricted
+EST predicate type that would make this structural at the EST layer too is a flagged future
+option; see design decision #6.)
 
 1.5 WHEN a predicate `P` contains a set term — a set literal, or any sub-expression whose
 value type is Set (including `it` used where `it` is itself a set, and the set operators
@@ -135,6 +137,19 @@ in policy and input size.
 
 2.7 WHEN `s` is empty, THEN `E.all(P)` SHALL be `true` and `E.any(P)` SHALL be `false`
 (vacuous truth / vacuous falsity), with no QuantifierError.
+
+2.8 (No early short-circuit — consequence of 2.5.) WHEN evaluating `E.all(P)` AND some element
+`e` makes `P[it := e]` evaluate to `false`, THEN the evaluator SHALL NOT immediately return
+`false`: because a *different* element may error and an error outranks `false` (2.5), the
+evaluator SHALL continue scanning the remaining elements and return `false` only if none of
+them errors. (By the `any`→`!all(!P)` lowering, `.any` likewise SHALL NOT short-circuit on the
+first `true`.) The evaluator MAY exit early upon encountering the first *error* (that is already
+the final result). This makes evaluation O(n) in the set size with no best-case short-circuit —
+an accepted cost of the deterministic error semantics for the initial implementation.
+_Alternative (documented, NOT adopted; see design "Alternative error semantics"):_ a
+`false`-decides-`all` semantics that permits short-circuiting on a decisive `false`/`true` and
+only surfaces errors when no element is decisive. It is faster and more error-tolerant but
+breaks the conjunction/disjunction-expansion identity; recorded for a possible future revisit.
 
 ### 3. `anyall` feature gate
 

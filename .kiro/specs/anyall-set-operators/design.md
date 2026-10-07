@@ -27,14 +27,16 @@ enum/variant names below are the actual ones in the repo as of this writing.
    error, the whole quantifier yields one bounded, iteration-order-independent error.
 5. **Everything is behind the `anyall` feature flag** on all three surfaces; the default
    build is unchanged.
-6. **Illegal states unrepresentable (nesting + set terms).** The predicate type `PredExpr`
-   has no `All` variant and no full-`Expr` child, so a **nested quantifier is impossible to
-   construct** at the AST and Lean layers — the compiler/type-checker refuses it, not a
-   runtime validator. The EST gets the same guarantee via a parallel `PredExprNoExt`. Set
-   literals are excluded the same way. The residual operator side-conditions (no
-   `Contains`/`…`/`IsEmpty` ops in a predicate) stay as smart-constructor checks, and the
-   intentionally-permissive PST catches nesting at **PST→AST**. See
-   [Nested quantifiers are structurally impossible](#nested-quantifiers-are-structurally-impossible-make-illegal-states-unrepresentable).
+6. **Illegal states unrepresentable (nesting + set terms) — at the AST and Lean layers.** The
+   predicate type `PredExpr` has no `All` variant and no full-`Expr` child, so a **nested
+   quantifier is impossible to construct** in the typed AST and Lean trees — the
+   compiler/type-checker refuses it, not a runtime validator. Set literals are excluded the
+   same way. For the initial implementation, **EST and PST stay simple**: their `any`/`all`
+   forms carry a *full `Expr`* inner (not a restricted type), so nesting is representable there
+   and is rejected at EST→AST / PST→AST. ⚠️ Flagged to revisit (a restricted `est::PredExpr`
+   would push the guarantee to EST). The operator side-conditions (no
+   `Contains`/`…`/`IsEmpty` in a predicate) stay as AST smart-constructor checks by decision.
+   See [Nested quantifiers are structurally impossible](#nested-quantifiers-are-structurally-impossible-make-illegal-states-unrepresentable).
 
 ---
 
@@ -152,28 +154,27 @@ What this does and does not cover, per surface:
   side-conditions are likewise maintained by the (Rust-side) constructor before the AST is
   handed to Lean via DRT; the Lean type additionally cannot *name* `all` inside a `PredExpr`.
 
-- **EST (`cedar-policy-core::est`): needs a parallel restricted type to get the same guarantee.**
-  The EST `Expr` is a **separate, flatter enum** (`ExprNoExt` has first-class `Greater`,
-  `GreaterEq`, `Contains`, `ContainsAll`, `ContainsAny`, `IsEmpty`, `Set`, and will gain an
-  `All`), and its children are `Arc<Expr>`, not a restricted type. If we add `All { expr, pred }`
-  to the EST with `pred: Arc<Expr>`, nesting becomes representable again at the EST layer. To
-  keep the invariant structural end-to-end, the EST must mirror the AST: a `PredExprNoExt`
-  (EST's restricted predicate type) with no `All`/`Set` and `PredExpr`-typed children, so
-  `All.pred: Arc<est::PredExpr>`. AST→EST and EST→AST then map `PredExpr ↔ est::PredExpr`
-  directly and the round-trip cannot smuggle in a nested quantifier.
+- **EST (`cedar-policy-core::est`) and PST (`cedar-policy-core::pst`): simple for now — NOT
+  structural (deliberate).** The EST `Expr` is a separate, flatter enum (`ExprNoExt` has
+  first-class `Greater`, `Contains`, `Set`, etc., with `Arc<Expr>` children) and the PST is the
+  intentionally-permissive lossless surface-syntax layer. For the initial implementation, EST
+  and PST gain `any`/`all` forms whose inner predicate is a **full `Expr`** (EST) / ordinary
+  surface expression (PST) — they do **not** get a restricted `PredExpr`-typed child, so at
+  those two layers a nested quantifier is *representable*. The invariant is restored at the
+  boundary into the typed tree: **EST→AST and PST→AST reject nesting / set-terms** (the first
+  layers where the typed `PredExpr` exists), which is where other semantic restrictions are
+  caught anyway. ⚠️ **FLAG TO REVISIT:** mirroring the AST with a restricted `est::PredExpr`
+  (and the same for the op side-conditions via split op enums) would push the guarantee all the
+  way out to EST, at the cost of type duplication and extra conversion code. Deferred by
+  explicit decision; the analyzability-critical structural guarantee already holds at the AST
+  and Lean layers that the solver and proofs actually consume.
 
-- **PST (`cedar-policy-core::pst`): best-effort, not structural.** The PST is the *lossless
-  surface syntax* layer and is intentionally permissive (it can represent syntactically
-  well-formed but semantically invalid policies — that is its job for good error messages). A
-  nested `.all(...all...)` is *syntactically* expressible there, so the PST cannot and should
-  not make it unrepresentable; it is rejected at **PST→AST** (`pst/ast_conversions.rs`), which
-  is the first layer with the typed `PredExpr`. This is the same place other semantic
-  restrictions are caught, so it is consistent, not a special case.
-
-**Net:** nesting and set-literals are made structurally impossible at the AST, Lean, and
-(with a `PredExprNoExt`) EST layers — the layers that carry a *typed* tree. The op
-side-conditions and the inherently-untyped PST surface are enforced by smart
-constructors / the PST→AST gate. This is recorded as **design decision #6** below.
+**Net:** nesting and set-literals are made **structurally impossible at the AST and Lean
+layers** — the typed trees that the evaluator, validator, SymCC and the Lean proofs consume.
+EST and PST hold a full-`Expr` inner for now and rely on the EST→AST / PST→AST conversion to
+reject nesting; tightening them to structural is a flagged future option. The op
+side-conditions (no `Contains`/`…`/`IsEmpty` in a predicate) stay as AST smart-constructor
+checks by decision. This is recorded as **design decision #6** below.
 
 ### Construction / lowering
 
@@ -276,6 +277,15 @@ def evalAll (e : Expr) (p : PredExpr) (req : Request) (es : Entities) : Result V
   -- Deterministic QuantifierError: fold over the set in its canonical order.
   -- If ANY element's predicate errors, the whole thing is `.error .quantifierError`
   -- (req 2.5), independent of order; otherwise it is the conjunction of the booleans.
+  --
+  -- NO EARLY SHORT-CIRCUIT ON FALSE. A plain `&&`-style loop stops at the first `false`,
+  -- but `.all` must NOT: a later element could still ERROR, and an error outranks `false`
+  -- (req 2.5). So the fold cannot return `.ok false` the moment an element is false — it
+  -- must keep scanning the remaining elements for a possible error. The accumulator
+  -- therefore tracks "false seen so far" while continuing, and only collapses to `.ok false`
+  -- once the whole set is known error-free. (It MAY stop early on the first ERROR, since an
+  -- error is already the final answer — early exit on error does not change the result,
+  -- only early exit on false would.)
   match s.elts.foldl step (.ok true) with …
 
 -- new arm in `evaluate`:
@@ -371,6 +381,34 @@ Properties the implementation must preserve:
 - **NOT first-error-wins** (that would be non-deterministic — rejected alternative in RFC 0021).
 - **NOT errors-as-false** (that would break the conjunction/disjunction interpretation —
   rejected alternative in RFC 0021).
+- **No early short-circuit to `false`.** Because an error on *any* element outranks a `false`
+  on another (req 2.5), the `.all` evaluation loop **cannot** stop and return `false` at the
+  first element whose predicate is `false` — it must continue scanning every remaining element
+  to detect a possible error. (By the lowering, `.any` inherits this: it cannot stop at the
+  first `true`.) Early exit on the first *error* is fine (an error is already the final
+  answer); early exit on the first *false* is not. This makes `.all`/`.any` **O(n)** in the set
+  size in all cases, with no best-case short-circuit — an accepted cost of the deterministic
+  error semantics for the initial implementation.
+
+### Alternative error semantics (NOT chosen for the initial implementation — flagged)
+
+The initial implementation follows RFC 0021: an error on any element produces `QuantifierError`
+even when another element already makes the quantifier `false`. There is a defensible
+**alternative** worth recording for a future revisit:
+
+> **`false`-decides-`all` (short-circuiting) semantics.** Treat `.all` as decided `false` as
+> soon as *some* element's predicate evaluates to `false`, regardless of whether *other*
+> elements would error — and dually, `.any` decided `true` as soon as some element is `true`.
+> Only if NO element is decisive (`.all`: none false; `.any`: none true) do remaining element
+> errors surface as `QuantifierError`.
+
+Trade-offs: it **permits early short-circuit** (best-case sub-`O(n)`) and is arguably closer to
+how `is_authorized` tolerates per-element errors, but it **breaks the "quantifier = its
+conjunction/disjunction expansion" identity** (the expansion `p(e₁) && p(e₂)` would error where
+the quantifier returns `false`), and it makes the result depend on whether a decisive element
+exists *anywhere* in the set rather than being a clean fold. It is **not** adopted now; it is
+recorded here as the primary candidate if short-circuit performance or error-tolerance becomes
+a requirement. (See req 2.8.)
 
 In Lean this is `Error.quantifierError`; in Rust it is a new evaluation-error variant, both
 `#[cfg(feature = "anyall")]` / flag-gated.
@@ -378,8 +416,9 @@ In Lean this is `Error.quantifierError`; in Rust it is a new evaluation-error va
 ## Analyzability (explicit)
 
 `.all` / `.any` are decidable **iff the predicate contains no set term** — exactly the
-restriction `PredExpr` encodes. Source: Mudathir, M. (2025), *Solving Set Constraints with
-Comprehensions and …*, TU Wien,
+restriction `PredExpr` encodes. Source: Mohamed Mudathir, Nick Feng, Clark Barrett, Cesare
+Tinelli, Andrew Reynolds, Marsha Chechik (2025), *Solving Set Constraints with Comprehensions
+and Bounded Quantifiers*, FMCAD 2025,
 [PDF](https://repositum.tuwien.at/bitstream/20.500.12708/219545/1/Mohamed%20Mudathir%20-%202025%20-%20Solving%20Set%20Constraints%20with%20Comprehensions%20and...pdf).
 Non-nested bounded set quantifiers over a set-free predicate compile to a bounded conjunction
 the SMT solver can decide; nested quantifiers and set-valued predicates are excluded precisely

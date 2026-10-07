@@ -68,9 +68,12 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   `BinaryOp` has `less`/`lessEq` but no `greater`/`greaterEq` (because the Rust `ExprBuilder`
   already lowered `>`/`>=` before the AST crosses into Lean via DRT), the Lean spec receives
   only `all`. There is therefore no `any` desugaring arm in `Evaluator.lean` — the single
-  `all` evaluator arm is all that is needed.
-  _Green check:_ `lake build Cedar`; add Lean spec unit tests for 2.1/2.2/2.5/2.7.
-  _Satisfies:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7.
+  `all` evaluator arm is all that is needed. The `evalAll` fold MUST NOT short-circuit to
+  `.ok false` on the first false element — it must keep scanning for a possible error (req
+  2.8); it may stop early only on the first error.
+  _Green check:_ `lake build Cedar`; add Lean spec unit tests for 2.1/2.2/2.5/2.7, plus a test
+  that `[false-element, erroring-element].all(..)` yields `quantifierError`, not `false` (2.8).
+  _Satisfies:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8.
 
 - **T2.3 Repair the structural proofs over `Expr` (gated).**
   Add the `.all` case everywhere a `Thm/` proof recurses over `Expr`: `Thm/WellTyped*`,
@@ -85,9 +88,12 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 - **T3.1 Implement the Rust evaluator arm for `ExprKind::All` (gated).**
   Mirror the Lean semantics exactly: instantiate `PredExpr` with each element, deterministic
   `QuantifierError` (new evaluation-error variant, witness = smallest erroring element by the
-  existing `Ord`), empty-set ⇒ `true`, non-set receiver ⇒ type error.
-  _Green check:_ core tests with `--features anyall`; parity unit tests mirroring the Lean ones.
-  _Satisfies:_ 2.1, 2.2, 2.4, 2.5, 2.6, 2.7.
+  existing `Ord`), empty-set ⇒ `true`, non-set receiver ⇒ type error. Do NOT short-circuit on
+  the first `false`; scan all elements for a possible error first (req 2.8), matching the Lean
+  fold exactly.
+  _Green check:_ core tests with `--features anyall`; parity unit tests mirroring the Lean ones
+  (including the false-then-error ⇒ QuantifierError case, req 2.8).
+  _Satisfies:_ 2.1, 2.2, 2.4, 2.5, 2.6, 2.7, 2.8.
 
 - **T3.2 Implement the Rust validator / well-formedness checks (gated).**
   Type rule for `All` (as T2.3); reject nested quantifiers (1.4), set-containing predicates
@@ -107,14 +113,13 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   _Satisfies:_ 1.1, 1.2, 1.3, 2.3.
 
 - **T4.2 EST (JSON) + `Display` pretty-printer (gated).**
-  Add an EST `All { expr, pred }` form AND a parallel restricted EST predicate type
-  `PredExprNoExt` (no `All`, no `Set`, `PredExpr`-typed children) so the EST layer makes nested
-  quantifiers structurally unrepresentable, mirroring the AST. Extend `est::Builder` so AST→EST
-  stays lossless/infallible and maps `ast::PredExpr ↔ est::PredExpr` directly; emit
-  `expr.all(pred)` (and `any` as its lowered `!expr.all(!pred)`). AST↔EST↔text roundtrip tests,
-  including a test that the round-trip cannot introduce a nested quantifier.
+  Add an EST `All { expr, pred }` form whose `pred` is a **full `Expr`** (EST stays simple — no
+  restricted predicate type for now; nesting is rejected at EST→AST). Extend `est::Builder` so
+  AST→EST stays lossless/infallible; emit `expr.all(pred)` (and `any` as its lowered
+  `!expr.all(!pred)`). AST↔EST↔text roundtrip tests. ⚠️ Flagged: a restricted `est::PredExpr`
+  (structural non-nesting at EST) is a possible future tightening.
   _Green check:_ core roundtrip tests with `anyall`.
-  _Satisfies:_ 1.4 (structural, EST layer), 4.1, 4.3.
+  _Satisfies:_ 4.1, 4.3.
 
 - **T4.3 Protobuf schema + round-trip (gated).**
   Add the `All` message to the protobuf schema and the encode/decode mapping; round-trip test.
