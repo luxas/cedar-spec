@@ -44,6 +44,15 @@ libc = "0.2.177"
 [features]
 input-generation = []
 
+# Non-nested `.any`/`.all` set operators (spec: anyall-set-operators). Passthrough
+# to the DRT and generator stack; inert until later phases. Off by default.
+anyall = [
+    "cedar-drt/anyall",
+    "cedar-policy/anyall",
+    "cedar-policy-core/anyall",
+    "cedar-policy-generators/anyall",
+]
+
 [patch.crates-io]
 cedar-policy = { path = "../../cedar/cedar-policy" }
 cedar-policy-core = { path = "../../cedar/cedar-policy-core" }
