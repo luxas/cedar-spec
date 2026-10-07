@@ -35,9 +35,10 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 
 ## Phase 1 — Rust AST, gated, no parser/eval yet
 
-- **T1.1 Add `SetFreeLiteral` newtype and the `PredExpr` / `PredExprKind` module.**
+- **T1.1 Add the `PredExpr` / `PredExprKind` module.**
   New file `cedar-policy-core/src/ast/pred.rs`, all `#[cfg(feature = "anyall")]`; re-export
-  from `ast/mod.rs`. Include smart constructors that reject `IsEmpty` and
+  from `ast/mod.rs`. `PredExprKind::Lit` reuses the existing `Literal` directly (already
+  set-free — no wrapper type). Include smart constructors that reject `IsEmpty` and
   `Contains`/`ContainsAll`/`ContainsAny` ops and have no `Set` form.
   _Green check:_ core builds with and without `anyall`; new types only compiled under flag.
   _Satisfies:_ 1.5 (structural set-freeness), design Surface 1.

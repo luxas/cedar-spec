@@ -56,12 +56,12 @@ enum/variant names below are the actual ones in the repo as of this writing.
   `ExprKind::All` variant.
 - `cedar-policy-core/src/ast/literal.rs`: `enum Literal { Bool(bool), Long(Integer),
   String(SmolStr), EntityUID(Arc<EntityUID>) }`. **`Literal` already has no set variant** —
-  its doc comment states set literals must become `ExprKind::Set`, not `Literal`. So the
-  "introduce a new `SetFreeLiteral`" idea maps to: *`Literal` already is set-free*, and the
-  set-freeness we must enforce is "the predicate contains no `ExprKind::Set` and no
-  Set-valued sub-expression", not a new literal enum. We still introduce a dedicated
-  `SetFreeLiteral` **type alias / newtype around `Literal`** at the `PredExpr` boundary to
-  make the invariant explicit in types (see below).
+  its doc comment states set literals must become `ExprKind::Set`, not `Literal`. So the plan's
+  "introduce a new `SetFreeLiteral`" is **unnecessary**: `Literal` is already set-free, so
+  `PredExpr` reuses `Literal` directly (`Lit(Literal)`). The set-freeness we must enforce is
+  "the predicate contains no `ExprKind::Set` and no Set-valued sub-expression", which is
+  handled by `PredExpr` having no `Set` variant plus the op side-conditions — not by wrapping
+  the literal type.
 - `cedar-policy-core/src/ast/ops.rs`: `enum UnaryOp { Not, Neg, IsEmpty }` and
   `enum BinaryOp { Eq, Less, LessEq, Add, Sub, Mul, In, Contains, ContainsAll, ContainsAny,
   GetTag, HasTag }`. The set operators to EXCLUDE from a set-free predicate are
@@ -94,9 +94,8 @@ pub enum ExprKind<T = ()> {
 pub enum PredExprKind<T = ()> {
     /// The current set element, written `it`.
     Item,
-    /// A set-free literal. `SetFreeLiteral` is a newtype over `Literal`
-    /// (which is already set-free) that documents/enforces the invariant.
-    Lit(SetFreeLiteral),
+    /// A literal. `Literal` is already set-free, so no wrapper is needed.
+    Lit(Literal),
     Var(Var),
     If  { test_expr: Arc<PredExpr<T>>, then_expr: Arc<PredExpr<T>>, else_expr: Arc<PredExpr<T>> },
     And { left: Arc<PredExpr<T>>, right: Arc<PredExpr<T>> },
@@ -111,11 +110,6 @@ pub enum PredExprKind<T = ()> {
     Is   { expr: Arc<PredExpr<T>>, entity_type: EntityType },
     Record(Arc<BTreeMap<SmolStr, PredExpr<T>>>), // records allowed; set literals not
 }
-
-/// Newtype documenting that this literal participates in a set-free predicate.
-/// `Literal` already excludes sets, so this is a thin wrapper, not a new enum.
-#[cfg(feature = "anyall")]
-pub struct SetFreeLiteral(pub Literal);
 ```
 
 Rationale for excluded forms:
@@ -139,7 +133,8 @@ illegal-states-unrepresentable discipline.
 What this does and does not cover, per surface:
 
 - **AST (`cedar-policy-core::ast`): YES, fully structural for nesting.** `All.pred : PredExpr`,
-  `PredExpr` has no `All`, no `Set`, no set-valued `Literal`. Nesting and set-literals are
+  `PredExpr` has no `All` and no `Set` (and reuses the already-set-free `Literal`). Nesting and
+  set-literals are
   unrepresentable. The *remaining* restrictions that are NOT yet pure-structural are the
   operator side-conditions — `BinaryApp.op ∉ {Contains, ContainsAll, ContainsAny}` and
   `UnaryApp.op ≠ IsEmpty` — because `PredExprKind` reuses the shared `BinaryOp`/`UnaryOp`
