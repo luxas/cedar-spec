@@ -160,16 +160,67 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 
 ## Phase 7 — Docs & open questions
 
-- **T7.1 Document the feature, keyword `it`, and the set-free restriction; cite Mudathir (2025).**
+- **T7.1 Document the feature, keyword `it`, and the set-free restriction; cite Mohamed et al. (FMCAD 2025).**
   _Satisfies:_ US-1..US-6 traceability; records the resolved analyzability citation.
 
 - **T7.2 Record the sets-of-sets decidability open question (OQ-1) in the design/docs.**
   Leave it explicitly out of scope and un-implemented.
   _Satisfies:_ OQ-1.
 
----
+## Phase 8 — cvc5 runtime benchmarks (LAST — empirical analyzability characterization)
 
-## Ordering rationale
+Motivation: RFC 0021 explicitly flagged that these operators "will likely have a negative
+impact on analysis performance," and Mohamed et al. (FMCAD 2025) measured exactly this — solver
+scaling of the filter/bounded-quantifier encoding. Decidability guarantees termination, not
+tractability; this phase measures how cvc5 actually behaves on `.all`/`.any` policies in
+practice. It runs LAST because it needs the whole feature (SymCC compilation of `all`, Phase 5)
+working end-to-end.
+
+cvc5 is invoked via `LocalSolver` in `cedar-drt/fuzz/src/symcc.rs` (binary from the `CVC5` env
+var, 1 GB memory cap, tokio `timeout`). The measurable queries are the existing SymCC check
+verbs: `check-always-allows`, `check-always-denies`, `check-equivalent`, `check-implies`,
+`check-disjoint`, `check-never-errors`. The benchmark compiles `.all`/`.any` policies to SMT and
+times cvc5 on each verb.
+
+- **T8.1 Benchmark harness (new, gated).**
+  Add an `anyall`-gated benchmark binary/target under `cedar-drt/` (e.g.
+  `cedar-drt/benches/anyall_symcc.rs` or an `--anyall-bench` mode of the fuzz manager). It
+  generates `.all`/`.any` policies parameterized by the dimensions below, compiles them through
+  SymCC, invokes cvc5 per check verb, and records wall-clock solve time, cvc5 exit status
+  (sat/unsat/unknown/timeout/oom), and SMT term size. Emit CSV/JSON for plotting. Use a fixed
+  per-query `timeout` and the same 1 GB memory cap as the DRT harness so results are comparable;
+  record `unknown`/`timeout`/`oom` as first-class outcomes, not failures. Keep it OUT of the
+  default `cargo test` path (own target, `bench = false` elsewhere) so CI time is unaffected.
+  _Satisfies:_ 5.4, RFC 0021 performance drawback.
+
+- **T8.2 Dimensions to sweep (each varied independently against a fixed baseline).**
+  1. **Set size** — bound/cardinality of the quantified set (e.g. 1, 2, 4, 8, 16, 32, 64, …):
+     the primary scaling axis, since `all` compiles to a bounded conjunction over elements.
+  2. **Predicate complexity** — predicate AST depth / number of operators (a bare `it == k`
+     vs. nested `&&`/`||`/`if` chains vs. `like`/`is`/attribute access), still set-free.
+  3. **Element type** — `Long` (LIA), `String`, `Bool`, `EntityUID`, and record elements with
+     attribute access in the predicate; element theory is Condition 2 of the paper and affects
+     solver difficulty.
+  4. **Number of quantifiers per policy** — 1 vs. several *sibling* (non-nested) `.all`/`.any`
+     conjoined, to see additive vs. super-additive cost (nesting stays excluded — not a
+     dimension).
+  5. **Check verb** — all six SymCC verbs above; equivalence/implication (two policies) are
+     typically harder than always-allows/denies (one).
+  6. **`.all` vs `.any`** — confirm the `!all(!p)` lowering carries no surprising asymmetry.
+  7. **SAT vs UNSAT shape** — satisfiable (counterexample-bearing) vs. unsatisfiable queries,
+     which cvc5 handles very differently (mirrors the paper's sat/unsat split).
+  _Satisfies:_ 5.4.
+
+- **T8.3 Report + regression guardrail.**
+  Produce a short results doc (table + cactus-style plot of instances solved under a time
+  budget, as in the paper's Fig. 3) under `.kiro/specs/anyall-set-operators/` or
+  `cedar-drt/benches/README`. Call out where cvc5 falls off a cliff (timeouts/unknowns) and at
+  what set size, so the feature's practical envelope is documented. OPTIONAL: a loose CI
+  smoke-bench at one small size with a generous timeout to catch gross regressions, kept off the
+  default path.
+  _Satisfies:_ 5.4 (documents the practical analyzability envelope).
+
+---
 
 1. Flags first and inert (Phase 0) → default build never changes (3.1/3.2).
 2. Node + types before behavior, per surface (Phases 1–5) → each surface compiles with the new
@@ -179,3 +230,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
    engines (and SymCC) implement it — otherwise an intermediate commit would produce a
    differential failure. This is why 3.3 ("generator gated on the same flag") is a requirement,
    not just a convenience.
+4. Benchmarks (Phase 8) run **after everything else**: they need the full SymCC pipeline
+   (Phase 5) and the generator (Phase 6) to produce and solve real `.all`/`.any` queries. They
+   measure tractability (how cvc5 scales), which decidability alone does not promise, and are
+   kept off the default `cargo test` path so they never gate a commit's green check.

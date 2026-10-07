@@ -194,6 +194,13 @@ refuse rather than emit an undecidable encoding).
 policy, THEN the `symcc-*` DRT targets SHALL confirm they agree (no counterexample where
 analysis and evaluation disagree).
 
+5.4 (Empirical tractability — decidability is not performance.) The feature SHALL ship with a
+benchmark harness that measures cvc5 solve time, outcome (sat/unsat/unknown/timeout/oom), and
+SMT term size on `.all` / `.any` policies, swept across set size, predicate complexity, element
+type, quantifier count, SymCC check verb, `.all` vs `.any`, and sat/unsat shape, and SHALL
+document the practical envelope (where cvc5 degrades or times out). The harness SHALL be kept
+off the default test path so it does not gate ordinary builds. See tasks Phase 8.
+
 ---
 
 ## Open questions / unresolved TODOs
