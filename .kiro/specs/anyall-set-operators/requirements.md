@@ -41,7 +41,7 @@ set-free. The analyzability claim is sourced to:
 > set-free `PredExpr` is exactly Condition 1.
 
 The new design also **carries over RFC 0021's chosen error semantics**: a single
-deterministic, iteration-order-independent `QuantifierError` (see requirement 2.x),
+deterministic, iteration-order-independent `QuantifierError` (see requirements 2.5 / 2.8),
 not first-error-wins and not errors-as-false.
 
 ---
@@ -169,8 +169,10 @@ only on a shared, mutually-supported language fragment.
 ### 4. Roundtrip
 
 4.1 WHEN a policy containing `.all` / `.any` is converted AST → policy string → AST, THEN
-the result SHALL be shape-equal to the original (lossless), analogous to how `e1 >= e2` is
-represented and printed via `!(e1 < e2)`.
+the result SHALL be **shape-equal to the original in the lowered normal form** — i.e. `.any`
+appears as `!s.all(!p)` and that form re-parses unchanged — exactly as `e1 >= e2` round-trips
+in its `!(e1 < e2)` normal form. (This is AST-shape-equality, NOT surface preservation of the
+`.any`/`>=` sugar: AST→EST via `try_into_expr` is structural and does not re-sugar.)
 
 4.2 WHEN a policy containing `.all` / `.any` is converted through EST (JSON) and back, and
 through protobuf and back, THEN the result SHALL round-trip losslessly.
@@ -200,6 +202,47 @@ SMT term size on `.all` / `.any` policies, swept across set size, predicate comp
 type, quantifier count, SymCC check verb, `.all` vs `.any`, and sat/unsat shape, and SHALL
 document the practical envelope (where cvc5 degrades or times out). The harness SHALL be kept
 off the default test path so it does not gate ordinary builds. See tasks Phase 8.
+
+### 6. Validation / typing
+
+6.1 WHEN the validator typechecks `E.all(P)` (equivalently `E.any(P)`) AND `E` has type
+`Set<τ>` for some element type `τ` AND the predicate `P` typechecks to `Bool` in the current
+type environment extended with `it : τ`, THEN `E.all(P)` SHALL typecheck to `Bool`.
+
+6.2 WHEN `E` does not have a set type, OR `P` does not typecheck to `Bool` under `it : τ`, THEN
+the validator SHALL reject the policy with a type error.
+
+6.3 WHEN the set's element type `τ` is not statically known as a concrete element type (e.g.
+an empty-set type or an `AnyType`/unspecified element), THEN the validator SHALL follow Cedar's
+existing treatment of such set element types (no special-casing introduced by this feature);
+the behavior SHALL match how `contains`/`containsAll` typecheck against the same element type.
+
+6.4 The type soundness of 6.1 SHALL be proved in Lean (`Thm/Validation`): a well-typed
+`E.all(P)` evaluates without a type error and yields a `Bool` (or the deterministic
+`QuantifierError`), i.e. the type rule is sound w.r.t. the evaluator of §2.
+
+### 7. Typed partial evaluation (TPE)
+
+7.1 WHEN the typed partial evaluator (`cedar-policy-core::tpe`) encounters `E.all(P)` AND the
+receiver `E` partially-evaluates to a **concrete** set value, THEN TPE SHALL evaluate the
+quantifier concretely over that set — instantiating `P` with each element `Value` (per §3's
+instantiation) — yielding `Concrete(true/false)` or the deterministic `QuantifierError`,
+matching the concrete evaluator (§2).
+
+7.2 WHEN the receiver `E` partially-evaluates to a **residual** (non-concrete) term, THEN TPE
+SHALL produce a residual `All` (a new `ResidualKind::All { expr, pred }`) rather than erroring
+or discarding the predicate, preserving the TPE soundness invariant (a residual re-evaluated
+with the remaining input agrees with full evaluation on complete input).
+
+7.3 WHEN TPE instantiates `P` for a concrete element whose own sub-terms are residual, THEN the
+per-element predicate SHALL itself be partially evaluated (the no-short-circuit rule of 2.8 is
+preserved: a residual element predicate cannot let the quantifier short-circuit past a possible
+error on another element).
+
+7.4 TPE support for `All` MAY land as a **late commit** (after the core evaluator, validator,
+roundtrip and SymCC are green); until then the `All` arm in the TPE evaluator MAY conservatively
+produce a residual `All` for any non-trivial case. The feature SHALL NOT break existing TPE
+behavior on non-`anyall` policies (3.1).
 
 ---
 

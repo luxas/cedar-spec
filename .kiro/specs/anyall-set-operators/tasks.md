@@ -79,10 +79,10 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 - **T2.3 Repair the structural proofs over `Expr` (gated).**
   Add the `.all` case everywhere a `Thm/` proof recurses over `Expr`: `Thm/WellTyped*`,
   `Thm/Validation/Typechecker*`, `Thm/Validation/Validator.lean`, and evaluator-soundness
-  lemmas. Prove the sound type rule: `e : Set τ` and `pred : Bool` under `it : τ` ⇒
-  `e.all(pred) : Bool`.
+  lemmas. Prove the sound type rule (req 6.1/6.4): `e : Set τ` and `pred : Bool` under `it : τ`
+  ⇒ `e.all(pred) : Bool`, sound w.r.t. the evaluator.
   _Green check:_ `lake build Cedar` (all proofs).
-  _Satisfies:_ 2.x type soundness, design Surface 2.
+  _Satisfies:_ 6.1, 6.4, design Surface 2.
 
 ## Phase 3 — Rust evaluator + validator, gated
 
@@ -97,10 +97,12 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   _Satisfies:_ 2.1, 2.2, 2.4, 2.5, 2.6, 2.7, 2.8.
 
 - **T3.2 Implement the Rust validator / well-formedness checks (gated).**
-  Type rule for `All` (as T2.3); reject nested quantifiers (1.4), set-containing predicates
-  (1.5), and `it` outside a predicate (1.6), in `Expr::try_validate` and the validator.
+  Implement the type rule for `All` (req 6.1–6.3: `E : Set<τ>`, `P : Bool` under `it : τ` ⇒
+  `Bool`; reject non-set receiver / non-Bool predicate; defer to existing element-type handling
+  for unknown `τ`); reject nested quantifiers (1.4), set-containing predicates (1.5), and `it`
+  outside a predicate (1.6), in `Expr::try_validate` and the validator.
   _Green check:_ core tests with `--features anyall`.
-  _Satisfies:_ 1.4, 1.5, 1.6.
+  _Satisfies:_ 1.4, 1.5, 1.6, 6.1, 6.2, 6.3.
 
 ## Phase 4 — Rust surface syntax + roundtrip, gated
 
@@ -147,16 +149,45 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   `cedar-policy-generators/src/expr.rs`: `#[cfg(feature = "anyall")]` arm generating
   `ExprKind::All` with a Set-typed receiver and a generated **set-free, non-nested** `PredExpr`
   (`arbitrary_pred_expr`). Gated on the same flag as the engines, so differential comparison
-  only happens once all engines support the node.
+  only happens once all engines support the node. **Also generate the `.any` shape:** because
+  `.any` has no node and lowers to `!all(!p)`, a generator that only emits `All` never exercises
+  `.any`. The arm MUST sometimes emit the lowered `!all(!p)` form (equivalently, call
+  `builder.any(..)`) so the `.any` surface and its lowering identity are actually produced — not
+  just assumed. The element type is varied over primitives, entities, and **records** (per the
+  B1 instantiation fix: elements are `Value`s, not just literals).
   _Green check:_ `cargo test` and `cargo test --features integration-testing` from `cedar-drt/`
   (with and without `anyall`).
-  _Satisfies:_ 3.3.
+  _Satisfies:_ 3.3, 2.3 (`.any` lowering exercised).
 
-- **T6.2 Exercise eval + analyzability differentially.**
+- **T6.2 Exercise eval + analyzability differentially — `.all` AND `.any`.**
   Confirm `eval-type-directed.rs` (via `run_eval_test`, Rust vs. Lean FFI) and the `symcc-*`
-  targets agree on generated `.all`/`.any` policies; optionally add an `anyall`-focused target.
+  targets agree on generated `.all` policies **and on the `.any`/`!all(!p)` shape from T6.1**, so
+  `.any` semantics (req 2.3) and record-valued elements (B1) are covered, not merely assumed.
+  Include a targeted differential case: a set with a record element whose predicate reads an
+  attribute of `it`.
   _Green check:_ DRT `cargo test` + `cargo test --features integration-testing`.
-  _Satisfies:_ 2.x parity, 5.3.
+  _Satisfies:_ 2.1, 2.2, 2.3, 2.5, 2.7, 2.8 (parity), 5.3.
+
+## Phase 6.5 — Typed partial evaluation (late commit)
+
+- **T6.5.1 TPE residual node + concrete-receiver evaluation (gated).**
+  Add `ResidualKind::All { expr, pred }` in `cedar-policy-core/src/tpe/residual.rs` and the
+  `Residual::from_expr` arm. In `tpe/evaluator.rs`, evaluate `All` when the receiver reduces to
+  a `Concrete` set: instantiate `pred` per element `Value` (§3 Value-instantiation, incl. record
+  elements), fold with the no-short-circuit QuantifierError semantics (2.8), and return
+  `Concrete(bool)` / `QuantifierError`.
+  _Green check:_ core tests with `--features anyall`; parity vs. the concrete evaluator on
+  concrete-receiver cases.
+  _Satisfies:_ 7.1, 7.3.
+
+- **T6.5.2 Residual-receiver passthrough + soundness (gated).**
+  When the receiver is `Partial`, produce a residual `All` rather than erroring; preserve the
+  TPE soundness invariant (residual re-evaluated on remaining input agrees with full eval). Add
+  the Lean TPE/residual `all` arm + soundness lemma if the spec's TPE is modeled in `cedar-lean`.
+  Runs LATE — a conservative "always residualize non-trivial `All`" is an acceptable first cut.
+  _Green check:_ `lake build Cedar` (if Lean TPE touched) + core tests with `--features anyall`;
+  confirm non-`anyall` TPE behavior is byte-unchanged (3.1).
+  _Satisfies:_ 7.2, 7.4.
 
 ## Phase 7 — Docs & open questions
 
@@ -234,3 +265,7 @@ times cvc5 on each verb.
    (Phase 5) and the generator (Phase 6) to produce and solve real `.all`/`.any` queries. They
    measure tractability (how cvc5 scales), which decidability alone does not promise, and are
    kept off the default `cargo test` path so they never gate a commit's green check.
+5. Typed partial evaluation (Phase 6.5) is sequenced **late**: it needs the Value-instantiation
+   evaluator (Phase 2/3) and reuses it for concrete receivers. Until it lands, the TPE `All` arm
+   may conservatively residualize, and the non-`anyall` default build is unaffected (3.1), so
+   deferring it never blocks an earlier green commit.

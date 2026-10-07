@@ -20,9 +20,19 @@ enum/variant names below are the actual ones in the repo as of this writing.
    node, *without* set literals/`Set`, and *without* the `Set`-valued `Literal`; it adds a
    `Item` form denoting the current set element (surface keyword `it`). Set-free is the
    analyzable fragment (Mohamed et al. 2025).
-3. **Evaluation is by instantiation.** `PredExpr` is turned into a concrete `Expr` by
-   substituting a concrete element literal for `Item`, then evaluated by the existing
-   evaluator — no second evaluator.
+3. **Evaluation is by instantiation with a `Value`, not a literal.** `PredExpr` is turned
+   into a concrete `Expr` by binding the current element — a full `Value` — to `Item`, then
+   evaluated by the existing evaluator. The element is NOT restricted to a primitive: set
+   elements are `Value`s (`prim`, `record`, `ext`, and entity UIDs), and an in-scope policy
+   such as `resource.owners.all(it.department == "eng")` quantifies over a set of **records**.
+   So instantiation substitutes a `Value` for `Item` — in Rust via the existing
+   `impl From<Value> for Expr` (`ast/expr.rs`), which reconstructs `Set`/`Record` sub-exprs; in
+   Lean by folding the `Value` into an `Expr` (`.lit`/`.set`/`.record`/`.call`) — or,
+   equivalently and more cleanly, by threading an `it ↦ Value` binding through `evaluate`
+   rather than rewriting the tree. The `.item`/`Item` leaf therefore stands for an arbitrary
+   element `Value`; `PredExpr.lit`/`Lit` is only for literals the author *wrote* in the
+   predicate, and carries `Prim`/`Literal` as before. (The receiver `it` being itself a *set*
+   stays out of scope — OQ-1 / Condition 1.)
 4. **Deterministic `QuantifierError`** (from RFC 0021): if *any* element's predicate would
    error, the whole quantifier yields one bounded, iteration-order-independent error.
 5. **Everything is behind the `anyall` feature flag** on all three surfaces; the default
@@ -184,19 +194,31 @@ checks by decision. This is recorded as **design decision #6** below.
   `cst_to_ast.rs:2321-2322`) and binds `it` → `PredExprKind::Item`. The parser does not itself
   construct the negation. The validity checks for 1.4/1.5/1.6 (no nesting, set-free, `it` only
   inside a predicate) run here and in `Expr::try_validate`.
-- The `Display`/EST path: because AST→EST is lossless and infallible today (`into_expr::<est::Builder>()`),
-  the EST builder gains a matching `All` form, and the pretty-printer emits `expr.all(pred)`.
-  `any` prints as the lowered `!expr.all(!pred)` (acceptable per requirement 4.3), OR we keep
-  a surface-preserving `Any` marker in the EST only — recorded as a design choice; default is
-  to print the lowered form for simplicity and lossless roundtrip.
+- The `Display`/EST path. **How `>=` actually round-trips (verified), and why `.any` follows
+  it:** the `ExprBuilder` *trait* lowers `>=`→`!(e1 < e2)` as a default method, and the **AST**
+  builder uses that default, so `>=` has no AST node. The **EST** builder *overrides*
+  `greater`/`greatereq` to emit first-class `ExprNoExt::Greater`/`GreaterEq` — but that override
+  only fires on the **parse / EST-JSON-input** path. AST→EST goes through `try_into_expr`
+  (`ast/expr.rs`), which walks **purely structurally** and does **NOT** re-sugar `!(e1 < e2)`
+  back into `>=`. So an AST holding `>=` (stored as `!(<)`) converts to EST `Not{ Less{} }`,
+  prints as `!(e1 < e2)`, and re-parses shape-equal **in that `!(<)` normal form** — the
+  roundtrip guarantee is AST-shape-equality in the normal form, NOT surface preservation of the
+  sugar. `.all`/`.any` inherit exactly this: `.all` prints as `expr.all(pred)`; `.any` has no
+  node and prints as the lowered **`!expr.all(!pred)`** (req 4.3), and that lowered form
+  re-parses shape-equal. The EST gains a first-class `All` form (its `pred` is a full `Expr`,
+  per decision #6); on the AST→EST path that `pred` is already the lowered/normalized predicate,
+  so no re-sugaring is needed or attempted. (Do **not** rely on `into_expr::<est::Builder>()`
+  to reconstruct a surface `.any` — it won't, by the same mechanism that leaves `>=` as `!(<)`.)
 
 ### Touch list (Rust)
 
 `ast/expr.rs` (variant + `variant_order`, `try_type_of`→`Type::Bool`, `subexpressions`,
 `eq_shape`/`hash_shape`/`cmp_shape`, `substitute_general`, `try_into_expr`), new `ast/pred.rs`,
-`ast/mod.rs` re-export, `parser` CST→AST, `est` builder + JSON, `evaluator`, `validator`,
-protobuf schema + round-trip, and the public `cedar-policy` re-exports — every one guarded by
-`#[cfg(feature = "anyall")]`.
+`ast/mod.rs` re-export, `parser` CST→AST, `est` builder + JSON (a recursive `PredExpr` message
+is needed on the protobuf side, with decode-time re-validation of the op/set-free side-conditions
+since proto bytes are untrusted), `evaluator`, `validator`, protobuf schema + round-trip,
+`tpe/residual.rs` + `tpe/evaluator.rs` (the `ResidualKind::All` arm — a LATE commit, Phase 6.5),
+and the public `cedar-policy` re-exports — every one guarded by `#[cfg(feature = "anyall")]`.
 
 ---
 
@@ -263,9 +285,16 @@ the validator and typechecker.
 Add to `Evaluator.lean`:
 
 ```lean
--- Instantiate a PredExpr into a concrete Expr by plugging a concrete element literal
--- (actually a Value) in for `.item`, then reuse `evaluate`.
-def PredExpr.instantiate (p : PredExpr) (elem : Value) : Expr := …  -- `.item ↦ literal-of elem`
+-- Instantiate a PredExpr into a concrete Expr by plugging the current element — a full
+-- `Value`, NOT just a `Prim` — in for `.item`, then reuse `evaluate`. Set elements can be
+-- records / extension values / entity UIDs, so `.item` must accept any `Value`:
+--   * either fold the `Value` into an `Expr` (`.lit`/`.set`/`.record`/`.call`), reusing the
+--     existing `Value → Expr` embedding, OR
+--   * (preferred) thread an `it ↦ Value` binding through `evaluate` and resolve `.item` to it,
+--     avoiding the Value→Expr round-trip entirely.
+-- `.item` is the element placeholder; `.lit (p : Prim)` is only for literals written IN the
+-- predicate, unchanged.
+def PredExpr.instantiate (p : PredExpr) (elem : Value) : Expr := …  -- `.item ↦ elem`
 
 def evalAll (e : Expr) (p : PredExpr) (req : Request) (es : Entities) : Result Value := do
   let s ← (evaluate e req es).as (Data.Set Value)   -- type error if not a set (req 2.4)
@@ -357,8 +386,41 @@ Empty-set case follows from the fold seed `.ok true` for `all` and its negation 
 
 ---
 
-## QuantifierError error semantics (explicit)
+## Surface interaction — Typed Partial Evaluation (TPE)
 
+The typed partial evaluator is a real subsystem: `cedar-policy-core/src/tpe/` with
+`residual.rs` (`enum Residual { Concrete { value: Value, ty } | Partial { kind: ResidualKind, ty }
+| Error(ty) }`, `ResidualKind` mirroring `ExprKind`, and `Residual::from_expr` matching each
+`ExprKind`) and `evaluator.rs`. Adding `ExprKind::All` therefore requires a corresponding TPE
+story, even though it can land as a **late commit**:
+
+- **New `ResidualKind::All { expr, pred }`** mirroring the AST node, plus the `from_expr` arm
+  that lifts an AST `All` into a residual.
+- **Concrete receiver** (req 7.1): if `E` reduces to a `Concrete` set `Value`, evaluate the
+  quantifier concretely — instantiate `P` with each element `Value` (the §3 Value-instantiation,
+  which already handles record/ext elements) — producing `Concrete(bool)` or the deterministic
+  `QuantifierError`, identical to the full evaluator.
+- **Residual receiver** (req 7.2): if `E` is `Partial`, produce a residual `All { expr, pred }`
+  rather than erroring, so the TPE soundness invariant holds (re-evaluating the residual with
+  the remaining input agrees with full evaluation).
+- **Residual element predicate** (req 7.3): when a concrete element's predicate has residual
+  sub-terms, partially-evaluate the per-element predicate; the no-short-circuit rule (2.8) is
+  preserved — a residual element result cannot let the fold short-circuit past a possible error
+  on another element, so a residual-or-false mix still has to scan for errors.
+- **Scheduling:** TPE for `All` is intentionally sequenced LATE (after Phases 1–5). Until then
+  the TPE `All` arm MAY conservatively return a residual `All` for any non-trivial case. The
+  default build (no `anyall`) is untouched (3.1), so existing TPE behavior is unaffected.
+- Lean counterpart: the Lean TPE/residual model (if the spec's TPE lives in Lean too) gains the
+  same `all` residual arm and its soundness lemma; mirror whatever `cedar-lean` already does for
+  the Rust `tpe` module.
+
+Note: `Unknown`/`Slot` handling, level validation, and `tolerant-ast` interaction are
+explicitly **out of scope** for this spec (per decision); only the TPE residual story above is
+in scope.
+
+---
+
+## QuantifierError error semantics (explicit)
 Carried verbatim in spirit from RFC 0021 and stated here as the normative choice:
 
 > **If evaluating the predicate on ANY element of the set would error, the entire `.all`
