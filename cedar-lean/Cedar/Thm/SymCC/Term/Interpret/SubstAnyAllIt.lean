@@ -476,6 +476,73 @@ theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term} {op : Op} {ts 
       | exact Op.WellTyped.string.like_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
       | (rename_i h; exact Op.WellTyped.ext_wt (extOp_wellTyped_substAnyAllIt hta h))
 
+/-- `ExtOp.WellTyped` transports across a typeOf-preserving arg map. -/
+theorem extOp_wellTyped_congr_typeOf {f : Term → Term} (hf : ∀ t, (f t).typeOf = t.typeOf)
+  {xop : ExtOp} {ts : List Term} {ty : TermType} :
+  ExtOp.WellTyped xop ts ty → ExtOp.WellTyped xop (ts.map (fun t => f t)) ty := by
+  intro hwt
+  cases hwt <;>
+    (try simp only [List.map_cons, List.map_nil]) <;>
+    first
+      | exact ExtOp.WellTyped.decimal.val_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.isV4_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.addrV4_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.prefixV4_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.addrV6_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.prefixV6_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.datetime.val_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.datetime.ofBitVec_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.duration.val_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.duration.ofBitVec_wt (by rw [hf]; assumption)
+
+/-- `Op.WellTyped` (non-`set.all`) transports across a typeOf-preserving arg map `f`.
+`set.all` is excluded (its extra `NoSetAll`/`anyAllItTyped` premises are not generic). -/
+theorem op_wellTyped_congr_typeOf {εs : SymEntities} {f : Term → Term}
+  (hf : ∀ t, (f t).typeOf = t.typeOf)
+  {op : Op} {ts : List Term} {ty : TermType} (hop : op ≠ Op.set.all) :
+  Op.WellTyped εs op ts ty → Op.WellTyped εs op (ts.map (fun t => f t)) ty := by
+  intro hwt
+  cases hwt <;>
+    (try simp only [List.map_cons, List.map_nil]) <;>
+    first
+      | exact absurd rfl hop
+      | exact Op.WellTyped.not_wt (by rw [hf]; assumption)
+      | exact Op.WellTyped.and_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.or_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.eq_wt (by rw [hf, hf]; assumption)
+      | (rename_i t₁ t₂ t₃ hb he
+         rw [← hf t₂]
+         exact Op.WellTyped.ite_wt (by rw [hf]; exact hb) (by rw [hf, hf]; exact he))
+      | exact Op.WellTyped.uuf_wt (by rw [hf]; assumption) (by assumption)
+      | exact Op.WellTyped.bvneg_wt (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvnego_wt (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvadd_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvsub_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvmul_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvsdiv_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvudiv_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvsrem_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvsmod_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvurem_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvshl_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvlshr_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvsaddo_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvssubo_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvsmulo_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvslt_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvsle_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvult_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.bvule_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.zero_extend_wt (by rw [hf]; assumption)
+      | exact Op.WellTyped.set.member_wt (by rw [hf, hf]; assumption)
+      | exact Op.WellTyped.set.subset_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.set.inter_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
+      | exact Op.WellTyped.option.get_wt (by rw [hf]; assumption)
+      | exact Op.WellTyped.record.get_wt (by rw [hf]; assumption) (by assumption)
+      | exact Op.WellTyped.string.like_wt (by rw [hf]; assumption)
+      | (rename_i h; exact Op.WellTyped.ext_wt (extOp_wellTyped_congr_typeOf hf h))
+
+
 /--
 **Lemma B (WellFormed).** `substAnyAllIt v` preserves well-formedness when `v` is
 well-formed and shares its type with every bound-variable occurrence. -/
