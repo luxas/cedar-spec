@@ -24,6 +24,7 @@ import Cedar.Thm.SymCC.Data
 import all Cedar.Thm.SymCC.Term.Interpret.Basic
 public import Cedar.Thm.SymCC.Term.WF
 import all Cedar.Thm.SymCC.Term.WF
+import Cedar.Thm.SymCC.Term.PE
 import all Cedar.Thm.SymCC.Interpretation
 
 /-! Lemmas relating `Term.substAnyAllIt` and `Term.interpretWith` (D-55). -/
@@ -647,6 +648,30 @@ theorem foldr_or_wf {εs : SymEntities} {α} {g : α → Term} :
     have htl := foldr_or_wf xs (fun y hy => hx y (by simp [hy]))
     simp only [List.foldr_cons]
     exact wf_or hhd.left htl.left hhd.right htl.right
+
+/-- A right fold of `Factory.and` over WF-literal bool terms is a literal. -/
+theorem foldr_and_isLit {εs : SymEntities} {α} {g : α → Term} :
+  ∀ (vs : List α), (∀ x ∈ vs, (g x).WellFormedLiteral εs ∧ (g x).typeOf = .bool) →
+    (vs.foldr (fun x acc => Factory.and (g x) acc) (true : Term)).isLiteral = true
+  | [], _ => by simp only [List.foldr_nil, Term.isLiteral]
+  | x :: xs, hx => by
+    have hhd := hx x (by simp)
+    have htlL := foldr_and_isLit xs (fun y hy => hx y (by simp [hy]))
+    have htlW := foldr_and_wf (g := g) xs (fun y hy => ⟨(hx y (by simp [hy])).left.left, (hx y (by simp [hy])).right⟩)
+    simp only [List.foldr_cons]
+    exact pe_and_wfl hhd.left hhd.right ⟨htlW.left, htlL⟩ htlW.right
+
+/-- A right fold of `Factory.or` over WF-literal bool terms is a literal. -/
+theorem foldr_or_isLit {εs : SymEntities} {α} {g : α → Term} :
+  ∀ (vs : List α), (∀ x ∈ vs, (g x).WellFormedLiteral εs ∧ (g x).typeOf = .bool) →
+    (vs.foldr (fun x acc => Factory.or (g x) acc) (false : Term)).isLiteral = true
+  | [], _ => by simp only [List.foldr_nil, Term.isLiteral]
+  | x :: xs, hx => by
+    have hhd := hx x (by simp)
+    have htlL := foldr_or_isLit xs (fun y hy => hx y (by simp [hy]))
+    have htlW := foldr_or_wf (g := g) xs (fun y hy => ⟨(hx y (by simp [hy])).left.left, (hx y (by simp [hy])).right⟩)
+    simp only [List.foldr_cons]
+    exact pe_or_wfl hhd.left hhd.right ⟨htlW.left, htlL⟩ htlW.right
 
 /-- A `set.all` node built from WF, `.bool`-typed, `NoSetAll`, `anyAllItTyped ety`
 bodies over a WF receiver of type `.set ety` is WF with type `.option .bool`. -/
