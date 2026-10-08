@@ -745,4 +745,21 @@ public theorem interpret_term_isRecordType {εs : SymEntities} {I : Interpretati
   t.typeOf.isRecordType = (t.interpret I).typeOf.isRecordType
 := by simp only [interpret_term_wf h₁ h₂]
 
+/-- `interpretWith σ` commutes through `option.get` exactly as `interpret` does
+(the smart ctor is a non-`set.all` app, so `σ` only threads to the argument).
+Used by `compilePred_interpretWith` (M3). -/
+public theorem interpretWith_option_get {εs : SymEntities} {σ : Option Term} (I : Interpretation) {t : Term} {ty : TermType} :
+    t.WellFormed εs → t.typeOf = .option ty →
+    (Factory.option.get t).interpretWith σ I = Factory.option.get' I (t.interpretWith σ I) := by
+  intro h₂ h₃
+  rw [Factory.option.get.eq_def]
+  split
+  case h_1 => simp only [Term.interpretWith, Factory.option.get, Factory.option.get', Factory.someOf]
+  case h_2 =>
+    split
+    case h_1 =>
+      rw [interpretWith_app_ne_setAll (by intro h; cases h), List.map₁_eq_map]
+      simp only [List.map, Op.interpret]
+    case h_2 h => simp only [h₃, TermType.option.injEq, forall_eq'] at h
+
 end Cedar.Thm
