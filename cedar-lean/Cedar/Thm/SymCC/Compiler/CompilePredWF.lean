@@ -21,6 +21,9 @@ import all Cedar.SymCC.Compiler
 import all Cedar.SymCC.Factory
 import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 import all Cedar.Thm.SymCC.Compiler.SetAllWF
+import Cedar.Thm.SymCC.Data.Basic
+import Cedar.Thm.Data.Map
+import all Cedar.Thm.SymCC.Compiler.Invert
 import Cedar.Thm.Tactics
 
 /-! Per-helper `NoSetAll` / `anyAllItTyped` preservation lemmas for the `compilePred`
@@ -197,5 +200,81 @@ theorem anyAllItTyped_compileRecord {ety : TermType} {ats : List (Attr × Term)}
   · apply anyAllItTyped_someOf; apply anyAllItTyped_recordOf
     intro p hp; simp only [List.mem_map, Prod.map] at hp; obtain ⟨q, hq, rfl⟩ := hp
     exact anyAllItTyped_option_get (h q hq)
+
+/-! ### compilePrim / compileVar (base cases) -/
+
+theorem compilePrim_pres {p : Prim} {r : Term} {εs : SymEntities} (hok : compilePrim p εs = Except.ok r) :
+    r.NoSetAll = true ∧ ∀ ety, r.anyAllItTyped ety = true := by
+  unfold compilePrim at hok
+  split at hok <;> try split at hok
+  all_goals simp only [Except.ok.injEq, reduceCtorEq] at hok
+  all_goals subst hok
+  all_goals exact ⟨noSetAll_someOf (by simp [Term.NoSetAll]), fun ety => anyAllItTyped_someOf (by simp [Term.anyAllItTyped])⟩
+
+theorem compileVar_pres {v : Var} {r : Term} {req : SymRequest} {εs : SymEntities}
+    (hwf : req.WellFormed εs) (hok : compileVar v req = Except.ok r) :
+    r.NoSetAll = true ∧ ∀ ety, r.anyAllItTyped ety = true := by
+  have ⟨_,_,hpn,hps,_,_,han,has,_,_,hrn,hrs,_,_,hcn,hcs⟩ := hwf
+  unfold compileVar at hok
+  split at hok <;> split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok <;> subst hok
+  all_goals refine ⟨noSetAll_someOf ?_, fun ety => anyAllItTyped_someOf ?_⟩
+  all_goals first
+    | exact hps | exact has | exact hrs | exact hcs
+    | exact noAnyAllItVar_anyAllItTyped _ hpn | exact noAnyAllItVar_anyAllItTyped _ han
+    | exact noAnyAllItVar_anyAllItTyped _ hrn | exact noAnyAllItVar_anyAllItTyped _ hcn
+
+/-! ### Factory.app on a well-formed UnaryFunction (uuf or udf; udf tables are literal) -/
+
+theorem noSetAll_udf_fold {t : Term} {tbl : List (Term × Term)} {dflt : Term}
+    (ht : t.NoSetAll = true) (hd : dflt.NoSetAll = true)
+    (htbl : ∀ p ∈ tbl, p.1.NoSetAll = true ∧ p.2.NoSetAll = true) :
+    (tbl.foldr (λ (p : Term × Term) t₃ => Factory.ite (Factory.eq t p.1) p.2 t₃) dflt).NoSetAll = true := by
+  induction tbl with
+  | nil => simpa using hd
+  | cons a rest ih =>
+    simp only [List.foldr_cons]
+    have ⟨ha1, ha2⟩ := htbl a (List.mem_cons_self ..)
+    exact noSetAll_ite (noSetAll_eq ht ha1) ha2 (ih (fun p hp => htbl p (List.mem_cons_of_mem a hp)))
+theorem anyAllItTyped_udf_fold {ety : TermType} {t : Term} {tbl : List (Term × Term)} {dflt : Term}
+    (ht : t.anyAllItTyped ety = true) (hd : dflt.anyAllItTyped ety = true)
+    (htbl : ∀ p ∈ tbl, p.1.anyAllItTyped ety = true ∧ p.2.anyAllItTyped ety = true) :
+    (tbl.foldr (λ (p : Term × Term) t₃ => Factory.ite (Factory.eq t p.1) p.2 t₃) dflt).anyAllItTyped ety = true := by
+  induction tbl with
+  | nil => simpa using hd
+  | cons a rest ih =>
+    simp only [List.foldr_cons]
+    have ⟨ha1, ha2⟩ := htbl a (List.mem_cons_self ..)
+    exact anyAllItTyped_ite (anyAllItTyped_eq ht ha1) ha2 (ih (fun p hp => htbl p (List.mem_cons_of_mem a hp)))
+
+theorem noSetAll_app_uf {uf : UnaryFunction} {t : Term} {εs : SymEntities}
+    (hwf : uf.WellFormed εs) (h : t.NoSetAll = true) : (Factory.app uf t).NoSetAll = true := by
+  unfold Factory.app
+  split
+  · exact noSetAll_app1 (op := Op.uuf _) (by intro h; cases h) h
+  · simp only [UnaryFunction.WellFormed, UDF.WellFormed] at hwf
+    split
+    · split
+      · rename_i t' hfind
+        exact isLiteral_noSetAll _ (hwf.right.right.right t t' (Map.find?_mem_toList hfind)).right.right.left.right
+      · exact isLiteral_noSetAll _ hwf.left.right
+    · apply noSetAll_udf_fold h (isLiteral_noSetAll _ hwf.left.right)
+      intro p hp
+      have := hwf.right.right.right p.1 p.2 (by cases p; exact hp)
+      exact ⟨isLiteral_noSetAll _ this.left.right, isLiteral_noSetAll _ this.right.right.left.right⟩
+theorem anyAllItTyped_app_uf {ety : TermType} {uf : UnaryFunction} {t : Term} {εs : SymEntities}
+    (hwf : uf.WellFormed εs) (h : t.anyAllItTyped ety = true) : (Factory.app uf t).anyAllItTyped ety = true := by
+  unfold Factory.app
+  split
+  · exact anyAllItTyped_app1 (op := Op.uuf _) h
+  · simp only [UnaryFunction.WellFormed, UDF.WellFormed] at hwf
+    split
+    · split
+      · rename_i t' hfind
+        exact isLiteral_anyAllItTyped _ (hwf.right.right.right t t' (Map.find?_mem_toList hfind)).right.right.left.right
+      · exact isLiteral_anyAllItTyped _ hwf.left.right
+    · apply anyAllItTyped_udf_fold h (isLiteral_anyAllItTyped _ hwf.left.right)
+      intro p hp
+      have := hwf.right.right.right p.1 p.2 (by cases p; exact hp)
+      exact ⟨isLiteral_anyAllItTyped _ this.left.right, isLiteral_anyAllItTyped _ this.right.right.left.right⟩
 
 end Cedar.Thm
