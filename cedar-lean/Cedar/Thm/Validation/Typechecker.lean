@@ -15,6 +15,7 @@
 -/
 
 import Cedar.Thm.Validation.Typechecker.And
+import Cedar.Thm.Validation.Typechecker.All
 import Cedar.Thm.Validation.Typechecker.BinaryApp
 import Cedar.Thm.Validation.Typechecker.Call
 import Cedar.Thm.Validation.Typechecker.GetAttr
