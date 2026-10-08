@@ -388,4 +388,39 @@ theorem noSetAll_uuf {f} {t : Term} (h : t.NoSetAll = true) : (Factory.app (.uuf
 theorem anyAllItTyped_uuf {ety : TermType} {f} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.app (.uuf f) t).anyAllItTyped ety = true := by
   unfold Factory.app; exact anyAllItTyped_app1 (op := Op.uuf f) h
 
+/-! ### set.inter / set.intersects -/
+
+theorem anyAllItTyped_set {ety : TermType} {ts : Set Term} {ty : TermType}
+    (h : Term.anyAllItTyped ety (.set ts ty) = true) : ∀ t ∈ ts.elts, Term.anyAllItTyped ety t = true := by
+  simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true] at h
+  intro t ht; exact h t ht
+
+theorem noSetAll_set_inter {a b : Term} (h1 : a.NoSetAll = true) (h2 : b.NoSetAll = true) :
+    (Factory.set.inter a b).NoSetAll = true := by
+  unfold Factory.set.inter; repeat' split
+  all_goals first
+    | (simp only [Term.NoSetAll, Set.all₁_eq_all, Set.all_eq_true]; intro t ht; exact noSetAll_set h1 t (Set.mem_inter_iff .. |>.mp ht).1)
+    | exact h1 | exact h2
+    | exact noSetAll_app2 (op := Op.set.inter) (by intro h; cases h) h1 h2
+    | simp only [Term.NoSetAll]
+theorem anyAllItTyped_set_inter {ety : TermType} {a b : Term}
+    (h1 : a.anyAllItTyped ety = true) (h2 : b.anyAllItTyped ety = true) :
+    (Factory.set.inter a b).anyAllItTyped ety = true := by
+  unfold Factory.set.inter; repeat' split
+  all_goals first
+    | (simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true]; intro t ht; exact anyAllItTyped_set h1 t (Set.mem_inter_iff .. |>.mp ht).1)
+    | exact h1 | exact h2
+    | exact anyAllItTyped_app2 (op := Op.set.inter) h1 h2
+    | simp only [Term.anyAllItTyped]
+
+theorem noSetAll_set_intersects {a b : Term} (h1 : a.NoSetAll = true) (h2 : b.NoSetAll = true) :
+    (Factory.set.intersects a b).NoSetAll = true := by
+  unfold Factory.set.intersects
+  exact noSetAll_not (noSetAll_set_isEmpty (noSetAll_set_inter h1 h2))
+theorem anyAllItTyped_set_intersects {ety : TermType} {a b : Term}
+    (h1 : a.anyAllItTyped ety = true) (h2 : b.anyAllItTyped ety = true) :
+    (Factory.set.intersects a b).anyAllItTyped ety = true := by
+  unfold Factory.set.intersects
+  exact anyAllItTyped_not (anyAllItTyped_set_isEmpty (anyAllItTyped_set_inter h1 h2))
+
 end Cedar.Thm
