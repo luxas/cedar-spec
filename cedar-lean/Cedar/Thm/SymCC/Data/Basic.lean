@@ -549,7 +549,9 @@ public inductive Op.WellTyped (εs : SymEntities) : Op → List Term → TermTyp
     (h₂ : predT.typeOf = .bool)
     (h₃ : errT.typeOf = .bool)
     (h₄ : predT.NoSetAll = true)
-    (h₅ : errT.NoSetAll = true) :
+    (h₅ : errT.NoSetAll = true)
+    (h₆ : predT.anyAllItTyped elemTy = true)
+    (h₇ : errT.anyAllItTyped elemTy = true) :
     WellTyped εs Op.set.all [setT, predT, errT] (.option .bool)
   | option.get_wt {t : Term} {ty : TermType}
     (h₁ : t.typeOf = .option ty) :

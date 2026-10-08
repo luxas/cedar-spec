@@ -73,6 +73,8 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 
 | D-56 | 5B | `Op.WellTyped.set.all_wt` carries two extra premises `h₄ : predT.NoSetAll` and `h₅ : errT.NoSetAll`, encoding the language rule "quantifier predicates are non-nested" in the term typing itself. True of every compiler-produced set.all (provable from the compilePred NoSetAll lemma), so any WF set.all term carries NoSetAll — which lets `interpret_term_app_wf` / `interpret_term_app_lit` discharge the fold via Lemma A + Lemma B + the existing interpret_term_wf / interpret_term_lit, with NO sigma-generalized interpretWith induction. `Term.NoSetAll` and `Term.substAnyAllIt` were moved out of `namespace Factory` into `Cedar.SymCC` so the dot-notation resolves in the public constructor type. Chosen over the sigma-generalized interpretWith_wf (D-55's fallback). | SETTLED |
 
+| D-57 | 5B | `Op.WellTyped.set.all_wt` additionally carries `h₆ : predT.anyAllItTyped elemTy` and `h₇ : errT.anyAllItTyped elemTy`: every occurrence of the reserved bound variable `!anyall!it` in the predicate/error bodies has type `elemTy` (the set's element type). This cannot be derived from term WF alone (var WF only requires the var's type be well-formed, not that it equals elemTy), yet the concrete fold needs it: substituting a literal element (type elemTy) for the bound variable preserves well-typedness only if the bound var was at elemTy. True of every compiler-produced set.all (compilePred binds `anyAllItVar elemTy`), discharged in compile_all_wf. `Term.anyAllItTyped` added alongside `Term.NoSetAll` in `Cedar.SymCC`. | SETTLED |
+
 ## Details
 
 ### D-01 — "phase 9"

@@ -92,6 +92,29 @@ decreasing_by
       | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
       | omega
 
+/--
+`Term.anyAllItTyped ety t` holds iff every occurrence of the reserved bound
+variable `!anyall!it` in `t` carries type `ety`. Compiler-produced predicate
+bodies satisfy this with `ety = elemTy` (they bind `anyAllItVar elemTy`), which
+is what lets the concrete fold substitute a literal element (of type `elemTy`)
+for the bound variable while preserving well-typedness (D-57). -/
+public def Term.anyAllItTyped (ety : TermType) : Term → Bool
+  | .prim _      => true
+  | .var w       => if w.id = "!anyall!it" then w.ty = ety else true
+  | .none _      => true
+  | .some t      => Term.anyAllItTyped ety t
+  | .set ts _    => ts.all₁ λ ⟨t, _⟩ => Term.anyAllItTyped ety t
+  | .record ats  => ats.toList.attach₂.all λ ⟨(_, t), _⟩ => Term.anyAllItTyped ety t
+  | .app _ ts _  => ts.attach.all λ ⟨t, _⟩ => Term.anyAllItTyped ety t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
+      | omega
+
 
 namespace Factory
 
