@@ -546,8 +546,8 @@ public inductive Op.WellTyped (εs : SymEntities) : Op → List Term → TermTyp
     WellTyped εs Op.set.inter [t₁, t₂] (.set ty)
   | set.all_wt {setT predT errT : Term} {elemTy : TermType}
     (h₁ : setT.typeOf = .set elemTy)
-    (h₂ : predT.typeOf = .option .bool)
-    (h₃ : errT.typeOf = .option .bool) :
+    (h₂ : predT.typeOf = .bool)
+    (h₃ : errT.typeOf = .bool) :
     WellTyped εs Op.set.all [setT, predT, errT] (.option .bool)
   | option.get_wt {t : Term} {ty : TermType}
     (h₁ : t.typeOf = .option ty) :
