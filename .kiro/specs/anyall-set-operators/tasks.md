@@ -15,6 +15,24 @@ all three engines understand the node.
 
 Each task lists the requirement IDs (from `requirements.md`) it satisfies.
 
+## Status overview
+
+Live implementation status. Branch-level detail lives in `branches/<branch>/{PLAN,OUTCOMES}.md`;
+decisions that may need the owner's attention are in `DECISIONS.md`.
+
+| Phase | Branch | Status |
+|---|---|---|
+| 0 | `1-anyall-feature-flags` | DONE — review converged (2 rounds) |
+| 1 | `phase1-anyall-rust-ast` | DONE — review converged (3 rounds) |
+| 2 | `phase2-anyall-lean-spec` | IMPLEMENTED — in review; T2.3 type rule deferred (D-11) |
+| 3 | `phase3-anyall-rust-eval-validator` | not started |
+| 4 | `phase4-anyall-surface-syntax` | not started |
+| 5 | `phase5-anyall-symcc` | not started |
+| 6 | `phase6-anyall-drt-differential` | not started |
+| 6.5 | `phase6_5-anyall-tpe` | not started |
+| 7 | `phase7-anyall-docs` | not started |
+| 8 | `phase8-anyall-benchmarks` | not started |
+
 ---
 
 ## Phase 0 — Feature flags, inert
@@ -25,6 +43,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   and `cedar-policy-generators/Cargo.toml`. No code paths yet.
   _Green check:_ builds unchanged with and without the flag.
   _Satisfies:_ 3.1.
+  _Status:_ DONE (cedar `e40e6d8d`, `e181a796`; cedar-spec `f427ffc`, `9964ab0`, `a814b11`).
 
 - **T0.2 Add the Lean build flag, inert.**
   Introduce the `anyall` gating mechanism in `cedar-lean/` (lakefile option / `set_option`
@@ -32,6 +51,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   constructors yet.
   _Green check:_ `lake build Cedar` unchanged.
   _Satisfies:_ 3.2.
+  _Status:_ DONE (`9e35bad`). Lean has no conditional compilation, so `Features.anyAll` is documentation only; the real gate is Rust/DRT-side (D-08).
 
 ## Phase 1 — Rust AST, gated, no parser/eval yet
 
@@ -42,6 +62,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   `Contains`/`ContainsAll`/`ContainsAny` ops and have no `Set` form.
   _Green check:_ core builds with and without `anyall`; new types only compiled under flag.
   _Satisfies:_ 1.5 (structural set-freeness), design Surface 1.
+  _Status:_ DONE (cedar `f9bcc713`, `fd487f13`).
 
 - **T1.2 Add `ExprKind::All { expr, pred }` under `#[cfg(feature = "anyall")]`.**
   Extend every exhaustive match on `ExprKind` with a flag-gated arm: `variant_order`,
@@ -52,6 +73,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   no AST node; neither does `any`).
   _Green check:_ core builds + unit tests pass with and without `anyall`.
   _Satisfies:_ 2.3 (lowering at the builder layer), 4.1 (shape machinery), design Surface 1.
+  _Status:_ DONE (cedar `e80f22c1`, `dff948a4`, `fd487f13`). As built, `any` is a free constructor `Expr::any`, not a trait default (D-05); the trait gains `type Pred`/`all`/`pred_from_ast` (D-04).
 
 ## Phase 2 — Lean spec node + evaluator, gated
 
@@ -61,6 +83,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   `sizeOf`/termination lemmas to cover the new constructors.
   _Green check:_ `lake build Cedar`.
   _Satisfies:_ 2.5/2.6 (error constructor), design Surface 2.
+  _Status:_ DONE (`b58a4fd`, `ce91a4b`). `PredExpr` lives in `Expr.lean` (not `Value.lean`).
 
 - **T2.2 Add `Expr.all` constructor + `evaluate` arm + `PredExpr.instantiate` + `evalAll`.**
   `Cedar/Spec/Expr.lean` (constructor), `Cedar/Spec/Evaluator.lean` (`evalAll`, instantiation,
@@ -75,6 +98,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   _Green check:_ `lake build Cedar`; add Lean spec unit tests for 2.1/2.2/2.5/2.7, plus a test
   that `[false-element, erroring-element].all(..)` yields `quantifierError`, not `false` (2.8).
   _Satisfies:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8.
+  _Status:_ DONE (`ce91a4b`, tests `f7239bf`: 16 tests, no-short-circuit regression verified by mutation). Implemented via `evaluatePred` (threads `it` as a full Value) rather than `PredExpr.instantiate`.
 
 - **T2.3 Repair the structural proofs over `Expr` (gated).**
   Add the `.all` case everywhere a `Thm/` proof recurses over `Expr`: `Thm/WellTyped*`,
@@ -83,6 +107,7 @@ Each task lists the requirement IDs (from `requirements.md`) it satisfies.
   ⇒ `e.all(pred) : Bool`, sound w.r.t. the evaluator.
   _Green check:_ `lake build Cedar` (all proofs).
   _Satisfies:_ 6.1, 6.4, design Surface 2.
+  _Status:_ PARTIAL (`ce91a4b`). Every structural proof has its `.all` case (about 25 files, no `sorry`). The sound type rule is NOT done: the Lean `typeOf` conservatively rejects `.all` — see D-11.
 
 ## Phase 3 — Rust evaluator + validator, gated
 
