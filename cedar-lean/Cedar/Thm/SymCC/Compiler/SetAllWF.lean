@@ -116,4 +116,32 @@ theorem anyAllItTyped_or {ety : TermType} {t₁ t₂ : Term}
     (try (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all]; simp [h1, h2])) <;>
     (try simp only [Term.anyAllItTyped])
 
+/-! ### eq -/
+
+theorem noSetAll_eq_simplify {a b : Term} (h1 : a.NoSetAll = true) (h2 : b.NoSetAll = true) :
+    (Factory.eq.simplify a b).NoSetAll = true := by
+  unfold Factory.eq.simplify; repeat' split
+  all_goals first | exact h1 | exact h2 | exact noSetAll_not h2 | exact noSetAll_not h1 | (simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all]; simp [h1, h2]) | simp only [Term.NoSetAll]
+theorem noSetAll_eq {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) :
+    (Factory.eq t₁ t₂).NoSetAll = true := by
+  unfold Factory.eq; split
+  · exact noSetAll_eq_simplify (by simp_all [Term.NoSetAll]) (by simp_all [Term.NoSetAll])
+  · simp only [Term.NoSetAll]
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_eq_simplify h1 h2
+
+theorem anyAllItTyped_eq_simplify {ety : TermType} {a b : Term}
+    (h1 : a.anyAllItTyped ety = true) (h2 : b.anyAllItTyped ety = true) :
+    (Factory.eq.simplify a b).anyAllItTyped ety = true := by
+  unfold Factory.eq.simplify; repeat' split
+  all_goals first | exact h1 | exact h2 | exact anyAllItTyped_not h2 | exact anyAllItTyped_not h1 | (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all]; simp [h1, h2]) | simp only [Term.anyAllItTyped]
+theorem anyAllItTyped_eq {ety : TermType} {t₁ t₂ : Term}
+    (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) :
+    (Factory.eq t₁ t₂).anyAllItTyped ety = true := by
+  unfold Factory.eq; split
+  · exact anyAllItTyped_eq_simplify (by simp_all [Term.anyAllItTyped]) (by simp_all [Term.anyAllItTyped])
+  · simp only [Term.anyAllItTyped]
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_eq_simplify h1 h2
+
 end Cedar.Thm
