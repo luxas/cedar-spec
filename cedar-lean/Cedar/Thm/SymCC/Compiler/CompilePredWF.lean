@@ -26,6 +26,7 @@ import Cedar.Thm.SymCC.Data.Basic
 import all Cedar.Thm.Data.Map
 import all Cedar.Thm.SymCC.Compiler.Invert
 import all Cedar.Thm.SymCC.Compiler.ExtHasAttrRec
+import Cedar.Thm.Data.List
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.Tactics
 
@@ -851,5 +852,195 @@ theorem anyAllItTyped_compileExtHasAttr {ety : TermType} {t r : Term} {ats : Lis
     (h : t.anyAllItTyped ety = true) (hok : compileExtHasAttr t ats εs = Except.ok r) : r.anyAllItTyped ety = true := by
   rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
   exact anyAllItTyped_compileExtHasAttrRec hwε h hok
+
+/-! ### compilePred_noSetAll / compilePred_anyAllItTyped (structural inductions) -/
+
+theorem compilePred_noSetAll {p : PredExpr} {it r : Term} {εnv : SymEnv}
+    (hwε : εnv.WellFormed) (hit : it.NoSetAll = true) (hok : compilePred p it εnv = Except.ok r) : r.NoSetAll = true := by
+  match p with
+  | .item => simp only [compilePred, Except.ok.injEq] at hok; subst hok; exact hit
+  | .lit l => simp only [compilePred] at hok; exact (compilePrim_pres hok).1
+  | .var v => simp only [compilePred] at hok; exact (compileVar_pres hwε.left hok).1
+  | .ite x₁ x₂ x₃ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact noSetAll_compileIf (compilePred_noSetAll hwε hit h1) (fun t₂ he => compilePred_noSetAll hwε hit he) (fun t₃ he => compilePred_noSetAll hwε hit he) hok
+  | .and x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact noSetAll_compileAnd (compilePred_noSetAll hwε hit h1) (fun t₂ he => compilePred_noSetAll hwε hit he) hok
+  | .or x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact noSetAll_compileOr (compilePred_noSetAll hwε hit h1) (fun t₂ he => compilePred_noSetAll hwε hit he) hok
+  | .unaryApp op₁ x₁ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hA : compileApp₁ op₁ (option.get t₁) <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    exact noSetAll_ifSome (compilePred_noSetAll hwε hit h1) (noSetAll_compileApp₁ (noSetAll_option_get (compilePred_noSetAll hwε hit h1)) hA)
+  | .binaryApp op₂ x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    cases h2 : compilePred x₂ it εnv <;> simp only [h2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁ t₂
+    cases hA : compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have hn1 := compilePred_noSetAll hwε hit h1
+    have hn2 := compilePred_noSetAll hwε hit h2
+    exact noSetAll_ifSome hn1 (noSetAll_ifSome hn2 (noSetAll_compileApp₂ hwε.right (noSetAll_option_get hn1) (noSetAll_option_get hn2) hA))
+  | .hasAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hH : compileHasAttr (option.get t₁) a εnv.entities <;> simp only [hH, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have hn1 := compilePred_noSetAll hwε hit h1
+    exact noSetAll_ifSome hn1 (noSetAll_compileHasAttr hwε.right (noSetAll_option_get hn1) hH)
+  | .getAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hG : compileGetAttr (option.get t₁) a εnv.entities <;> simp only [hG, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have hn1 := compilePred_noSetAll hwε hit h1
+    exact noSetAll_ifSome hn1 (noSetAll_compileGetAttr hwε.right (noSetAll_option_get hn1) hG)
+  | .extHasAttr x a ats =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact noSetAll_compileExtHasAttr hwε.right (compilePred_noSetAll hwε hit h1) hok
+  | .record axs =>
+    simp only [compilePred] at hok
+    simp_do_let (axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do Except.ok (a₁, ← compilePred x₁ it εnv))) at hok
+    rename_i ats hts
+    simp only [List.mapM₂_eq_mapM λ (q : Attr × PredExpr) => do
+        Except.ok (q.fst, ← compilePred q.snd it εnv),
+      List.mapM_ok_iff_forall₂] at hts
+    simp only [Except.ok.injEq] at hok; subst hok
+    apply noSetAll_compileRecord
+    intro q hq
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts q hq
+    cases hxv : compilePred px.snd it εnv <;>
+      simp only [hxv, Except.bind_err, Except.bind_ok, reduceCtorEq, Except.ok.injEq] at hp
+    rename_i tv
+    rw [← hp]
+    exact compilePred_noSetAll (p := px.snd) hwε hit hxv
+  | .call xfn xs =>
+    simp only [compilePred] at hok
+    simp_do_let (xs.mapM₁ (λ ⟨x₁, _⟩ => compilePred x₁ it εnv)) at hok
+    rename_i ts hts
+    simp only [List.mapM₁_eq_mapM λ (q : PredExpr) => compilePred q it εnv,
+      List.mapM_ok_iff_forall₂] at hts
+    apply noSetAll_compileCall (xfn := xfn) _ hok
+    intro t ht
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts t ht
+    exact compilePred_noSetAll (p := px) hwε hit hp
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
+      | (have := List.sizeOf_lt_of_mem hpx; omega)
+
+theorem compilePred_anyAllItTyped {p : PredExpr} {it r : Term} {εnv : SymEnv} {elemTy : TermType}
+    (hwε : εnv.WellFormed) (hit : it.anyAllItTyped elemTy = true) (hok : compilePred p it εnv = Except.ok r) : r.anyAllItTyped elemTy = true := by
+  match p with
+  | .item => simp only [compilePred, Except.ok.injEq] at hok; subst hok; exact hit
+  | .lit l => simp only [compilePred] at hok; exact (compilePrim_pres hok).2 elemTy
+  | .var v => simp only [compilePred] at hok; exact (compileVar_pres hwε.left hok).2 elemTy
+  | .ite x₁ x₂ x₃ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact anyAllItTyped_compileIf (compilePred_anyAllItTyped hwε hit h1) (fun t₂ he => compilePred_anyAllItTyped hwε hit he) (fun t₃ he => compilePred_anyAllItTyped hwε hit he) hok
+  | .and x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact anyAllItTyped_compileAnd (compilePred_anyAllItTyped hwε hit h1) (fun t₂ he => compilePred_anyAllItTyped hwε hit he) hok
+  | .or x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact anyAllItTyped_compileOr (compilePred_anyAllItTyped hwε hit h1) (fun t₂ he => compilePred_anyAllItTyped hwε hit he) hok
+  | .unaryApp op₁ x₁ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hA : compileApp₁ op₁ (option.get t₁) <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    exact anyAllItTyped_ifSome (compilePred_anyAllItTyped hwε hit h1) (anyAllItTyped_compileApp₁ (anyAllItTyped_option_get (compilePred_anyAllItTyped hwε hit h1)) hA)
+  | .binaryApp op₂ x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    cases h2 : compilePred x₂ it εnv <;> simp only [h2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁ t₂
+    cases hA : compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have hn1 := compilePred_anyAllItTyped hwε hit h1
+    have hn2 := compilePred_anyAllItTyped hwε hit h2
+    exact anyAllItTyped_ifSome hn1 (anyAllItTyped_ifSome hn2 (anyAllItTyped_compileApp₂ hwε.right (anyAllItTyped_option_get hn1) (anyAllItTyped_option_get hn2) hA))
+  | .hasAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hH : compileHasAttr (option.get t₁) a εnv.entities <;> simp only [hH, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have hn1 := compilePred_anyAllItTyped hwε hit h1
+    exact anyAllItTyped_ifSome hn1 (anyAllItTyped_compileHasAttr hwε.right (anyAllItTyped_option_get hn1) hH)
+  | .getAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hG : compileGetAttr (option.get t₁) a εnv.entities <;> simp only [hG, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have hn1 := compilePred_anyAllItTyped hwε hit h1
+    exact anyAllItTyped_ifSome hn1 (anyAllItTyped_compileGetAttr hwε.right (anyAllItTyped_option_get hn1) hG)
+  | .extHasAttr x a ats =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact anyAllItTyped_compileExtHasAttr hwε.right (compilePred_anyAllItTyped hwε hit h1) hok
+  | .record axs =>
+    simp only [compilePred] at hok
+    simp_do_let (axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do Except.ok (a₁, ← compilePred x₁ it εnv))) at hok
+    rename_i ats hts
+    simp only [List.mapM₂_eq_mapM λ (q : Attr × PredExpr) => do
+        Except.ok (q.fst, ← compilePred q.snd it εnv),
+      List.mapM_ok_iff_forall₂] at hts
+    simp only [Except.ok.injEq] at hok; subst hok
+    apply anyAllItTyped_compileRecord
+    intro q hq
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts q hq
+    cases hxv : compilePred px.snd it εnv <;>
+      simp only [hxv, Except.bind_err, Except.bind_ok, reduceCtorEq, Except.ok.injEq] at hp
+    rename_i tv
+    rw [← hp]
+    exact compilePred_anyAllItTyped (p := px.snd) hwε hit hxv
+  | .call xfn xs =>
+    simp only [compilePred] at hok
+    simp_do_let (xs.mapM₁ (λ ⟨x₁, _⟩ => compilePred x₁ it εnv)) at hok
+    rename_i ts hts
+    simp only [List.mapM₁_eq_mapM λ (q : PredExpr) => compilePred q it εnv,
+      List.mapM_ok_iff_forall₂] at hts
+    apply anyAllItTyped_compileCall (xfn := xfn) _ hok
+    intro t ht
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts t ht
+    exact compilePred_anyAllItTyped (p := px) hwε hit hp
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
+      | (have := List.sizeOf_lt_of_mem hpx; omega)
 
 end Cedar.Thm
