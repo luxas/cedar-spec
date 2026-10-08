@@ -476,6 +476,36 @@ private theorem interpret_term_app_wf_record_get {εs : SymEntities} {I : Interp
   simp only [List.mem_singleton, InterpretTermWF, forall_eq, h₃] at ih
   exact wf_record_get ih.left ih.right h₁
 
+private theorem interpret_term_app_wf_set_all {εs : SymEntities} {I : Interpretation} {ts : List Term} {ty : TermType}
+  (h₁ : Term.WellFormed εs (Term.app Op.set.all ts ty))
+  (ih : ∀ (t : Term), t ∈ ts → InterpretTermWF εs I t) :
+  InterpretTermWF εs I (Term.app Op.set.all ts ty)
+:= by
+  -- Invert the input well-formedness to the three arguments + the set.all typing rule.
+  cases h₁ with
+  | app_wf hargs hwt =>
+    cases hwt with
+    | set.all_wt hset hpred herr =>
+      rename_i setT predT errT elemTy
+      -- interpret unfolds (D-54) to app set.all over the three interpreted args
+      have ihset := ih setT (by simp)
+      have ihpred := ih predT (by simp)
+      have iherr := ih errT (by simp)
+      simp only [InterpretTermWF, Term.interpret, Term.typeOf]
+      refine ⟨?_, ?_⟩
+      · apply Term.WellFormed.app_wf
+        · intro t ht
+          simp only [List.mem_cons, List.mem_singleton, List.not_mem_nil, or_false] at ht
+          rcases ht with h | h | h <;> subst h
+          · exact ihset.left
+          · exact ihpred.left
+          · exact iherr.left
+        · exact Op.WellTyped.set.all_wt
+            (by rw [ihset.right]; exact hset)
+            (by rw [ihpred.right]; exact hpred)
+            (by rw [iherr.right]; exact herr)
+      · trivial
+
 public theorem interpret_term_app_wf {εs : SymEntities} {I : Interpretation} {op : Op} {ts : List Term} {ty : TermType}
   (h₀ : I.WellFormed εs)
   (h₁ : Term.WellFormed εs (Term.app op ts ty))
@@ -511,6 +541,7 @@ public theorem interpret_term_app_wf {εs : SymEntities} {I : Interpretation} {o
   | Op.set.member        => exact interpret_term_app_wf_set_member h₁ ih
   | Op.set.subset        => exact interpret_term_app_wf_set_subset h₁ ih
   | Op.set.inter         => exact interpret_term_app_wf_set_inter h₁ ih
+  | Op.set.all           => exact interpret_term_app_wf_set_all h₁ ih
   | .zero_extend _     => exact interpret_term_app_wf_zero_extend h₁ ih
   | Op.option.get        => exact interpret_term_app_wf_option_get h₀ h₁ ih
   | Op.record.get _      => exact interpret_term_app_wf_record_get h₁ ih

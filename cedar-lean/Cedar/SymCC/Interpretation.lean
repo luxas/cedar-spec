@@ -150,13 +150,13 @@ public def Term.interpret (I : Interpretation) : Term → Term
     let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
     .set ts' ty
   | .app Op.set.all [setT, predT, errT] ty =>
-    -- Capture-safe (D-52): interpret the set and the predicate/error bodies, but
-    -- pin the reserved bound element variable to itself so the model `I` cannot
-    -- substitute it (it is a bound, not a free environment, variable).
-    let elemTy := match setT.typeOf with | .set e => e | _ => TermType.bool
-    let I' : Interpretation :=
-      { I with vars := fun v => if v = Factory.anyAllItVar elemTy then .var v else I.vars v }
-    .app Op.set.all [setT.interpret I, predT.interpret I', errT.interpret I'] ty
+    -- D-54: interpret all three arguments under `I`. The bound element variable
+    -- `anyAllItVar` is handled uniformly as any other variable here; its binding
+    -- role is enforced by the encoder (it is emitted as the `set.filter` lambda
+    -- parameter) and by the `set.all` Op's semantics, not by a special-cased
+    -- interpretation. This keeps `interpret` compositional (so WF-preservation
+    -- follows from the per-argument IH, no non-well-formed pinned interpretation).
+    .app Op.set.all [setT.interpret I, predT.interpret I, errT.interpret I] ty
   | .app op ts ty =>
     let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
     op.interpret I ts' ty
