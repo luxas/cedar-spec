@@ -152,7 +152,7 @@ theorem interpret_compileApp₁ {op₁ : UnaryOp} {t t₁: Term} {εs : SymEntit
     replace ⟨⟨_, hty⟩, hok⟩ := hok
     simp only [hty, someOf, hok, interpret_term_some, interpret_set_isEmpty hI hwt hty]
 
-private theorem compileApp₁_ok_typeOf {op₁ : UnaryOp} {t₁ t₁' t₂ : Term}
+theorem compileApp₁_ok_typeOf {op₁ : UnaryOp} {t₁ t₁' t₂ : Term}
   (hty : t₁.typeOf = t₂.typeOf)
   (hok : compileApp₁ op₁ t₁ = Except.ok t₁') :
   ∃ t₂', compileApp₁ op₁ t₂ = Except.ok t₂'
@@ -168,7 +168,7 @@ private theorem compileApp₁_ok_typeOf {op₁ : UnaryOp} {t₁ t₁' t₂ : Ter
     replace ⟨⟨_, hty⟩, _⟩ := hok
     simp only [hty, Except.ok.injEq, exists_eq']
 
-private theorem compileApp₁_ok_typeOf_eq {op₁ : UnaryOp} {t₁ t₁' t₂ t₂' : Term} {εs : SymEntities}
+theorem compileApp₁_ok_typeOf_eq {op₁ : UnaryOp} {t₁ t₁' t₂ t₂' : Term} {εs : SymEntities}
   (hw₁ : t₁.WellFormed εs)
   (hw₂ : t₂.WellFormed εs)
   (hok₁ : compileApp₁ op₁ t₁ = Except.ok t₁')
