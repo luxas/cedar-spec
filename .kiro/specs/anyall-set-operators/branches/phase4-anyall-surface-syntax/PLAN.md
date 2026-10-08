@@ -295,8 +295,10 @@ a mutation that makes them fail. Tests to add (all `#[cfg(feature="anyall")]`):
 **Green matrix (must all pass with `--tests`), per the Phase-1/3 lesson that feature *combinations*
 break, not single flags:**
 - core: `default`, `--features anyall`, `--features anyall,tolerant-ast`,
-  `--features anyall,protobufs`, `--features experimental`, `--all-features`.
-- cedar-policy: `default`, `--features experimental`, `--all-features`.
+  `--features experimental`, `--all-features`.
+- cedar-policy: `default`, `--features experimental`, `--features protobufs`,
+  `--features protobufs,anyall`, `--all-features` (`protobufs` is a cedar-policy feature, not a
+  core one; corrected after review round 1).
 - Report lib test counts default vs `anyall` and the exact delta (expect `+N` new tests, 0 ignored),
   as Phases 1 (+12) and 3 (+48) did.
 - `cargo clippy --all-features` clean (lib) for both crates.

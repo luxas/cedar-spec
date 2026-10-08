@@ -26,8 +26,8 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 1 | `phase1-anyall-rust-ast` | DONE — review converged (3 rounds) |
 | 2 | `phase2-anyall-lean-spec` | DONE — review converged (2 rounds); T2.3 type rule deferred (D-11) |
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
-| 4 | `phase4-anyall-surface-syntax` | implemented; review round 1 running |
-| 5 | `phase5-anyall-symcc` | not started |
+| 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
+| 5 | `phase5-anyall-symcc` | planning |
 | 6 | `phase6-anyall-drt-differential` | not started |
 | 6.5 | `phase6_5-anyall-tpe` | not started |
 | 7 | `phase7-anyall-docs` | not started |

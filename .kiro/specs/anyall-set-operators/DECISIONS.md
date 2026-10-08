@@ -39,6 +39,7 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-29 | 4 | The Lean protobuf decoder (`CedarProto`) gets its `All`/`Item` arms in Phase 6, when DRT first sends `.all` to Lean. | SETTLED |
 | D-30 | 4 | The PST `All` node holds the already-checked AST `PredExpr` (keeps PST→AST conversion infallible); the EST holds a full expression, checked on conversion to the AST. | SETTLED |
 | D-31 | 4 | **Pre-existing, not caused by this work:** `cedar-drt/fuzz` does not compile against the nested cedar checkout (`proto_gen.rs` expects `BTreeMap` proto records, cedar-spec `4149769`, but cedar's `build.rs` does not configure that). Phase 6 needs the fuzz targets, so it must align the cedar checkout or the generator. | OPEN — blocks Phase 6 fuzzing |
+| D-32 | 4 | The stray-`it` check runs at each entry point (text `parse_expr` and policy conditions, EST `Clause`, proto policy bodies), not centrally. A future entry point that forgets it would let the sentinel reach evaluation as a residual unknown instead of an error. Optional hardening: a central guard (e.g. in partial evaluation / TPE). Revisit in Phase 6.5. | OPEN (review NIT) |
 
 ## Details
 
