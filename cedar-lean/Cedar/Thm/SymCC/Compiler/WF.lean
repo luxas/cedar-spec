@@ -933,6 +933,16 @@ public theorem compileOr_wf {εs : SymEntities} {t₁ t : Term} {r₂ : SymCC.Re
     exact ⟨h.left, _, h.right⟩
   · simp only [reduceCtorEq] at hok
 
+public theorem compileRecord_wf {εs : SymEntities} {ats : List (Attr × Term)}
+  (ih : ∀ a t, (a, t) ∈ ats → t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty) :
+  (compileRecord ats).WellFormed εs ∧ ∃ ty, (compileRecord ats).typeOf = .option ty := by
+  simp only [compileRecord]
+  have hwf := wf_prods_option_implies_wf_prods ih
+  have hwg := wf_prods_implies_wf_map_snd hwf
+  have ⟨hwo, ty, hty⟩ := wf_some_recordOf_map (wf_option_get_mem_of_type_snd ih)
+  have hwa := wf_ifAllSome hwg hwo hty
+  simp only [someOf, hwa, TermType.option.injEq, exists_eq', and_self]
+
 public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
   εnv.WellFormedFor x →
   compile x εnv = .ok t →
