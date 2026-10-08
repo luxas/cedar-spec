@@ -1104,6 +1104,64 @@ decreasing_by
       | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
       | (have := List.sizeOf_lt_of_mem hpx; omega)
 
+private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
+  (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
+  (hok : compile (Expr.all x₁ p) εnv = Except.ok t)
+  (ih₁ : CompileWF x₁) :
+  t.WellFormed εnv.entities ∧ ∃ ty, t.typeOf = .option ty := by
+  have hwφ₁ : SymEnv.WellFormedFor εnv x₁ := by
+    refine ⟨hwf.left, ?_⟩
+    have hv := hwf.right
+    cases hv with | all_valid hvx _ => exact hvx
+  rw [compile.eq_def] at hok
+  simp only [] at hok
+  simp_do_let (compile x₁ εnv) at hok
+  rename_i t₁ hr₁
+  have ⟨ih1w, ty1, hty1⟩ := ih₁ hwφ₁ hr₁
+  split at hok
+  · rename_i elemTy helemq
+    simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
+    rename_i pt hpt
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    rename_i hpbool
+    subst hok
+    -- itVar facts
+    have hgt := wf_option_get ih1w hty1
+    have htys : ty1 = .set elemTy := by rw [← hgt.right]; exact helemq
+    rw [htys] at hgt
+    have hel : TermType.WellFormed εnv.entities elemTy := by
+      have hw := typeOf_wf_term_is_wf hgt.left
+      rw [hgt.right] at hw
+      cases hw with | set_wf h => exact h
+    have hvarw : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).WellFormed εnv.entities :=
+      Term.WellFormed.some_wf (Term.WellFormed.var_wf hel)
+    have hvarty : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).typeOf = .option elemTy := by
+      simp only [Factory.someOf, typeOf_term_some, typeOf_term_var, Factory.anyAllItVar]
+    have hvarn : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).NoSetAll = true := by
+      simp only [Factory.someOf, Term.NoSetAll]
+    have hvara : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).anyAllItTyped elemTy = true := by
+      simp [Factory.someOf, Term.anyAllItTyped, Factory.anyAllItVar]
+    -- pt facts
+    have ⟨hptw, pty, hptty⟩ := compilePred_wf hwf.left hvarw hvarty hpt
+    have hptn := compilePred_noSetAll hwf.left hvarn hpt
+    have hpta := compilePred_anyAllItTyped (elemTy := elemTy) hwf.left hvara hpt
+    -- option.get pt facts (bool by the guard)
+    have hgp := wf_option_get hptw hptty
+    rw [hpbool] at hgp
+    have hgpn : (option.get pt).NoSetAll = true := noSetAll_option_get hptn
+    have hgpa : (option.get pt).anyAllItTyped elemTy = true := anyAllItTyped_option_get hpta
+    -- not (isSome pt) facts
+    have hns := wf_isSome hptw
+    have hnotw := wf_not hns.left hns.right
+    have hnotn : (Factory.not (isSome pt)).NoSetAll = true := noSetAll_not (noSetAll_isSome hptn)
+    have hnota : (Factory.not (isSome pt)).anyAllItTyped elemTy = true := anyAllItTyped_not (anyAllItTyped_isSome hpta)
+    -- set.all WF
+    have hsa := wf_set_all hgt.left hgt.right hgp.left hpbool hnotw.left hnotw.right hgpn hnotn hgpa hnota
+    -- ifSome wrap
+    have h := wf_ifSome_option ih1w hsa.left hsa.right
+    exact ⟨h.left, _, h.right⟩
+  · simp only [reduceCtorEq] at hok
+
 public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
   εnv.WellFormedFor x →
   compile x εnv = .ok t →
@@ -1158,7 +1216,9 @@ public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
       intro xᵢ _
       exact @compile_wf xᵢ
     exact compile_call_wf hwf hok ih
-  | .all _ _         => simp [compile] at hok
+  | .all x₁ p        =>
+    have ih₁ := @compile_wf x₁
+    exact compile_all_wf hwf hok ih₁
 
 public theorem compile_extHasAttr_typeOf {x₁ : Expr} {a : Attr} {l : List Attr} {εnv : SymEnv} {t : Term}
   (hwf : SymEnv.WellFormedFor εnv (Expr.extHasAttr x₁ a l))
