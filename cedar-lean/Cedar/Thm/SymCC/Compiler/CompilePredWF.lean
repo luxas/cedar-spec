@@ -25,6 +25,7 @@ import all Cedar.Thm.SymCC.Compiler.SetAllWF
 import Cedar.Thm.SymCC.Data.Basic
 import all Cedar.Thm.Data.Map
 import all Cedar.Thm.SymCC.Compiler.Invert
+import all Cedar.Thm.SymCC.Compiler.ExtHasAttrRec
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.Tactics
 
@@ -767,4 +768,88 @@ theorem anyAllItTyped_compileCall {xfn : ExtFun} {ts : List Term} {r : Term}
         | exact anyAllItTyped_ccwe2 (fun x y hx hy => aa_Datetime_offset hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
         | exact anyAllItTyped_ccwe2 (fun x y hx hy => aa_Datetime_durationSince hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok )
     | exact absurd hok (by simp [reduceCtorEq])
+/-! ### compileExtHasAttr (via ExtHasAttrRec) -/
+
+theorem noSetAll_compileExtHasAttrRec {t r : Term} {ats : List Attr} {εs} (hwε : εs.WellFormed) (h : t.NoSetAll = true)
+    (hok : compileExtHasAttrRec t ats εs = Except.ok r) : r.NoSetAll = true := by
+  induction ats generalizing t r with
+  | nil =>
+    rw [compileExtHasAttrRec] at hok
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hok; subst hok
+    exact noSetAll_someOf (by simp [Term.NoSetAll])
+  | cons a ats₁ ih =>
+    cases hats : ats₁ with
+    | nil =>
+      subst hats
+      simp only [compileExtHasAttrRec] at hok
+      cases hH : compileHasAttr (option.get t) a εs <;>
+        simp only [hH, bind, Except.bind, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+      simp only [Except.ok.injEq] at hok; subst hok
+      exact noSetAll_ifSome h (noSetAll_compileHasAttr hwε (noSetAll_option_get h) hH)
+    | cons b rest =>
+      subst hats
+      simp only [compileExtHasAttrRec] at hok
+      cases hH : compileHasAttr (option.get t) a εs <;>
+        simp only [hH, bind, Except.bind, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+      rename_i t₀
+      have hhas : (ifSome t t₀).NoSetAll = true := noSetAll_ifSome h (noSetAll_compileHasAttr hwε (noSetAll_option_get h) hH)
+      split at hok
+      · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hok; subst hok; exact hhas
+      · split at hok
+        · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hok; subst hok; exact hhas
+        · simp only [reduceCtorEq] at hok
+        · rename_i t₂ hG
+          cases hRec : compileExtHasAttrRec (ifSome t t₂) (b :: rest) εs with
+          | error e => simp only [hRec, bind, Except.bind, Except.bind_err, reduceCtorEq] at hok
+          | ok t₄ =>
+            simp only [hRec, bind, Except.bind, Except.bind_ok] at hok
+            have hrec := ih (t := ifSome t t₂) (noSetAll_ifSome h (noSetAll_compileGetAttr hwε (noSetAll_option_get h) hG)) hRec
+            exact noSetAll_compileAnd hhas (fun t₄' he => by simp only [Except.ok.injEq] at he; subst he; exact hrec) hok
+
+theorem anyAllItTyped_compileExtHasAttrRec {ety : TermType} {t r : Term} {ats : List Attr} {εs} (hwε : εs.WellFormed) (h : t.anyAllItTyped ety = true)
+    (hok : compileExtHasAttrRec t ats εs = Except.ok r) : r.anyAllItTyped ety = true := by
+  induction ats generalizing t r with
+  | nil =>
+    rw [compileExtHasAttrRec] at hok
+    simp only [Pure.pure, Except.pure, Except.ok.injEq] at hok; subst hok
+    exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped])
+  | cons a ats₁ ih =>
+    cases hats : ats₁ with
+    | nil =>
+      subst hats
+      simp only [compileExtHasAttrRec] at hok
+      cases hH : compileHasAttr (option.get t) a εs <;>
+        simp only [hH, bind, Except.bind, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+      simp only [Except.ok.injEq] at hok; subst hok
+      exact anyAllItTyped_ifSome h (anyAllItTyped_compileHasAttr hwε (anyAllItTyped_option_get h) hH)
+    | cons b rest =>
+      subst hats
+      simp only [compileExtHasAttrRec] at hok
+      cases hH : compileHasAttr (option.get t) a εs <;>
+        simp only [hH, bind, Except.bind, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+      rename_i t₀
+      have hhas : (ifSome t t₀).anyAllItTyped ety = true := anyAllItTyped_ifSome h (anyAllItTyped_compileHasAttr hwε (anyAllItTyped_option_get h) hH)
+      split at hok
+      · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hok; subst hok; exact hhas
+      · split at hok
+        · simp only [Pure.pure, Except.pure, Except.ok.injEq] at hok; subst hok; exact hhas
+        · simp only [reduceCtorEq] at hok
+        · rename_i t₂ hG
+          cases hRec : compileExtHasAttrRec (ifSome t t₂) (b :: rest) εs with
+          | error e => simp only [hRec, bind, Except.bind, Except.bind_err, reduceCtorEq] at hok
+          | ok t₄ =>
+            simp only [hRec, bind, Except.bind, Except.bind_ok] at hok
+            have hrec := ih (t := ifSome t t₂) (anyAllItTyped_ifSome h (anyAllItTyped_compileGetAttr hwε (anyAllItTyped_option_get h) hG)) hRec
+            exact anyAllItTyped_compileAnd hhas (fun t₄' he => by simp only [Except.ok.injEq] at he; subst he; exact hrec) hok
+
+
+theorem noSetAll_compileExtHasAttr {t r : Term} {ats : List Attr} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.NoSetAll = true) (hok : compileExtHasAttr t ats εs = Except.ok r) : r.NoSetAll = true := by
+  rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
+  exact noSetAll_compileExtHasAttrRec hwε h hok
+theorem anyAllItTyped_compileExtHasAttr {ety : TermType} {t r : Term} {ats : List Attr} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.anyAllItTyped ety = true) (hok : compileExtHasAttr t ats εs = Except.ok r) : r.anyAllItTyped ety = true := by
+  rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
+  exact anyAllItTyped_compileExtHasAttrRec hwε h hok
+
 end Cedar.Thm
