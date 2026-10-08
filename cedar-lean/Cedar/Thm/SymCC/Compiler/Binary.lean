@@ -190,7 +190,7 @@ theorem interpret_getTag {t₁ t₂ : Term} {ety : EntityType} {εs : SymEntitie
   simp only [SymTags.getTag!, SymTags.interpret, interpret_app hI hto.left hwf hto.right,
     interpret_tagOf]
 
-private theorem interpret_compileApp₂ {op₂ : BinaryOp} {t t₁ t₂: Term} {εs : SymEntities} {I : Interpretation}
+theorem interpret_compileApp₂ {op₂ : BinaryOp} {t t₁ t₂: Term} {εs : SymEntities} {I : Interpretation}
   (hwε  : εs.WellFormed)
   (hI   : Interpretation.WellFormed I εs)
   (hwφ₁ : Term.WellFormed εs t₁)
