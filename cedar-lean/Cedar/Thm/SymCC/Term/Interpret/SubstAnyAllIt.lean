@@ -755,6 +755,60 @@ theorem op_interpret_wf {εs : SymEntities} {I : Interpretation} {op : Op} {ts :
     | duration.ofBitVec_wt he => exact wf_ext_duration_ofBitVec (hargs _ (by simp)) he
 
 
+/-- `op.interpret` (non-`set.all`) of well-formed-literal arguments is a literal. -/
+theorem op_interpret_lit {εs : SymEntities} {I : Interpretation} {op : Op} {ts : List Term} {ty : TermType}
+  (h₀ : I.WellFormed εs) (hop : op ≠ Op.set.all) (hwt : Op.WellTyped εs op ts ty)
+  (hargs : ∀ t ∈ ts, t.WellFormedLiteral εs) :
+  (Op.interpret I op ts ty).isLiteral = true := by
+  simp only [Op.interpret]
+  cases hwt with
+  | not_wt h1 => exact pe_not_wfl (hargs _ (by simp)) h1
+  | and_wt h1 h2 => exact pe_and_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | or_wt h1 h2 => exact pe_or_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | eq_wt h1 => exact (pe_eq_lit (hargs _ (by simp)).right (hargs _ (by simp)).right).left
+  | ite_wt h1 h2 => exact pe_ite_wfl (hargs _ (by simp)) (hargs _ (by simp)) (hargs _ (by simp)) h1
+  | @uuf_wt f t h1 h2 =>
+    exact pe_app_wfl (hargs t (by simp)) (wf_interpretation_implies_wf_udf h₀ h2).left
+  | bvneg_wt h1 => exact pe_bvneg_wfl (hargs _ (by simp)) h1
+  | bvnego_wt h1 => exact pe_bvnego_wfl (hargs _ (by simp)) h1
+  | bvadd_wt h1 h2 => exact pe_bvadd_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvsub_wt h1 h2 => exact pe_bvsub_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvmul_wt h1 h2 => exact pe_bvmul_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvsdiv_wt h1 h2 => exact pe_bvsdiv_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvudiv_wt h1 h2 => exact pe_bvudiv_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvsrem_wt h1 h2 => exact pe_bvsrem_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvsmod_wt h1 h2 => exact pe_bvsmod_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvurem_wt h1 h2 => exact pe_bvurem_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvshl_wt h1 h2 => exact pe_bvshl_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvlshr_wt h1 h2 => exact pe_bvlshr_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvsaddo_wt h1 h2 => exact pe_bvsaddo_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvssubo_wt h1 h2 => exact pe_bvssubo_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvsmulo_wt h1 h2 => exact pe_bvsmulo_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvslt_wt h1 h2 => exact pe_bvslt_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvsle_wt h1 h2 => exact pe_bvsle_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvult_wt h1 h2 => exact pe_bvult_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | bvule_wt h1 h2 => exact pe_bvule_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | zero_extend_wt h1 => exact pe_zero_extend_wfl (hargs _ (by simp)) h1
+  | set.member_wt h1 => exact pe_set_member_wfl (hargs _ (by simp)) (hargs _ (by simp)) h1
+  | set.subset_wt h1 h2 => exact pe_set_subset_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | set.inter_wt h1 h2 => exact pe_set_inter_wfl (hargs _ (by simp)) h1 (hargs _ (by simp)) h2
+  | option.get_wt h1 => exact pe_option_get'_wfl h₀ (hargs _ (by simp)) h1
+  | record.get_wt h1 h2 => exact pe_record_get_wfl (hargs _ (by simp)) h1 h2
+  | string.like_wt h1 => exact pe_string_like_wfl (hargs _ (by simp)) h1
+  | ext_wt h1 =>
+    cases h1 with
+    | decimal.val_wt he => exact pe_ext_decimal_val_wfl (hargs _ (by simp)) he
+    | ipaddr.isV4_wt he => exact pe_ext_ipaddr_isV4_wfl (hargs _ (by simp)) he
+    | ipaddr.addrV4_wt he => exact pe_ext_ipaddr_addrV4'_wfl h₀ (hargs _ (by simp)) he
+    | ipaddr.prefixV4_wt he => exact pe_ext_ipaddr_prefixV4'_wfl h₀ (hargs _ (by simp)) he
+    | ipaddr.addrV6_wt he => exact pe_ext_ipaddr_addrV6'_wfl h₀ (hargs _ (by simp)) he
+    | ipaddr.prefixV6_wt he => exact pe_ext_ipaddr_prefixV6'_wfl h₀ (hargs _ (by simp)) he
+    | datetime.val_wt he => exact pe_ext_datetime_val_wfl (hargs _ (by simp)) he
+    | datetime.ofBitVec_wt he => exact pe_ext_datetime_ofBitVec_wfl (hargs _ (by simp)) he
+    | duration.val_wt he => exact pe_ext_duration_val_wfl (hargs _ (by simp)) he
+    | duration.ofBitVec_wt he => exact pe_ext_duration_ofBitVec_wfl (hargs _ (by simp)) he
+  | set.all_wt _ _ _ _ _ _ _ => exact absurd rfl hop
+
 /--
 **σ-generalized interpret WF.** Interpreting a well-formed, non-nested term `t`
 whose reserved-var occurrences are all at type `v.typeOf`, with the bound var
@@ -855,6 +909,84 @@ theorem interpretWith_wf {εs : SymEntities} {I : Interpretation} {v : Term}
     have := op_interpret_wf h₀ hwt' hwfargs'
     simp only [Term.typeOf]
     exact this
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts s; have := List.sizeOf_lt_of_mem ‹_ ∈ s.elts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+
+
+/-- **σ-generalized interpret literalness.** For a well-formed-literal substituend
+`v` and a well-formed, non-nested term whose reserved-var occurrences are at type
+`v.typeOf`, interpreting with the bound var mapped to `v` yields a literal. -/
+theorem interpretWith_lit {εs : SymEntities} {I : Interpretation} {v : Term}
+  (h₀ : I.WellFormed εs) (hvl : v.WellFormedLiteral εs) :
+  ∀ t : Term, t.WellFormed εs → t.NoSetAll = true → t.anyAllItTyped v.typeOf = true →
+    (Term.interpretWith (Option.some v) I t).isLiteral = true
+  | .prim p, _, _, _ => by simp only [Term.interpretWith, Term.isLiteral]
+  | .var w, _, _, hat => by
+    simp only [Term.interpretWith]
+    by_cases hw : w.id = "!anyall!it"
+    · simp only [hw, reduceIte]; exact hvl.right
+    · simp only [hw, reduceIte]
+      exact (h₀.left w (by cases ‹Term.WellFormed εs (Term.var w)› with | var_wf hvw => exact hvw)).left.right
+  | .none ty, _, _, _ => by simp only [Term.interpretWith, Factory.noneOf, Term.isLiteral]
+  | .some t, h, hn, hat => by
+    cases h with | some_wf h₁ =>
+    have hn' : t.NoSetAll = true := by simp only [Term.NoSetAll] at hn; exact hn
+    have hat' : t.anyAllItTyped v.typeOf = true := by simp only [Term.anyAllItTyped] at hat; exact hat
+    simp only [Term.interpretWith, Factory.someOf, Term.isLiteral]
+    exact interpretWith_lit h₀ hvl t h₁ hn' hat'
+  | .set s ty, h, hn, hat => by
+    cases h with | set_wf h₁ h₂ h₃ h₄ =>
+    have hnm : ∀ t ∈ s.elts, t.NoSetAll = true := noSetAll_set hn
+    have ham : ∀ t ∈ s.elts, t.anyAllItTyped v.typeOf = true := by
+      simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true] at hat; exact hat
+    simp only [Term.interpretWith, Term.isLiteral, Set.map₁_eq_map, Set.all₁_eq_all, Set.all_eq_true]
+    intro t ht
+    rw [Set.mem_map] at ht
+    rcases ht with ⟨t', ht', rfl⟩
+    exact interpretWith_lit h₀ hvl t' (h₁ t' ht') (hnm t' ht') (ham t' ht')
+  | .record ats, h, hn, hat => by
+    cases h with | record_wf h₁ h₂ =>
+    have hnm : ∀ p ∈ ats.toList, p.2.NoSetAll = true := noSetAll_record hn
+    have ham : ∀ p ∈ ats.toList, p.2.anyAllItTyped v.typeOf = true := by
+      simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hat
+      intro p hp; exact hat p.1 p.2 hp
+    simp only [Term.interpretWith, Term.isLiteral, Map.mapOnValues₂_eq_mapOnValues,
+      List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+    intro a t ht
+    rcases Map.in_mapOnValues_in_toList' ht with ⟨t', rfl, ht'⟩
+    exact interpretWith_lit h₀ hvl t' (h₁ a t' ht') (hnm (a, t') ht') (ham (a, t') ht')
+  | .app op ts ty, h, hn, hat => by
+    have ⟨hop, hargsNoSetAll⟩ := noSetAll_app hn
+    have hargsTyped : ∀ t ∈ ts, t.anyAllItTyped v.typeOf = true := by
+      have h' : (ts.attach.all (fun x => Term.anyAllItTyped v.typeOf x.val)) = true := by
+        cases op <;> first | exact absurd rfl hop | (simp only [Term.anyAllItTyped] at hat ⊢; exact hat)
+      rw [List.all_eq_true] at h'
+      intro t ht; exact h' ⟨t, ht⟩ (List.mem_attach ts ⟨t, ht⟩)
+    cases h with | app_wf hwfargs hwt =>
+    have ihW : ∀ t ∈ ts, (Term.interpretWith (Option.some v) I t).WellFormed εs ∧
+        (Term.interpretWith (Option.some v) I t).typeOf = t.typeOf :=
+      fun t ht => interpretWith_wf h₀ hvl.left t (hwfargs t ht) (hargsNoSetAll t ht) (hargsTyped t ht)
+    have ihL : ∀ t ∈ ts, (Term.interpretWith (Option.some v) I t).isLiteral = true :=
+      fun t ht => interpretWith_lit h₀ hvl t (hwfargs t ht) (hargsNoSetAll t ht) (hargsTyped t ht)
+    rw [interpretWith_app_ne_setAll hop]
+    have hwt' : Op.WellTyped εs op (ts.map₁ (fun x => Term.interpretWith (Option.some v) I x.val)) ty := by
+      rw [List.map₁_eq_map]
+      exact op_wellTyped_congr_typeOf (fun t ht => (ihW t ht).right) hop hwt
+    have hargs' : ∀ t ∈ ts.map₁ (fun x => Term.interpretWith (Option.some v) I x.val), t.WellFormedLiteral εs := by
+      intro t ht
+      simp only [List.map₁_eq_map, List.mem_map] at ht
+      rcases ht with ⟨t', ht', rfl⟩
+      exact ⟨(ihW t' ht').left, ihL t' ht'⟩
+    exact op_interpret_lit h₀ hop hwt' hargs'
 termination_by t => sizeOf t
 decreasing_by
   all_goals simp_wf
