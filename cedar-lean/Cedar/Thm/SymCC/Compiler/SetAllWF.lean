@@ -144,4 +144,66 @@ theorem anyAllItTyped_eq {ety : TermType} {t₁ t₂ : Term}
   · simp only [Term.anyAllItTyped]
   · exact anyAllItTyped_eq_simplify h1 h2
 
+/-! ### ite -/
+
+theorem noSetAll_ite_simplify {t₁ a b : Term}
+    (h1 : t₁.NoSetAll = true) (ha : a.NoSetAll = true) (hb : b.NoSetAll = true) :
+    (Factory.ite.simplify t₁ a b).NoSetAll = true := by
+  unfold Factory.ite.simplify; repeat' split
+  all_goals first | exact ha | exact hb | exact h1 | exact noSetAll_not h1 | exact noSetAll_and h1 ha | exact noSetAll_or h1 hb | (simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all]; simp [h1, ha, hb]) | simp only [Term.NoSetAll]
+theorem noSetAll_ite {t₁ t₂ t₃ : Term}
+    (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) (h3 : t₃.NoSetAll = true) :
+    (Factory.ite t₁ t₂ t₃).NoSetAll = true := by
+  unfold Factory.ite; split
+  · simp only [Term.NoSetAll]
+    exact noSetAll_ite_simplify h1 (by simp_all [Term.NoSetAll]) (by simp_all [Term.NoSetAll])
+  · exact noSetAll_ite_simplify h1 h2 h3
+
+theorem anyAllItTyped_ite_simplify {ety : TermType} {t₁ a b : Term}
+    (h1 : t₁.anyAllItTyped ety = true) (ha : a.anyAllItTyped ety = true) (hb : b.anyAllItTyped ety = true) :
+    (Factory.ite.simplify t₁ a b).anyAllItTyped ety = true := by
+  unfold Factory.ite.simplify; repeat' split
+  all_goals first | exact ha | exact hb | exact h1 | exact anyAllItTyped_not h1 | exact anyAllItTyped_and h1 ha | exact anyAllItTyped_or h1 hb | (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all]; simp [h1, ha, hb]) | simp only [Term.anyAllItTyped]
+theorem anyAllItTyped_ite {ety : TermType} {t₁ t₂ t₃ : Term}
+    (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) (h3 : t₃.anyAllItTyped ety = true) :
+    (Factory.ite t₁ t₂ t₃).anyAllItTyped ety = true := by
+  unfold Factory.ite; split
+  · simp only [Term.anyAllItTyped]
+    exact anyAllItTyped_ite_simplify h1 (by simp_all [Term.anyAllItTyped]) (by simp_all [Term.anyAllItTyped])
+  · exact anyAllItTyped_ite_simplify h1 h2 h3
+
+/-! ### isNone / isSome / ifSome -/
+
+theorem noSetAll_isNone {t : Term} (h : t.NoSetAll = true) : (Factory.isNone t).NoSetAll = true := by
+  unfold Factory.isNone; repeat' split
+  all_goals (try exact h) <;> (try exact noSetAll_eq h noSetAll_noneOf) <;>
+    (try (apply noSetAll_not; simp_all [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all])) <;>
+    (try (simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;>
+    (try simp only [Term.NoSetAll])
+theorem anyAllItTyped_isNone {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+    (Factory.isNone t).anyAllItTyped ety = true := by
+  unfold Factory.isNone; repeat' split
+  all_goals (try exact h) <;> (try exact anyAllItTyped_eq h anyAllItTyped_noneOf) <;>
+    (try (apply anyAllItTyped_not; simp_all [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all])) <;>
+    (try (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;>
+    (try simp only [Term.anyAllItTyped])
+
+theorem noSetAll_isSome {t : Term} (h : t.NoSetAll = true) : (Factory.isSome t).NoSetAll = true := by
+  unfold Factory.isSome; exact noSetAll_not (noSetAll_isNone h)
+theorem anyAllItTyped_isSome {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+    (Factory.isSome t).anyAllItTyped ety = true := by
+  unfold Factory.isSome; exact anyAllItTyped_not (anyAllItTyped_isNone h)
+
+theorem noSetAll_ifSome {g t : Term} (hg : g.NoSetAll = true) (ht : t.NoSetAll = true) :
+    (Factory.ifSome g t).NoSetAll = true := by
+  unfold Factory.ifSome Factory.ifFalse; split
+  · exact noSetAll_ite (noSetAll_isNone hg) noSetAll_noneOf ht
+  · exact noSetAll_ite (noSetAll_isNone hg) noSetAll_noneOf (noSetAll_someOf ht)
+theorem anyAllItTyped_ifSome {ety : TermType} {g t : Term}
+    (hg : g.anyAllItTyped ety = true) (ht : t.anyAllItTyped ety = true) :
+    (Factory.ifSome g t).anyAllItTyped ety = true := by
+  unfold Factory.ifSome Factory.ifFalse; split
+  · exact anyAllItTyped_ite (anyAllItTyped_isNone hg) anyAllItTyped_noneOf ht
+  · exact anyAllItTyped_ite (anyAllItTyped_isNone hg) anyAllItTyped_noneOf (anyAllItTyped_someOf ht)
+
 end Cedar.Thm
