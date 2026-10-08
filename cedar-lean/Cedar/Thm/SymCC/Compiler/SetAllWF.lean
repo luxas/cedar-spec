@@ -511,4 +511,9 @@ theorem anyAllItTyped_bvlshr {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyA
 theorem noSetAll_bvule {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvule t₁ t₂).NoSetAll = true := noSetAll_bvcmp (by intro h; cases h) h1 h2
 theorem anyAllItTyped_bvule {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvule t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvcmp h1 h2
 
+theorem noSetAll_bvsrem {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsrem t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem anyAllItTyped_bvsrem {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsrem t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+theorem noSetAll_bvsmod {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsmod t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem anyAllItTyped_bvsmod {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsmod t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+
 end Cedar.Thm
