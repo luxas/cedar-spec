@@ -423,4 +423,92 @@ theorem anyAllItTyped_set_intersects {ety : TermType} {a b : Term}
   unfold Factory.set.intersects
   exact anyAllItTyped_not (anyAllItTyped_set_isEmpty (anyAllItTyped_set_inter h1 h2))
 
+/-! ### more ext ops + bv ops + zero_extend (for compileCall encoders) -/
+
+theorem noSetAll_ext_decimal_val {t : Term} (h : t.NoSetAll = true) : (Factory.ext.decimal.val t).NoSetAll = true := by
+  unfold Factory.ext.decimal.val; split
+  · simp [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.decimal.val) (by intro h; cases h) h
+theorem anyAllItTyped_ext_decimal_val {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.decimal.val t).anyAllItTyped ety = true := by
+  unfold Factory.ext.decimal.val; split
+  · simp [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.decimal.val) h
+
+theorem noSetAll_ext_ipaddr_isV4 {t : Term} (h : t.NoSetAll = true) : (Factory.ext.ipaddr.isV4 t).NoSetAll = true := by
+  unfold Factory.ext.ipaddr.isV4; split
+  · simp [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.ipaddr.isV4) (by intro h; cases h) h
+theorem anyAllItTyped_ext_ipaddr_isV4 {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.ipaddr.isV4 t).anyAllItTyped ety = true := by
+  unfold Factory.ext.ipaddr.isV4; split
+  · simp [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.ipaddr.isV4) h
+
+theorem noSetAll_ext_ipaddr_addrV4 {t : Term} (h : t.NoSetAll = true) : (Factory.ext.ipaddr.addrV4 t).NoSetAll = true := by
+  unfold Factory.ext.ipaddr.addrV4; split
+  · simp [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.ipaddr.addrV4) (by intro h; cases h) h
+theorem anyAllItTyped_ext_ipaddr_addrV4 {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.ipaddr.addrV4 t).anyAllItTyped ety = true := by
+  unfold Factory.ext.ipaddr.addrV4; split
+  · simp [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.ipaddr.addrV4) h
+
+theorem noSetAll_ext_ipaddr_addrV6 {t : Term} (h : t.NoSetAll = true) : (Factory.ext.ipaddr.addrV6 t).NoSetAll = true := by
+  unfold Factory.ext.ipaddr.addrV6; split
+  · simp [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.ipaddr.addrV6) (by intro h; cases h) h
+theorem anyAllItTyped_ext_ipaddr_addrV6 {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.ipaddr.addrV6 t).anyAllItTyped ety = true := by
+  unfold Factory.ext.ipaddr.addrV6; split
+  · simp [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.ipaddr.addrV6) h
+
+theorem noSetAll_ext_ipaddr_prefixV4 {t : Term} (h : t.NoSetAll = true) : (Factory.ext.ipaddr.prefixV4 t).NoSetAll = true := by
+  unfold Factory.ext.ipaddr.prefixV4; split <;> try split
+  all_goals first | exact noSetAll_noneOf | exact noSetAll_someOf (by simp [Term.NoSetAll]) | exact noSetAll_app1 (op := Op.ext ExtOp.ipaddr.prefixV4) (by intro h; cases h) h
+theorem anyAllItTyped_ext_ipaddr_prefixV4 {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.ipaddr.prefixV4 t).anyAllItTyped ety = true := by
+  unfold Factory.ext.ipaddr.prefixV4; split <;> try split
+  all_goals first | exact anyAllItTyped_noneOf | exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped]) | exact anyAllItTyped_app1 (op := Op.ext ExtOp.ipaddr.prefixV4) h
+
+theorem noSetAll_ext_ipaddr_prefixV6 {t : Term} (h : t.NoSetAll = true) : (Factory.ext.ipaddr.prefixV6 t).NoSetAll = true := by
+  unfold Factory.ext.ipaddr.prefixV6; split <;> try split
+  all_goals first | exact noSetAll_noneOf | exact noSetAll_someOf (by simp [Term.NoSetAll]) | exact noSetAll_app1 (op := Op.ext ExtOp.ipaddr.prefixV6) (by intro h; cases h) h
+theorem anyAllItTyped_ext_ipaddr_prefixV6 {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.ipaddr.prefixV6 t).anyAllItTyped ety = true := by
+  unfold Factory.ext.ipaddr.prefixV6; split <;> try split
+  all_goals first | exact anyAllItTyped_noneOf | exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped]) | exact anyAllItTyped_app1 (op := Op.ext ExtOp.ipaddr.prefixV6) h
+
+theorem noSetAll_ext_datetime_ofBitVec {t : Term} (h : t.NoSetAll = true) : (Factory.ext.datetime.ofBitVec t).NoSetAll = true := by
+  unfold Factory.ext.datetime.ofBitVec; split
+  · simp [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.datetime.ofBitVec) (by intro h; cases h) h
+theorem anyAllItTyped_ext_datetime_ofBitVec {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.datetime.ofBitVec t).anyAllItTyped ety = true := by
+  unfold Factory.ext.datetime.ofBitVec; split
+  · simp [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.datetime.ofBitVec) h
+
+theorem noSetAll_ext_duration_ofBitVec {t : Term} (h : t.NoSetAll = true) : (Factory.ext.duration.ofBitVec t).NoSetAll = true := by
+  unfold Factory.ext.duration.ofBitVec; split
+  · simp [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.duration.ofBitVec) (by intro h; cases h) h
+theorem anyAllItTyped_ext_duration_ofBitVec {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.duration.ofBitVec t).anyAllItTyped ety = true := by
+  unfold Factory.ext.duration.ofBitVec; split
+  · simp [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.duration.ofBitVec) h
+
+theorem noSetAll_zero_extend {n : Nat} {t : Term} (h : t.NoSetAll = true) : (Factory.zero_extend n t).NoSetAll = true := by
+  unfold Factory.zero_extend; split
+  · apply isLiteral_noSetAll; simp [Term.isLiteral]
+  · split <;> first | exact noSetAll_app1 (op := Op.zero_extend n) (by intro h; cases h) h | exact h
+theorem anyAllItTyped_zero_extend {ety : TermType} {n : Nat} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.zero_extend n t).anyAllItTyped ety = true := by
+  unfold Factory.zero_extend; split
+  · apply isLiteral_anyAllItTyped; simp [Term.isLiteral]
+  · split <;> first | exact anyAllItTyped_app1 (op := Op.zero_extend n) h | exact h
+
+theorem noSetAll_bvsdiv {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsdiv t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem anyAllItTyped_bvsdiv {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsdiv t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+theorem noSetAll_bvshl {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvshl t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem anyAllItTyped_bvshl {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvshl t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+theorem noSetAll_bvlshr {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvlshr t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem anyAllItTyped_bvlshr {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvlshr t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+theorem noSetAll_bvule {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvule t₁ t₂).NoSetAll = true := noSetAll_bvcmp (by intro h; cases h) h1 h2
+theorem anyAllItTyped_bvule {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvule t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvcmp h1 h2
+
 end Cedar.Thm
