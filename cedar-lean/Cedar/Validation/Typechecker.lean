@@ -423,8 +423,8 @@ public def typeOf (x : Expr) (c : Capabilities) (env : TypeEnv) : ResultType :=
   | .call xfn xs => do
     let tys ← xs.mapM₁ (λ ⟨x₁, _⟩ => justType (typeOf x₁ c env))
     typeOfCall xfn tys xs
-  -- Temporary conservative arm (anyall Phase 2, C2); replaced by the real
-  -- `.all` type rule later in the same phase.
+  -- Conservative reject: the sound `.all` type rule is deferred pending
+  -- decision D-11 (see .kiro/specs/anyall-set-operators/DECISIONS.md).
   | .all _ _ => .error (.unexpectedType (.bool .anyBool))
 
 ---- Derivations -----

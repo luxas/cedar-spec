@@ -161,6 +161,10 @@ non-boolean result), the whole expression is the single, payload-free
 `quantifierError`, independent of iteration order and of other elements being
 `false`. Otherwise the result is the conjunction (`true` on the empty set).
 There is no short-circuit on `false`: `mapM` stops only at an error.
+
+The result does not depend on traversal order provided `s` is well formed
+(canonical, as produced by `Set.make`), which the evaluator assumes of every
+set it handles; any soundness lemma about `evalAll` needs that hypothesis.
 -/
 public def evalAll (s : Set Value) (f : Value → Result Value) : Result Value :=
   match s.toList.mapM (fun v => (f v).as Bool) with

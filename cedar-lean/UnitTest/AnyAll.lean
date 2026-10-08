@@ -75,6 +75,8 @@ def testsForAll :=
     -- req 2.8: an earlier false element must not short-circuit past a later
     -- error (ints order before strings, so 0 is visited before "a")
     t "false then error is quantifierError" (.all (.set [int 0, str "a"]) itPos) (.inl .quantifierError),
+    -- req 2.5: same elements, reversed insertion order, same result
+    t "error then false (reversed) is quantifierError" (.all (.set [str "a", int 0]) itPos) (.inl .quantifierError),
     -- a non-boolean predicate result counts as an erroring element
     t "non-bool predicate" (.all (.set [int 1]) .item) (.inl .quantifierError),
     -- elements bind full values, e.g. records
