@@ -774,44 +774,46 @@ public theorem interpretWith_noneOf {σ : Option Term} {I : Interpretation} {ty 
     (Factory.noneOf ty).interpretWith σ I = Factory.noneOf ty := by
   simp only [Factory.noneOf, Term.interpretWith]
 
-/-- Extend an interpretation to bind the reserved `!anyall!it` element variable to `v` (D-67). -/
-def extInterp (I : Interpretation) (v : Term) : Interpretation :=
-  { I with vars := fun w => if w.id = "!anyall!it" then v else I.vars w }
-
-/-- `Op.interpret` ignores the `.vars` field, so it is insensitive to `extInterp`. -/
-theorem op_interpret_extInterp {I : Interpretation} {v : Term} {op : Op} {ts : List Term} {ty : TermType} :
-    Op.interpret (extInterp I v) op ts ty = Op.interpret I op ts ty := by rfl
-
-/-- D-67 key lemma: interpreting with the bound element substituted (`interpretWith (some v)`) equals
-interpreting under the extended interpretation `extInterp I v`, for terms with no `set.all` node. The only
-differing arm is `.var` (the reserved var → `v` on both sides); `Op.interpret` ignores `.vars`. This lets
-every existing `interpret_*` / `compile_interpret` argument apply unchanged at `extInterp I v`, so no
-interpretWith-versions of the Factory commutation lemmas are needed. -/
-theorem interpretWith_some_eq_interpret_ext {I : Interpretation} {v : Term} :
-    ∀ t : Term, t.NoSetAll = true →
-      Term.interpretWith (some v) I t = Term.interpret (extInterp I v) t
-  | .prim p, _ => by simp only [Term.interpretWith, Term.interpret]
-  | .var w, _ => by simp only [Term.interpretWith, Term.interpret, extInterp]
-  | .none ty, _ => by simp only [Term.interpretWith, Term.interpret]
-  | .some t, hs => by
-    simp only [Term.NoSetAll] at hs
-    simp only [Term.interpretWith, Term.interpret, someOf, interpretWith_some_eq_interpret_ext t hs]
-  | .set ts ty, hs => by
+/-- Extend an interpretation to bind the reserved `!anyall!it` element variable (of type `ety`) to `v` (D-67, id+ty match). -/
+public def extInterp (I : Interpretation) (v : Term) (ety : TermType) : Interpretation :=
+  { I with vars := fun w => if w.id = "!anyall!it" ∧ w.ty = ety then v else I.vars w }
+theorem op_interpret_extInterp {I : Interpretation} {v : Term} {ety : TermType} {op : Op} {ts : List Term} {ty : TermType} :
+    Op.interpret (extInterp I v ety) op ts ty = Op.interpret I op ts ty := by rfl
+public theorem interpretWith_some_eq_interpret_ext {I : Interpretation} {v : Term} {ety : TermType} :
+    ∀ t : Term, t.NoSetAll = true → t.anyAllItTyped ety = true →
+      Term.interpretWith (some v) I t = Term.interpret (extInterp I v ety) t
+  | .prim p, _, _ => by simp only [Term.interpretWith, Term.interpret]
+  | .var w, _, ha => by
+    simp only [Term.interpretWith, Term.interpret, extInterp]
+    simp only [Term.anyAllItTyped] at ha
+    split at ha
+    · rename_i hid
+      have ha' : w.ty = ety := by simpa using ha
+      rw [if_pos hid, if_pos ⟨hid, ha'⟩]
+    · rename_i hid
+      rw [if_neg hid, if_neg (fun hc => hid hc.1)]
+  | .none ty, _, _ => by simp only [Term.interpretWith, Term.interpret]
+  | .some t, hs, ha => by
+    simp only [Term.NoSetAll] at hs; simp only [Term.anyAllItTyped] at ha
+    simp only [Term.interpretWith, Term.interpret, someOf, interpretWith_some_eq_interpret_ext t hs ha]
+  | .set ts ty, hs, ha => by
     simp only [Term.NoSetAll, Set.all₁_eq_all, Set.all_eq_true] at hs
+    simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true] at ha
     simp only [Term.interpretWith, Term.interpret, Set.map₁_eq_map]
     congr 1
     apply Set.map_congr
-    intro x hx; exact interpretWith_some_eq_interpret_ext x (hs x hx)
-  | .record ats, hs => by
+    intro x hx; exact interpretWith_some_eq_interpret_ext x (hs x hx) (ha x hx)
+  | .record ats, hs, ha => by
     simp only [Term.NoSetAll, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hs
+    simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at ha
     simp only [Term.interpretWith, Term.interpret]
     congr 1
     simp only [Map.mapOnValues₂_eq_mapOnValues]
     apply Map.mapOnValues_congr
     intro w hw
     have ⟨a, hmem⟩ := Map.in_values_exists_key hw
-    exact interpretWith_some_eq_interpret_ext w (hs a w hmem)
-  | .app op ts ty, hs => by
+    exact interpretWith_some_eq_interpret_ext w (hs a w hmem) (ha a w hmem)
+  | .app op ts ty, hs, ha => by
     have hop : op ≠ Op.set.all := by intro heq; subst heq; simp only [Term.NoSetAll, Bool.false_eq_true] at hs
     have ⟨_, hsargs⟩ := noSetAll_app hs
     rw [interpretWith_app_ne_setAll hop, interpret_app_ne_setAll hop, op_interpret_extInterp]
@@ -819,7 +821,9 @@ theorem interpretWith_some_eq_interpret_ext {I : Interpretation} {v : Term} :
     simp only [List.map₁_eq_map]
     apply List.map_congr_left
     intro x hx
-    exact interpretWith_some_eq_interpret_ext x (hsargs x hx)
+    simp only [Term.anyAllItTyped] at ha
+    rw [List.all_eq_true] at ha
+    exact interpretWith_some_eq_interpret_ext x (hsargs x hx) (ha ⟨x, hx⟩ (List.mem_attach _ _))
 termination_by t => sizeOf t
 decreasing_by
   all_goals simp_wf
@@ -829,5 +833,15 @@ decreasing_by
       | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
       | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
       | (have h1 := List.sizeOf_lt_of_mem ‹(_,_) ∈ Map.toList ats›; have h2 := Map.sizeOf_lt_of_toList ats; simp only [Prod.mk.sizeOf_spec] at h1; omega)
+public theorem extInterp_wf {I : Interpretation} {εs : SymEntities} {v : Term} {ety : TermType}
+    (hI : I.WellFormed εs) (hvl : v.WellFormedLiteral εs) (hvty : v.typeOf = ety) :
+    (extInterp I v ety).WellFormed εs := by
+  simp only [Interpretation.WellFormed, extInterp] at hI ⊢
+  refine ⟨?_, hI.2.1, hI.2.2⟩
+  intro w hw
+  by_cases h : w.id = "!anyall!it" ∧ w.ty = ety
+  · simp only [h, and_self, reduceIte, Interpretation.WellFormed.WellFormedVarInterpretation]
+    exact ⟨hvl, hvty⟩
+  · simp only [h, reduceIte]; exact hI.1 w hw
 
 end Cedar.Thm
