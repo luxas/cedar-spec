@@ -21,6 +21,7 @@ public import Cedar.SymCC.Env
 public import Cedar.SymCC.Interpretation
 public import Cedar.SymCC.Term
 import Cedar.Thm.SymCC.Data
+import Cedar.Thm.Data.Map
 import all Cedar.SymCC.Factory
 import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 
@@ -205,5 +206,55 @@ theorem anyAllItTyped_ifSome {ety : TermType} {g t : Term}
   unfold Factory.ifSome Factory.ifFalse; split
   · exact anyAllItTyped_ite (anyAllItTyped_isNone hg) anyAllItTyped_noneOf ht
   · exact anyAllItTyped_ite (anyAllItTyped_isNone hg) anyAllItTyped_noneOf (anyAllItTyped_someOf ht)
+
+/-! ### anyAllItTyped record extraction (mirror of noSetAll_record) -/
+
+theorem anyAllItTyped_record {ety : TermType} {ats : Map Attr Term}
+    (h : Term.anyAllItTyped ety (.record ats) = true) :
+    ∀ p ∈ ats.toList, Term.anyAllItTyped ety p.2 = true := by
+  simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h
+  intro p hp; exact h p.1 p.2 hp
+
+/-! ### leaf-app constructors (reduce to literal or non-set.all .app) -/
+
+theorem noSetAll_option_get {t : Term} (h : t.NoSetAll = true) : (Factory.option.get t).NoSetAll = true := by
+  unfold Factory.option.get; repeat' split
+  all_goals (try exact h) <;> (try (simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try simp only [Term.NoSetAll])
+theorem anyAllItTyped_option_get {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+    (Factory.option.get t).anyAllItTyped ety = true := by
+  unfold Factory.option.get; repeat' split
+  all_goals (try exact h) <;> (try (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try simp only [Term.anyAllItTyped])
+
+theorem noSetAll_record_get {t : Term} {a : Attr} (h : t.NoSetAll = true) :
+    (Factory.record.get t a).NoSetAll = true := by
+  unfold Factory.record.get; repeat' split
+  · rename_i r _ tₐ hfind; exact noSetAll_record h (a, tₐ) (Map.find?_mem_toList hfind)
+  all_goals (try exact h) <;> (try (simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try simp only [Term.NoSetAll])
+theorem anyAllItTyped_record_get {ety : TermType} {t : Term} {a : Attr} (h : t.anyAllItTyped ety = true) :
+    (Factory.record.get t a).anyAllItTyped ety = true := by
+  unfold Factory.record.get; repeat' split
+  · rename_i r _ tₐ hfind; exact anyAllItTyped_record h (a, tₐ) (Map.find?_mem_toList hfind)
+  all_goals (try exact h) <;> (try (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try simp only [Term.anyAllItTyped])
+
+theorem noSetAll_string_like {t : Term} {p : Pattern} (h : t.NoSetAll = true) :
+    (Factory.string.like t p).NoSetAll = true := by
+  unfold Factory.string.like; split
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.string.like p) (by intro h; cases h) h
+theorem anyAllItTyped_string_like {ety : TermType} {t : Term} {p : Pattern} (h : t.anyAllItTyped ety = true) :
+    (Factory.string.like t p).anyAllItTyped ety = true := by
+  unfold Factory.string.like; split
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.string.like p) h
+
+theorem noSetAll_set_member {t ts : Term} (h1 : t.NoSetAll = true) (h2 : ts.NoSetAll = true) :
+    (Factory.set.member t ts).NoSetAll = true := by
+  unfold Factory.set.member; repeat' split
+  all_goals (try (simp only [Term.NoSetAll]; done)) <;> (try exact noSetAll_app2 (op := Op.set.member) (by intro h; cases h) h1 h2) <;> (try simp only [Term.NoSetAll])
+theorem anyAllItTyped_set_member {ety : TermType} {t ts : Term}
+    (h1 : t.anyAllItTyped ety = true) (h2 : ts.anyAllItTyped ety = true) :
+    (Factory.set.member t ts).anyAllItTyped ety = true := by
+  unfold Factory.set.member; repeat' split
+  all_goals (try (simp only [Term.anyAllItTyped]; done)) <;> (try exact anyAllItTyped_app2 (op := Op.set.member) h1 h2) <;> (try simp only [Term.anyAllItTyped])
 
 end Cedar.Thm
