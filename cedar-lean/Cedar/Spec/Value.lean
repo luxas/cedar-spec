@@ -34,6 +34,9 @@ public inductive Error where
   | typeError
   | arithBoundsError
   | extensionError
+  /-- A `.all`/`.any` set quantifier whose predicate errored on at least one
+  element. Deterministic and order-independent (RFC 0021 semantics). -/
+  | quantifierError
 
 public abbrev Result (α) := Except Error α
 
