@@ -888,7 +888,7 @@ private theorem compile_call_wf {f : ExtFun} {xs : List Expr} {εnv : SymEnv} {t
   simp only [@ih x hx εnv t (hwf x hx) heq]
 
 public theorem compileIf_wf {εs : SymEntities} {t₁ t : Term} {r₂ r₃ : SymCC.Result Term}
-  (hw₁ : t₁.WellFormed εs) (hty₁ : t₁.typeOf = .option .bool)
+  (hw₁ : t₁.WellFormed εs)
   (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ ∃ ty, t₂.typeOf = .option ty)
   (hr₃ : ∀ t₃, r₃ = .ok t₃ → t₃.WellFormed εs ∧ ∃ ty, t₃.typeOf = .option ty)
   (hok : compileIf t₁ r₂ r₃ = .ok t) : t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty := by
@@ -896,7 +896,8 @@ public theorem compileIf_wf {εs : SymEntities} {t₁ t : Term} {r₂ r₃ : Sym
   split at hok
   · exact hr₂ t hok
   · exact hr₃ t hok
-  · cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  · rename_i hguard
+    cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
     cases he3 : r₃ <;> simp only [he3, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
     rename_i t₂ t₃
     split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
@@ -904,32 +905,56 @@ public theorem compileIf_wf {εs : SymEntities} {t₁ t : Term} {r₂ r₃ : Sym
     rename_i hteq
     have ⟨hw₂, ty₂, ht₂⟩ := hr₂ t₂ he2
     have ⟨hw₃, ty₃, ht₃⟩ := hr₃ t₃ he3
-    have hg := wf_option_get hw₁ hty₁
+    have hg := wf_option_get hw₁ hguard
     have hite := wf_ite hg.left hw₂ hw₃ hg.right hteq
     have h := wf_ifSome_option hw₁ hite.left (by rw [hite.right]; exact ht₂)
     exact ⟨h.left, ty₂, h.right⟩
   · simp only [reduceCtorEq] at hok
 
 public theorem compileOr_wf {εs : SymEntities} {t₁ t : Term} {r₂ : SymCC.Result Term}
-  (hw₁ : t₁.WellFormed εs) (hty₁ : t₁.typeOf = .option .bool)
-  (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ t₂.typeOf = .option .bool)
+  (hw₁ : t₁.WellFormed εs)
+  (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ ∃ ty, t₂.typeOf = .option ty)
   (hok : compileOr t₁ r₂ = .ok t) : t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty := by
   rw [compileOr.eq_def] at hok
   split at hok
   · simp only [Except.ok.injEq] at hok; subst hok
-    exact ⟨hw₁, _, hty₁⟩
-  · cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    exact ⟨hw₁, .bool, by simp only [typeOf_term_some, typeOf_bool]⟩
+  · rename_i hguard
+    cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
     rename_i t₂
     split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
     subst hok
     rename_i ht₂eq
-    have ⟨hw₂, ht₂⟩ := hr₂ t₂ he2
-    have hg := wf_option_get hw₁ hty₁
+    have ⟨hw₂, ty₂, ht₂⟩ := hr₂ t₂ he2
+    have hg := wf_option_get hw₁ hguard
     have hite := wf_ite (t₂ := Term.some (Term.prim (TermPrim.bool true)))
       hg.left (Term.WellFormed.some_wf wf_bool) hw₂ hg.right
       (by simp only [typeOf_term_some, typeOf_bool, ← ht₂eq])
     simp only [typeOf_term_some, typeOf_bool] at hite
     have h := wf_ifSome_option hw₁ hite.left hite.right
+    exact ⟨h.left, _, h.right⟩
+  · simp only [reduceCtorEq] at hok
+
+public theorem compileAnd_wf {εs : SymEntities} {t₁ t : Term} {r₂ : SymCC.Result Term}
+  (hw₁ : t₁.WellFormed εs)
+  (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ ∃ ty, t₂.typeOf = .option ty)
+  (hok : compileAnd t₁ r₂ = .ok t) : t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty := by
+  rw [compileAnd.eq_def] at hok
+  split at hok
+  · simp only [Except.ok.injEq] at hok; subst hok
+    exact ⟨hw₁, .bool, by simp only [typeOf_term_some, typeOf_bool]⟩
+  · rename_i hguard
+    cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₂
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    rename_i ht₂eq
+    have ⟨hw₂, ty₂, ht₂⟩ := hr₂ t₂ he2
+    have hg := wf_option_get hw₁ hguard
+    have hite := wf_ite (t₃ := Term.some (Term.prim (TermPrim.bool false)))
+      hg.left hw₂ (Term.WellFormed.some_wf wf_bool) hg.right
+      (by simp only [typeOf_term_some, typeOf_bool, ht₂eq])
+    have h := wf_ifSome_option hw₁ hite.left (by rw [hite.right, ht₂eq])
     exact ⟨h.left, _, h.right⟩
   · simp only [reduceCtorEq] at hok
 
