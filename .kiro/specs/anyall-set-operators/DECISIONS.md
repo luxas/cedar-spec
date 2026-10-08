@@ -14,7 +14,7 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-04 | 1 | `ExprBuilder` trait gains gated `type Pred` + `all` + `pred_from_ast` (option B2). EST/PST `all()` is `unreachable!` until Phase 4 adds their form. | OPEN |
 | D-05 | 1 | `Expr::any` is a free constructor (`!all(!p)`), not a trait default method, because `negate` lives on `PredExpr`. | SETTLED |
 | D-06 | 1 | Phase-1 placeholders: evaluator returns `non_value`, typecheck conservatively fails, TPE/entity-manifest/protobuf reject `All` with an "unsupported" error. Each is replaced in its owning phase. | SETTLED |
-| D-07 | 1 | Protobuf serialization of `All` is `unimplemented!` (mirrors the existing `Error` arm). No phase in the spec adds a protobuf `All` message; it stays unsupported unless you want one. | OPEN |
+| D-07 | 1 | Protobuf serialization of `All` is `unimplemented!` until Phase 4 T4.3 adds the proto form (correction: the spec does plan it). | SETTLED |
 | D-08 | 2 | Lean `Expr.all` is unconditionally present (Lean has no `#[cfg]`); gating is only on the Rust/DRT side. `Features.anyAll` stays `false` and unused. | SETTLED |
 | D-09 | 2 | Lean `PredExpr` is a separate restricted inductive (no `set`, no `all`), not `Expr` + a well-formedness predicate. | SETTLED |
 | D-10 | 2 | Lean `quantifierError` carries no payload (req 2.6 is conditional on a payload; none means trivially bounded and deterministic). | SETTLED |
@@ -35,9 +35,9 @@ through a trait method; this forced the trait change. Reversal cost grows each
 phase. Phase 4 replaces the EST/PST `unreachable!` with real forms.
 
 ### D-07 — protobuf `All`
-Policies containing `.all`/`.any` cannot be protobuf-serialized under
-`--features protobufs,anyall` (panic via `unimplemented!`). Options: keep as is,
-return an error instead of panicking, or add a proto message (schema change).
+Until Phase 4 (T4.3), serializing a policy containing `.all`/`.any` under
+`--features protobufs,anyall` panics via `unimplemented!`. Phase 4 replaces
+this with the real proto form and a round-trip test.
 
 ### D-11 — Lean type rule and soundness for `.all` (req 6.4) — NEEDS DECISION
 **Where it stands.** Phase 2 landed the Lean node, the evaluator (RFC 0021
