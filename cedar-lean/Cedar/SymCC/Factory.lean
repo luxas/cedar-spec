@@ -301,6 +301,31 @@ decreasing_by
       | (rename_i h; have := Map.sizeOf_lt_of_toList ats; have := List.sizeOf_lt_of_mem h; omega)
 
 /--
+`Term.NoSetAll t` holds iff `t` contains no `Op.set.all` application node
+anywhere. Predicate/error bodies produced by `compilePred` satisfy this
+(predicates are non-nested, D-55), which is exactly the side condition under
+which `interpretWith (some v)` agrees with `substAnyAllIt v` followed by
+`interpret` (the latter has no `set.all` arm, the former folds it). -/
+public def Term.NoSetAll : Term → Bool
+  | .prim _      => true
+  | .var _       => true
+  | .none _      => true
+  | .some t      => Term.NoSetAll t
+  | .set ts _    => ts.all₁ λ ⟨t, _⟩ => Term.NoSetAll t
+  | .record ats  => ats.toList.attach₂.all λ ⟨(_, t), _⟩ => Term.NoSetAll t
+  | .app Op.set.all _ _ => false
+  | .app _ ts _  => ts.attach.all λ ⟨t, _⟩ => Term.NoSetAll t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (have h := Set.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
+      | omega
+
+/--
 Smart constructor for the `.all` set-quantifier term (D-34/D-51). `set` is the
 compiled receiver (type `.set elemTy`), `pred`/`err` are boolean Terms over
 `anyAllItVar elemTy` (the per-element predicate value and error). The result is `.option .bool` (tri-valued, D-35); it encodes via two
