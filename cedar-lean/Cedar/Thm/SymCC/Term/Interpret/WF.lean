@@ -762,4 +762,14 @@ public theorem interpretWith_option_get {εs : SymEntities} {σ : Option Term} (
       simp only [List.map, Op.interpret]
     case h_2 h => simp only [h₃, TermType.option.injEq, forall_eq'] at h
 
+/-- `interpretWith σ` commutes through `someOf` (= `.some`). -/
+public theorem interpretWith_someOf {σ : Option Term} {I : Interpretation} {t : Term} :
+    (Factory.someOf t).interpretWith σ I = Factory.someOf (t.interpretWith σ I) := by
+  simp only [Factory.someOf, Term.interpretWith]
+
+/-- `interpretWith σ` fixes `noneOf` (a literal). -/
+public theorem interpretWith_noneOf {σ : Option Term} {I : Interpretation} {ty : TermType} :
+    (Factory.noneOf ty).interpretWith σ I = Factory.noneOf ty := by
+  simp only [Factory.noneOf, Term.interpretWith]
+
 end Cedar.Thm
