@@ -22,6 +22,7 @@ public import Cedar.SymCC.Interpretation
 public import Cedar.SymCC.Term
 import Cedar.Thm.SymCC.Data
 import Cedar.Thm.Data.Map
+import Cedar.Thm.Data.Set
 import all Cedar.SymCC.Factory
 import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 
@@ -256,5 +257,135 @@ theorem anyAllItTyped_set_member {ety : TermType} {t ts : Term}
     (Factory.set.member t ts).anyAllItTyped ety = true := by
   unfold Factory.set.member; repeat' split
   all_goals (try (simp only [Term.anyAllItTyped]; done)) <;> (try exact anyAllItTyped_app2 (op := Op.set.member) h1 h2) <;> (try simp only [Term.anyAllItTyped])
+
+/-! ### recordOf -/
+
+theorem noSetAll_recordOf {ats : List (Attr × Term)} (h : ∀ p ∈ ats, p.2.NoSetAll = true) :
+    (Factory.recordOf ats).NoSetAll = true := by
+  simp only [Factory.recordOf, Term.NoSetAll, List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+  intro a t hmem; exact h (a, t) (Map.mem_make_mem_list hmem)
+theorem anyAllItTyped_recordOf {ety : TermType} {ats : List (Attr × Term)}
+    (h : ∀ p ∈ ats, p.2.anyAllItTyped ety = true) : (Factory.recordOf ats).anyAllItTyped ety = true := by
+  simp only [Factory.recordOf, Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+  intro a t hmem; exact h (a, t) (Map.mem_make_mem_list hmem)
+
+/-! ### set.subset / set.isEmpty -/
+
+theorem noSetAll_set_subset {a b : Term} (h1 : a.NoSetAll = true) (h2 : b.NoSetAll = true) :
+    (Factory.set.subset a b).NoSetAll = true := by
+  unfold Factory.set.subset; repeat' split
+  all_goals (try (simp only [Term.NoSetAll]; done)) <;> (try exact noSetAll_app2 (op := Op.set.subset) (by intro h; cases h) h1 h2) <;> (try simp only [Term.NoSetAll])
+theorem anyAllItTyped_set_subset {ety : TermType} {a b : Term}
+    (h1 : a.anyAllItTyped ety = true) (h2 : b.anyAllItTyped ety = true) :
+    (Factory.set.subset a b).anyAllItTyped ety = true := by
+  unfold Factory.set.subset; repeat' split
+  all_goals (try (simp only [Term.anyAllItTyped]; done)) <;> (try exact anyAllItTyped_app2 (op := Op.set.subset) h1 h2) <;> (try simp only [Term.anyAllItTyped])
+
+theorem noSetAll_set_isEmpty {ts : Term} (h : ts.NoSetAll = true) :
+    (Factory.set.isEmpty ts).NoSetAll = true := by
+  unfold Factory.set.isEmpty; repeat' split
+  all_goals (try (simp only [Term.NoSetAll]; done)) <;> (try (apply noSetAll_eq h; simp [Term.NoSetAll, Set.all₁_eq_all, Set.all_eq_true, Set.elts_empty])) <;> (try simp only [Term.NoSetAll])
+theorem anyAllItTyped_set_isEmpty {ety : TermType} {ts : Term} (h : ts.anyAllItTyped ety = true) :
+    (Factory.set.isEmpty ts).anyAllItTyped ety = true := by
+  unfold Factory.set.isEmpty; repeat' split
+  all_goals (try (simp only [Term.anyAllItTyped]; done)) <;> (try (apply anyAllItTyped_eq h; simp [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true, Set.elts_empty])) <;> (try simp only [Term.anyAllItTyped])
+
+/-! ### bitvector ops -/
+
+theorem noSetAll_bvapp {op : Op} {fn} {t₁ t₂ : Term} (hop : op ≠ Op.set.all)
+    (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvapp op fn t₁ t₂).NoSetAll = true := by
+  unfold Factory.bvapp; split
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_app2 (op := op) hop h1 h2
+theorem anyAllItTyped_bvapp {ety : TermType} {op : Op} {fn} {t₁ t₂ : Term}
+    (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) :
+    (Factory.bvapp op fn t₁ t₂).anyAllItTyped ety = true := by
+  unfold Factory.bvapp; split
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_app2 (op := op) h1 h2
+
+theorem noSetAll_bvcmp {op : Op} {fn} {t₁ t₂ : Term} (hop : op ≠ Op.set.all)
+    (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvcmp op fn t₁ t₂).NoSetAll = true := by
+  unfold Factory.bvcmp; split
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_app2 (op := op) hop h1 h2
+theorem anyAllItTyped_bvcmp {ety : TermType} {op : Op} {fn} {t₁ t₂ : Term}
+    (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) :
+    (Factory.bvcmp op fn t₁ t₂).anyAllItTyped ety = true := by
+  unfold Factory.bvcmp; split
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_app2 (op := op) h1 h2
+
+theorem noSetAll_bvso {op : Op} {fn} {t₁ t₂ : Term} (hop : op ≠ Op.set.all)
+    (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvso op fn t₁ t₂).NoSetAll = true := by
+  unfold Factory.bvso; split
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_app2 (op := op) hop h1 h2
+theorem anyAllItTyped_bvso {ety : TermType} {op : Op} {fn} {t₁ t₂ : Term}
+    (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) :
+    (Factory.bvso op fn t₁ t₂).anyAllItTyped ety = true := by
+  unfold Factory.bvso; split
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_app2 (op := op) h1 h2
+
+theorem noSetAll_bvneg {t : Term} (h : t.NoSetAll = true) : (Factory.bvneg t).NoSetAll = true := by
+  unfold Factory.bvneg; repeat' split
+  all_goals (try (simp only [Term.NoSetAll]; done)) <;> (try (simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try exact noSetAll_app1 (op := Op.bvneg) (by intro h; cases h) h) <;> (try simp only [Term.NoSetAll])
+theorem anyAllItTyped_bvneg {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+    (Factory.bvneg t).anyAllItTyped ety = true := by
+  unfold Factory.bvneg; repeat' split
+  all_goals (try (simp only [Term.anyAllItTyped]; done)) <;> (try (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try exact anyAllItTyped_app1 (op := Op.bvneg) h) <;> (try simp only [Term.anyAllItTyped])
+
+theorem noSetAll_bvnego {t : Term} (h : t.NoSetAll = true) : (Factory.bvnego t).NoSetAll = true := by
+  unfold Factory.bvnego; split
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.bvnego) (by intro h; cases h) h
+theorem anyAllItTyped_bvnego {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+    (Factory.bvnego t).anyAllItTyped ety = true := by
+  unfold Factory.bvnego; split
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.bvnego) h
+
+-- concrete bv wrappers used by compileApp₂
+theorem noSetAll_bvadd {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvadd t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem noSetAll_bvsub {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsub t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem noSetAll_bvmul {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvmul t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
+theorem noSetAll_bvslt {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvslt t₁ t₂).NoSetAll = true := noSetAll_bvcmp (by intro h; cases h) h1 h2
+theorem noSetAll_bvsle {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsle t₁ t₂).NoSetAll = true := noSetAll_bvcmp (by intro h; cases h) h1 h2
+theorem noSetAll_bvsaddo {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsaddo t₁ t₂).NoSetAll = true := noSetAll_bvso (by intro h; cases h) h1 h2
+theorem noSetAll_bvssubo {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvssubo t₁ t₂).NoSetAll = true := noSetAll_bvso (by intro h; cases h) h1 h2
+theorem noSetAll_bvsmulo {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsmulo t₁ t₂).NoSetAll = true := noSetAll_bvso (by intro h; cases h) h1 h2
+theorem anyAllItTyped_bvadd {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvadd t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+theorem anyAllItTyped_bvsub {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsub t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+theorem anyAllItTyped_bvmul {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvmul t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+theorem anyAllItTyped_bvslt {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvslt t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvcmp h1 h2
+theorem anyAllItTyped_bvsle {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsle t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvcmp h1 h2
+theorem anyAllItTyped_bvsaddo {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsaddo t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvso h1 h2
+theorem anyAllItTyped_bvssubo {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvssubo t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvso h1 h2
+theorem anyAllItTyped_bvsmulo {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsmulo t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvso h1 h2
+
+/-! ### extension ops + uuf -/
+
+theorem noSetAll_ext_datetime_val {t : Term} (h : t.NoSetAll = true) : (Factory.ext.datetime.val t).NoSetAll = true := by
+  unfold Factory.ext.datetime.val; split
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.datetime.val) (by intro h; cases h) h
+theorem anyAllItTyped_ext_datetime_val {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.datetime.val t).anyAllItTyped ety = true := by
+  unfold Factory.ext.datetime.val; split
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.datetime.val) h
+theorem noSetAll_ext_duration_val {t : Term} (h : t.NoSetAll = true) : (Factory.ext.duration.val t).NoSetAll = true := by
+  unfold Factory.ext.duration.val; split
+  · simp only [Term.NoSetAll]
+  · exact noSetAll_app1 (op := Op.ext ExtOp.duration.val) (by intro h; cases h) h
+theorem anyAllItTyped_ext_duration_val {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.ext.duration.val t).anyAllItTyped ety = true := by
+  unfold Factory.ext.duration.val; split
+  · simp only [Term.anyAllItTyped]
+  · exact anyAllItTyped_app1 (op := Op.ext ExtOp.duration.val) h
+
+theorem noSetAll_uuf {f} {t : Term} (h : t.NoSetAll = true) : (Factory.app (.uuf f) t).NoSetAll = true := by
+  unfold Factory.app; exact noSetAll_app1 (op := Op.uuf f) (by intro h; cases h) h
+theorem anyAllItTyped_uuf {ety : TermType} {f} {t : Term} (h : t.anyAllItTyped ety = true) : (Factory.app (.uuf f) t).anyAllItTyped ety = true := by
+  unfold Factory.app; exact anyAllItTyped_app1 (op := Op.uuf f) h
 
 end Cedar.Thm
