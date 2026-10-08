@@ -477,69 +477,70 @@ theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term} {op : Op} {ts 
       | (rename_i h; exact Op.WellTyped.ext_wt (extOp_wellTyped_substAnyAllIt hta h))
 
 /-- `ExtOp.WellTyped` transports across a typeOf-preserving arg map. -/
-theorem extOp_wellTyped_congr_typeOf {f : Term → Term} (hf : ∀ t, (f t).typeOf = t.typeOf)
-  {xop : ExtOp} {ts : List Term} {ty : TermType} :
+theorem extOp_wellTyped_congr_typeOf {f : Term → Term}
+  {xop : ExtOp} {ts : List Term} {ty : TermType}
+  (hf : ∀ t ∈ ts, (f t).typeOf = t.typeOf) :
   ExtOp.WellTyped xop ts ty → ExtOp.WellTyped xop (ts.map (fun t => f t)) ty := by
   intro hwt
   cases hwt <;>
     (try simp only [List.map_cons, List.map_nil]) <;>
     first
-      | exact ExtOp.WellTyped.decimal.val_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.ipaddr.isV4_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.ipaddr.addrV4_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.ipaddr.prefixV4_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.ipaddr.addrV6_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.ipaddr.prefixV6_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.datetime.val_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.datetime.ofBitVec_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.duration.val_wt (by rw [hf]; assumption)
-      | exact ExtOp.WellTyped.duration.ofBitVec_wt (by rw [hf]; assumption)
+      | exact ExtOp.WellTyped.decimal.val_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.isV4_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.addrV4_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.prefixV4_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.addrV6_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.ipaddr.prefixV6_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.datetime.val_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.datetime.ofBitVec_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.duration.val_wt (by rw [hf _ (by simp)]; assumption)
+      | exact ExtOp.WellTyped.duration.ofBitVec_wt (by rw [hf _ (by simp)]; assumption)
 
 /-- `Op.WellTyped` (non-`set.all`) transports across a typeOf-preserving arg map `f`.
 `set.all` is excluded (its extra `NoSetAll`/`anyAllItTyped` premises are not generic). -/
 theorem op_wellTyped_congr_typeOf {εs : SymEntities} {f : Term → Term}
-  (hf : ∀ t, (f t).typeOf = t.typeOf)
-  {op : Op} {ts : List Term} {ty : TermType} (hop : op ≠ Op.set.all) :
+  {op : Op} {ts : List Term} {ty : TermType}
+  (hf : ∀ t ∈ ts, (f t).typeOf = t.typeOf) (hop : op ≠ Op.set.all) :
   Op.WellTyped εs op ts ty → Op.WellTyped εs op (ts.map (fun t => f t)) ty := by
   intro hwt
   cases hwt <;>
     (try simp only [List.map_cons, List.map_nil]) <;>
     first
       | exact absurd rfl hop
-      | exact Op.WellTyped.not_wt (by rw [hf]; assumption)
-      | exact Op.WellTyped.and_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.or_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.eq_wt (by rw [hf, hf]; assumption)
+      | exact Op.WellTyped.not_wt (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.and_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.or_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.eq_wt (by rw [hf _ (by simp), hf _ (by simp)]; assumption)
       | (rename_i t₁ t₂ t₃ hb he
-         rw [← hf t₂]
-         exact Op.WellTyped.ite_wt (by rw [hf]; exact hb) (by rw [hf, hf]; exact he))
-      | exact Op.WellTyped.uuf_wt (by rw [hf]; assumption) (by assumption)
-      | exact Op.WellTyped.bvneg_wt (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvnego_wt (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvadd_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvsub_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvmul_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvsdiv_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvudiv_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvsrem_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvsmod_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvurem_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvshl_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvlshr_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvsaddo_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvssubo_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvsmulo_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvslt_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvsle_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvult_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.bvule_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.zero_extend_wt (by rw [hf]; assumption)
-      | exact Op.WellTyped.set.member_wt (by rw [hf, hf]; assumption)
-      | exact Op.WellTyped.set.subset_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.set.inter_wt (by rw [hf]; assumption) (by rw [hf]; assumption)
-      | exact Op.WellTyped.option.get_wt (by rw [hf]; assumption)
-      | exact Op.WellTyped.record.get_wt (by rw [hf]; assumption) (by assumption)
-      | exact Op.WellTyped.string.like_wt (by rw [hf]; assumption)
+         rw [← hf t₂ (by simp)]
+         exact Op.WellTyped.ite_wt (by rw [hf _ (by simp)]; exact hb) (by rw [hf _ (by simp), hf _ (by simp)]; exact he))
+      | exact Op.WellTyped.uuf_wt (by rw [hf _ (by simp)]; assumption) (by assumption)
+      | exact Op.WellTyped.bvneg_wt (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvnego_wt (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvadd_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvsub_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvmul_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvsdiv_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvudiv_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvsrem_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvsmod_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvurem_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvshl_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvlshr_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvsaddo_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvssubo_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvsmulo_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvslt_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvsle_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvult_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.bvule_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.zero_extend_wt (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.set.member_wt (by rw [hf _ (by simp), hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.set.subset_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.set.inter_wt (by rw [hf _ (by simp)]; assumption) (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.option.get_wt (by rw [hf _ (by simp)]; assumption)
+      | exact Op.WellTyped.record.get_wt (by rw [hf _ (by simp)]; assumption) (by assumption)
+      | exact Op.WellTyped.string.like_wt (by rw [hf _ (by simp)]; assumption)
       | (rename_i h; exact Op.WellTyped.ext_wt (extOp_wellTyped_congr_typeOf hf h))
 
 
@@ -727,6 +728,119 @@ theorem op_interpret_wf {εs : SymEntities} {I : Interpretation} {op : Op} {ts :
     | datetime.ofBitVec_wt he => exact wf_ext_datetime_ofBitVec (hargs _ (by simp)) he
     | duration.val_wt he => exact wf_ext_duration_val (hargs _ (by simp)) he
     | duration.ofBitVec_wt he => exact wf_ext_duration_ofBitVec (hargs _ (by simp)) he
+
+
+/--
+**σ-generalized interpret WF.** Interpreting a well-formed, non-nested term `t`
+whose reserved-var occurrences are all at type `v.typeOf`, with the bound var
+mapped to a well-formed `v`, preserves well-formedness and type. The `.app` arm
+reuses `op_interpret_wf` (its args are WF with preserved types by the IH, and the
+op is well-typed on them by `op_wellTyped_congr_typeOf`); the nested `set.all`
+case is impossible under `t.NoSetAll`. -/
+theorem interpretWith_wf {εs : SymEntities} {I : Interpretation} {v : Term}
+  (h₀ : I.WellFormed εs) (hvwf : v.WellFormed εs) :
+  ∀ t : Term, t.WellFormed εs → t.NoSetAll = true → t.anyAllItTyped v.typeOf = true →
+    (Term.interpretWith (some v) I t).WellFormed εs ∧
+    (Term.interpretWith (some v) I t).typeOf = t.typeOf
+  | .prim p, h, _, _ => by
+    refine ⟨?_, ?_⟩ <;> simp only [Term.interpretWith]
+    exact h
+  | .var w, _, _, hat => by
+    simp only [Term.interpretWith]
+    by_cases hw : w.id = "!anyall!it"
+    · simp only [hw, reduceIte]
+      refine ⟨hvwf, ?_⟩
+      simp only [Term.anyAllItTyped, hw, reduceIte, decide_eq_true_eq] at hat
+      simp only [Term.typeOf]; exact hat.symm
+    · simp only [hw, reduceIte]
+      have := (h₀.left w (by cases ‹Term.WellFormed εs (Term.var w)› with | var_wf hvw => exact hvw))
+      exact ⟨this.left.left, by simp only [Term.typeOf, this.right]⟩
+  | .none ty, _, _, _ => by
+    simp only [Term.interpretWith]
+    exact ⟨Term.WellFormed.none_wf (by cases ‹Term.WellFormed εs (Term.none ty)› with | none_wf h => exact h),
+      by simp only [Term.typeOf, Factory.noneOf]⟩
+  | .some t, h, hn, hat => by
+    cases h with | some_wf h₁ =>
+    have hn' : t.NoSetAll = true := by simp only [Term.NoSetAll] at hn; exact hn
+    have hat' : t.anyAllItTyped v.typeOf = true := by simp only [Term.anyAllItTyped] at hat; exact hat
+    have ih := interpretWith_wf h₀ hvwf t h₁ hn' hat'
+    refine ⟨?_, ?_⟩ <;> simp only [Term.interpretWith, Factory.someOf, Term.typeOf]
+    · exact Term.WellFormed.some_wf ih.left
+    · rw [ih.right]
+  | .set s ty, h, hn, hat => by
+    cases h with | set_wf h₁ h₂ h₃ h₄ =>
+    have hnm : ∀ t ∈ s.elts, t.NoSetAll = true := noSetAll_set hn
+    have ham : ∀ t ∈ s.elts, t.anyAllItTyped v.typeOf = true := by
+      simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true] at hat; exact hat
+    have ihelt : ∀ t ∈ s.elts, (Term.interpretWith (some v) I t).WellFormed εs ∧
+        (Term.interpretWith (some v) I t).typeOf = t.typeOf :=
+      fun t ht => interpretWith_wf h₀ hvwf t (h₁ t ht) (hnm t ht) (ham t ht)
+    simp only [Term.interpretWith, Term.typeOf]
+    refine ⟨Term.WellFormed.set_wf ?_ ?_ h₃ (by rw [Set.map₁_eq_map]; exact Set.map_wf _ _), ?_⟩
+    · intro t ht
+      simp only [Set.map₁_eq_map, Set.mem_map] at ht
+      rcases ht with ⟨t', ht', rfl⟩
+      exact (ihelt t' ht').left
+    · intro t ht
+      simp only [Set.map₁_eq_map, Set.mem_map] at ht
+      rcases ht with ⟨t', ht', rfl⟩
+      rw [(ihelt t' ht').right]; exact h₂ t' ht'
+    · simp only [Set.map₁_eq_map]
+  | .record ats, h, hn, hat => by
+    cases h with | record_wf h₁ h₂ =>
+    have hnm : ∀ p ∈ ats.toList, p.2.NoSetAll = true := noSetAll_record hn
+    have ham : ∀ p ∈ ats.toList, p.2.anyAllItTyped v.typeOf = true := by
+      simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hat
+      intro p hp; exact hat p.1 p.2 hp
+    simp only [Term.interpretWith, Term.typeOf]
+    refine ⟨Term.WellFormed.record_wf ?_ ?_, ?_⟩
+    · intro a t ht
+      rw [Map.mapOnValues₂_eq_mapOnValues] at ht
+      rcases Map.in_mapOnValues_in_toList' ht with ⟨t', rfl, ht'⟩
+      exact (interpretWith_wf h₀ hvwf t' (h₁ a t' ht') (hnm (a, t') ht') (ham (a, t') ht')).left
+    · rw [Map.mapOnValues₂_eq_mapOnValues]; exact Map.mapOnValues_wf.mp h₂
+    · simp only [Map.mapOnValues₂_eq_mapOnValues]
+      apply congrArg (TermType.record ·)
+      rw [Map.mapOnValues_mapOnValues]
+      apply Map.mapOnValues_congr
+      intro w hw
+      rcases Map.in_values_exists_key hw with ⟨a, ha⟩
+      simp only [Function.comp_apply]
+      exact (interpretWith_wf h₀ hvwf w (h₁ a w ha) (hnm (a, w) ha) (ham (a, w) ha)).right
+  | .app op ts ty, h, hn, hat => by
+    have ⟨hop, hargsNoSetAll⟩ := noSetAll_app hn
+    have hargsTyped : ∀ t ∈ ts, t.anyAllItTyped v.typeOf = true := by
+      have h' : (ts.attach.all (fun x => Term.anyAllItTyped v.typeOf x.val)) = true := by
+        cases op <;> first | exact absurd rfl hop | (simp only [Term.anyAllItTyped] at hat ⊢; exact hat)
+      rw [List.all_eq_true] at h'
+      intro t ht; exact h' ⟨t, ht⟩ (List.mem_attach ts ⟨t, ht⟩)
+    cases h with | app_wf hwfargs hwt =>
+    have ihargs : ∀ t ∈ ts, (Term.interpretWith (some v) I t).WellFormed εs ∧
+        (Term.interpretWith (some v) I t).typeOf = t.typeOf :=
+      fun t ht => interpretWith_wf h₀ hvwf t (hwfargs t ht) (hargsNoSetAll t ht) (hargsTyped t ht)
+    rw [interpretWith_app_ne_setAll hop]
+    have hwt' : Op.WellTyped εs op (ts.map₁ (fun x => Term.interpretWith (some v) I x.val)) ty := by
+      rw [List.map₁_eq_map]
+      exact op_wellTyped_congr_typeOf (fun t ht => (ihargs t ht).right) hop hwt
+    have hwfargs' : ∀ t ∈ ts.map₁ (fun x => Term.interpretWith (some v) I x.val), t.WellFormed εs := by
+      intro t ht
+      simp only [List.map₁_eq_map, List.mem_map] at ht
+      rcases ht with ⟨t', ht', rfl⟩
+      exact (ihargs t' ht').left
+    have := op_interpret_wf h₀ hwt' hwfargs'
+    simp only [Term.typeOf]
+    exact this
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts s; have := List.sizeOf_lt_of_mem ‹_ ∈ s.elts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
 
 
 end Cedar.Thm
