@@ -462,7 +462,7 @@ public theorem wt_op_same_domain {εs₁ εs₂ : SymEntities} {op : Op} {ts : L
   case set.member_wt h    => exact Op.WellTyped.set.member_wt h
   case set.subset_wt h h' => exact Op.WellTyped.set.subset_wt h h'
   case set.inter_wt h h'  => exact Op.WellTyped.set.inter_wt h h'
-  case set.all_wt h h' h'' => exact Op.WellTyped.set.all_wt h h' h''
+  case set.all_wt h h' h'' h₄ h₅ => exact Op.WellTyped.set.all_wt h h' h'' h₄ h₅
   case option.get_wt h    => exact Op.WellTyped.option.get_wt h
   case record.get_wt h h' => exact Op.WellTyped.record.get_wt h h'
   case string.like_wt h   => exact Op.WellTyped.string.like_wt h

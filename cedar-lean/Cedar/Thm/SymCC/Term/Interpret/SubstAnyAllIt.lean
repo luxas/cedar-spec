@@ -211,17 +211,72 @@ theorem extOp_wellTyped_substAnyAllIt {v : Term}
       | exact ExtOp.WellTyped.duration.val_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
       | exact ExtOp.WellTyped.duration.ofBitVec_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
 
+/-- `substAnyAllIt v` preserves `NoSetAll` when `v` itself has no `set.all`. -/
+theorem substAnyAllIt_noSetAll {v : Term} (hvn : v.NoSetAll = true) :
+  ∀ t : Term, Term.NoSetAll t = true → Term.NoSetAll (Term.substAnyAllIt v t) = true
+  | .prim _, _ => by simp only [Term.substAnyAllIt, Term.NoSetAll]
+  | .var w, _ => by
+    simp only [Term.substAnyAllIt]
+    by_cases h : w.id = "!anyall!it"
+    · simp only [h, reduceIte]; exact hvn
+    · simp only [h, reduceIte, Term.NoSetAll]
+  | .none _, _ => by simp only [Term.substAnyAllIt, Term.NoSetAll]
+  | .some t, hn => by
+    have : Term.NoSetAll t = true := by simp only [Term.NoSetAll] at hn; exact hn
+    simp only [Term.substAnyAllIt, Term.NoSetAll, substAnyAllIt_noSetAll hvn t this]
+  | .set ts ty, hn => by
+    have hmem := noSetAll_set hn
+    simp only [Term.substAnyAllIt, Term.NoSetAll, Set.map₁_eq_map]
+    rw [Set.all₁_eq_all, Set.all_eq_true]
+    intro t ht
+    rw [Set.mem_map] at ht
+    rcases ht with ⟨t', ht', rfl⟩
+    exact substAnyAllIt_noSetAll hvn t' (hmem t' ht')
+  | .record ats, hn => by
+    have hmem := noSetAll_record hn
+    simp only [Term.substAnyAllIt, Term.NoSetAll, Map.mapOnValues₂_eq_mapOnValues,
+      List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+    intro a t' ht'
+    rcases Map.in_mapOnValues_in_toList' ht' with ⟨t'', rfl, hmem'⟩
+    exact substAnyAllIt_noSetAll hvn t'' (hmem (a, t'') hmem')
+  | .app op ts ty, hn => by
+    have ⟨hop, hmem⟩ := noSetAll_app hn
+    simp only [Term.substAnyAllIt]
+    cases op <;> first
+      | exact absurd rfl hop
+      | (simp only [Term.NoSetAll, List.map₁_eq_map, List.map_map, List.all_eq_true, List.mem_map,
+           Function.comp_apply]
+         intro x _
+         rcases List.mem_map.mp x.property with ⟨t', ht', heq⟩
+         rw [← heq]
+         exact substAnyAllIt_noSetAll hvn t' (hmem t' ht'))
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+      | omega
+
 /--
 **WellTyped transport.** `Op.WellTyped` depends only on argument types, which
 `substAnyAllIt v` preserves (`substAnyAllIt_typeOf`), so it transports across the
-substitution. -/
+substitution. The `set.all` constructor also carries `NoSetAll` premises, which
+transport via `substAnyAllIt_noSetAll` (needing `v.NoSetAll`). -/
 theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term}
   (hv : ∀ w : TermVar, w.id = "!anyall!it" → v.typeOf = w.ty)
+  (hvn : v.NoSetAll = true)
   {op : Op} {ts : List Term} {ty : TermType} :
   Op.WellTyped εs op ts ty →
   Op.WellTyped εs op (ts.map (Term.substAnyAllIt v)) ty := by
   intro hwt
   have hT : ∀ t : Term, (Term.substAnyAllIt v t).typeOf = t.typeOf := substAnyAllIt_typeOf hv
+  have hN : ∀ t : Term, Term.NoSetAll t = true → Term.NoSetAll (Term.substAnyAllIt v t) = true :=
+    substAnyAllIt_noSetAll hvn
   cases hwt <;>
     (try simp only [List.map_cons, List.map_nil]) <;>
     first
@@ -256,7 +311,7 @@ theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term}
       | exact Op.WellTyped.set.member_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
       | exact Op.WellTyped.set.subset_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
       | exact Op.WellTyped.set.inter_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.set.all_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
+      | exact Op.WellTyped.set.all_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by apply hN; assumption) (by apply hN; assumption)
       | exact Op.WellTyped.option.get_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
       | exact Op.WellTyped.record.get_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by assumption)
       | exact Op.WellTyped.string.like_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
@@ -267,7 +322,8 @@ theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term}
 well-formed and shares its type with every bound-variable occurrence. -/
 theorem substAnyAllIt_wf {εs : SymEntities} {v : Term}
   (hvwf : v.WellFormed εs)
-  (hv : ∀ w : TermVar, w.id = "!anyall!it" → v.typeOf = w.ty) :
+  (hv : ∀ w : TermVar, w.id = "!anyall!it" → v.typeOf = w.ty)
+  (hvn : v.NoSetAll = true) :
   ∀ t : Term, Term.WellFormed εs t → (Term.substAnyAllIt v t).WellFormed εs
   | .prim p, h => by simp only [Term.substAnyAllIt]; exact h
   | .var w, h => by
@@ -279,7 +335,7 @@ theorem substAnyAllIt_wf {εs : SymEntities} {v : Term}
   | .some t, h => by
     simp only [Term.substAnyAllIt]
     cases h with | some_wf h₁ =>
-    exact Term.WellFormed.some_wf (substAnyAllIt_wf hvwf hv t h₁)
+    exact Term.WellFormed.some_wf (substAnyAllIt_wf hvwf hv hvn t h₁)
   | .set s ty, h => by
     simp only [Term.substAnyAllIt]
     cases h with | set_wf h₁ h₂ h₃ h₄ =>
@@ -287,7 +343,7 @@ theorem substAnyAllIt_wf {εs : SymEntities} {v : Term}
     · intro t ht
       simp only [Set.map₁_eq_map, Set.mem_map] at ht
       rcases ht with ⟨t', ht', rfl⟩
-      exact substAnyAllIt_wf hvwf hv t' (h₁ t' ht')
+      exact substAnyAllIt_wf hvwf hv hvn t' (h₁ t' ht')
     · intro t ht
       simp only [Set.map₁_eq_map, Set.mem_map] at ht
       rcases ht with ⟨t', ht', rfl⟩
@@ -301,7 +357,7 @@ theorem substAnyAllIt_wf {εs : SymEntities} {v : Term}
     · intro a t ht
       rw [Map.mapOnValues₂_eq_mapOnValues] at ht
       rcases Map.in_mapOnValues_in_toList' ht with ⟨t', rfl, ht'⟩
-      exact substAnyAllIt_wf hvwf hv t' (h₁ a t' ht')
+      exact substAnyAllIt_wf hvwf hv hvn t' (h₁ a t' ht')
     · rw [Map.mapOnValues₂_eq_mapOnValues]; exact Map.mapOnValues_wf.mp h₂
   | .app op ts ty, h => by
     simp only [Term.substAnyAllIt]
@@ -310,9 +366,9 @@ theorem substAnyAllIt_wf {εs : SymEntities} {v : Term}
     · intro t ht
       simp only [List.map₁_eq_map, List.mem_map] at ht
       rcases ht with ⟨t', ht', rfl⟩
-      exact substAnyAllIt_wf hvwf hv t' (h₁ t' ht')
+      exact substAnyAllIt_wf hvwf hv hvn t' (h₁ t' ht')
     · rw [List.map₁_eq_map]
-      exact op_wellTyped_substAnyAllIt hv h₂
+      exact op_wellTyped_substAnyAllIt hv hvn h₂
 termination_by t => sizeOf t
 decreasing_by
   all_goals simp_wf

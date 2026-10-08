@@ -19,7 +19,7 @@ module
 public import Cedar.Spec
 public import Cedar.SymCC.Concretizer
 public import Cedar.SymCC.Env
-import Cedar.SymCC.Factory
+public import Cedar.SymCC.Factory
 public import Cedar.SymCC.Interpretation
 public import Cedar.SymCC.Verifier
 import Cedar.Thm.Data.Control
@@ -547,7 +547,9 @@ public inductive Op.WellTyped (εs : SymEntities) : Op → List Term → TermTyp
   | set.all_wt {setT predT errT : Term} {elemTy : TermType}
     (h₁ : setT.typeOf = .set elemTy)
     (h₂ : predT.typeOf = .bool)
-    (h₃ : errT.typeOf = .bool) :
+    (h₃ : errT.typeOf = .bool)
+    (h₄ : predT.NoSetAll = true)
+    (h₅ : errT.NoSetAll = true) :
     WellTyped εs Op.set.all [setT, predT, errT] (.option .bool)
   | option.get_wt {t : Term} {ty : TermType}
     (h₁ : t.typeOf = .option ty) :
