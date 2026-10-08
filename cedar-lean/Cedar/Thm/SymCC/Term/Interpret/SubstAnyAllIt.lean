@@ -323,6 +323,61 @@ decreasing_by
          simp only [Prod.mk.sizeOf_spec] at h1; omega)
       | omega
 
+/-- A literal has no `set.all` node. -/
+theorem isLiteral_noSetAll : ∀ t : Term, t.isLiteral = true → Term.NoSetAll t = true
+  | .prim _, _ => by simp only [Term.NoSetAll]
+  | .none _, _ => by simp only [Term.NoSetAll]
+  | .some t, h => by
+    have : t.isLiteral = true := by simp only [Term.isLiteral] at h; exact h
+    simp only [Term.NoSetAll, isLiteral_noSetAll t this]
+  | .set ts _, h => by
+    simp only [Term.isLiteral, Set.all₁_eq_all, Set.all_eq_true] at h
+    simp only [Term.NoSetAll, Set.all₁_eq_all, Set.all_eq_true]
+    intro t ht; exact isLiteral_noSetAll t (h t ht)
+  | .record ats, h => by
+    simp only [Term.isLiteral, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h
+    simp only [Term.NoSetAll, List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+    intro a t ht; exact isLiteral_noSetAll t (h a t ht)
+  | .var _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+  | .app _ _ _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+
+theorem isLiteral_anyAllItTyped {ety : TermType} : ∀ t : Term, t.isLiteral = true → Term.anyAllItTyped ety t = true
+  | .prim _, _ => by simp only [Term.anyAllItTyped]
+  | .none _, _ => by simp only [Term.anyAllItTyped]
+  | .some t, h => by
+    have : t.isLiteral = true := by simp only [Term.isLiteral] at h; exact h
+    simp only [Term.anyAllItTyped, isLiteral_anyAllItTyped t this]
+  | .set ts _, h => by
+    simp only [Term.isLiteral, Set.all₁_eq_all, Set.all_eq_true] at h
+    simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true]
+    intro t ht; exact isLiteral_anyAllItTyped t (h t ht)
+  | .record ats, h => by
+    simp only [Term.isLiteral, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h
+    simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+    intro a t ht; exact isLiteral_anyAllItTyped t (h a t ht)
+  | .var _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+  | .app _ _ _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+
 /--
 **WellTyped transport.** `Op.WellTyped` depends only on argument types, which
 `substAnyAllIt v` preserves (`substAnyAllIt_typeOf`), so it transports across the

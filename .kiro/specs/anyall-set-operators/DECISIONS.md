@@ -75,6 +75,8 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 
 | D-57 | 5B | `Op.WellTyped.set.all_wt` additionally carries `h₆ : predT.anyAllItTyped elemTy` and `h₇ : errT.anyAllItTyped elemTy`: every occurrence of the reserved bound variable `!anyall!it` in the predicate/error bodies has type `elemTy` (the set's element type). This cannot be derived from term WF alone (var WF only requires the var's type be well-formed, not that it equals elemTy), yet the concrete fold needs it: substituting a literal element (type elemTy) for the bound variable preserves well-typedness only if the bound var was at elemTy. True of every compiler-produced set.all (compilePred binds `anyAllItVar elemTy`), discharged in compile_all_wf. `Term.anyAllItTyped` added alongside `Term.NoSetAll` in `Cedar.SymCC`. | SETTLED |
 
+| D-58 | 5B | The fold-WF lemma `interpret_term_app_wf_set_all` lives in `Interpret/WF.lean`, but `Interpret/Lit.lean` imports `WF.lean`, so WF cannot use `interpret_term_lit` (the "receiver interprets to a literal set" shortcut). Resolution (option C): prove a direct `interpretWith_wf` in WF.lean (I.WF → vi WFL → vi.typeOf=elemTy → t.WF → t.anyAllItTyped vi.typeOf → (interpretWith (some vi) I t).WF ∧ typeOf preserved) by induction mirroring `interpret_term_wf` — no literalness, no Lit dependency — covering the literal-branch element WF. The symbolic branch is proved via `interpretWith_none` preserving `NoSetAll`/`anyAllItTyped` (the `op.interpret` sub-case holds because `op.interpret` for a non-`set.all` op never emits an `Op.set.all` node). `Interpret/Lit.lean:207` (literal-ness) separately uses Lemma A + substAnyAllIt_wf + interpret_term_lit, all available in Lit. | SETTLED |
+
 ## Details
 
 ### D-01 — "phase 9"
