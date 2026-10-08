@@ -22,7 +22,7 @@ import all Cedar.SymCC.Factory
 import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 import all Cedar.Thm.SymCC.Compiler.SetAllWF
 import Cedar.Thm.SymCC.Data.Basic
-import Cedar.Thm.Data.Map
+import all Cedar.Thm.Data.Map
 import all Cedar.Thm.SymCC.Compiler.Invert
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.Tactics
@@ -330,5 +330,166 @@ theorem anyAllItTyped_compileGetAttr {ety' : TermType} {t r : Term} {a : Attr} {
   split at hR <;> subst hR
   · exact anyAllItTyped_record_get h2
   · exact anyAllItTyped_someOf (anyAllItTyped_record_get h2)
+
+/-! ### compileApp₂ helpers: ifTrue, tagOf, SymTags.hasTag/getTag, compileInₑ/ₛ, compileHasTag/GetTag -/
+
+theorem noSetAll_ifTrue {g t : Term} (hg : g.NoSetAll = true) (ht : t.NoSetAll = true) : (Factory.ifTrue g t).NoSetAll = true := by
+  unfold Factory.ifTrue; exact noSetAll_ite hg (noSetAll_someOf ht) noSetAll_noneOf
+theorem anyAllItTyped_ifTrue {ety : TermType} {g t : Term} (hg : g.anyAllItTyped ety = true) (ht : t.anyAllItTyped ety = true) : (Factory.ifTrue g t).anyAllItTyped ety = true := by
+  unfold Factory.ifTrue; exact anyAllItTyped_ite hg (anyAllItTyped_someOf ht) anyAllItTyped_noneOf
+
+theorem noSetAll_tagOf {e tg : Term} (he : e.NoSetAll = true) (ht : tg.NoSetAll = true) : (Factory.tagOf e tg).NoSetAll = true := by
+  simp only [Factory.tagOf, EntityTag.mk, Term.NoSetAll, List.all_attach₂_snd, List.all_eq_true, Prod.forall, Map.toList]
+  intro a t hmem; simp only [List.mem_cons, List.not_mem_nil, or_false, Prod.mk.injEq] at hmem
+  rcases hmem with ⟨_, rfl⟩ | ⟨_, rfl⟩ <;> assumption
+theorem anyAllItTyped_tagOf {ety : TermType} {e tg : Term} (he : e.anyAllItTyped ety = true) (ht : tg.anyAllItTyped ety = true) : (Factory.tagOf e tg).anyAllItTyped ety = true := by
+  simp only [Factory.tagOf, EntityTag.mk, Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall, Map.toList]
+  intro a t hmem; simp only [List.mem_cons, List.not_mem_nil, or_false, Prod.mk.injEq] at hmem
+  rcases hmem with ⟨_, rfl⟩ | ⟨_, rfl⟩ <;> assumption
+
+theorem noSetAll_symTags_hasTag {τs : SymTags} {e tg : Term} {εs : SymEntities} {ety : EntityType}
+    (hwτ : τs.WellFormed εs ety) (he : e.NoSetAll = true) (ht : tg.NoSetAll = true) : (τs.hasTag e tg).NoSetAll = true := by
+  unfold SymTags.hasTag; exact noSetAll_set_member ht (noSetAll_app_uf hwτ.left he)
+theorem anyAllItTyped_symTags_hasTag {ety' : TermType} {τs : SymTags} {e tg : Term} {εs : SymEntities} {ety : EntityType}
+    (hwτ : τs.WellFormed εs ety) (he : e.anyAllItTyped ety' = true) (ht : tg.anyAllItTyped ety' = true) : (τs.hasTag e tg).anyAllItTyped ety' = true := by
+  unfold SymTags.hasTag; exact anyAllItTyped_set_member ht (anyAllItTyped_app_uf hwτ.left he)
+
+theorem noSetAll_symTags_getTag {τs : SymTags} {e tg : Term} {εs : SymEntities} {ety : EntityType}
+    (hwτ : τs.WellFormed εs ety) (he : e.NoSetAll = true) (ht : tg.NoSetAll = true) : (τs.getTag e tg).NoSetAll = true := by
+  unfold SymTags.getTag SymTags.getTag!
+  exact noSetAll_ifTrue (noSetAll_symTags_hasTag hwτ he ht) (noSetAll_app_uf hwτ.right.right.right.left (noSetAll_tagOf he ht))
+theorem anyAllItTyped_symTags_getTag {ety' : TermType} {τs : SymTags} {e tg : Term} {εs : SymEntities} {ety : EntityType}
+    (hwτ : τs.WellFormed εs ety) (he : e.anyAllItTyped ety' = true) (ht : tg.anyAllItTyped ety' = true) : (τs.getTag e tg).anyAllItTyped ety' = true := by
+  unfold SymTags.getTag SymTags.getTag!
+  exact anyAllItTyped_ifTrue (anyAllItTyped_symTags_hasTag hwτ he ht) (anyAllItTyped_app_uf hwτ.right.right.right.left (anyAllItTyped_tagOf he ht))
+
+theorem noSetAll_compileInₑ {t₁ t₂ : Term} {ancs? : Option UnaryFunction} {εs : SymEntities} {ety₁ ety₂ : EntityType}
+    (ha : ancs? = SymEntities.ancestorsOfType εs ety₁ ety₂) (hwε : εs.WellFormed) (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (compileInₑ t₁ t₂ ancs?).NoSetAll = true := by
+  simp only [compileInₑ]
+  apply noSetAll_or
+  · delta SymCC.compileInₑ.isEq; split <;> first | exact noSetAll_eq h1 h2 | simp [Term.NoSetAll]
+  · delta SymCC.compileInₑ.isIn; split
+    · exact noSetAll_set_member h2 (noSetAll_app_uf (wf_εs_implies_wf_ancs hwε ha.symm).left h1)
+    · simp [Term.NoSetAll]
+theorem anyAllItTyped_compileInₑ {ety' : TermType} {t₁ t₂ : Term} {ancs? : Option UnaryFunction} {εs : SymEntities} {ety₁ ety₂ : EntityType}
+    (ha : ancs? = SymEntities.ancestorsOfType εs ety₁ ety₂) (hwε : εs.WellFormed) (h1 : t₁.anyAllItTyped ety' = true) (h2 : t₂.anyAllItTyped ety' = true) : (compileInₑ t₁ t₂ ancs?).anyAllItTyped ety' = true := by
+  simp only [compileInₑ]
+  apply anyAllItTyped_or
+  · delta SymCC.compileInₑ.isEq; split <;> first | exact anyAllItTyped_eq h1 h2 | simp [Term.anyAllItTyped]
+  · delta SymCC.compileInₑ.isIn; split
+    · exact anyAllItTyped_set_member h2 (anyAllItTyped_app_uf (wf_εs_implies_wf_ancs hwε ha.symm).left h1)
+    · simp [Term.anyAllItTyped]
+
+theorem noSetAll_compileInₛ {t ts : Term} {ancs? : Option UnaryFunction} {εs : SymEntities} {ety₁ ety₂ : EntityType}
+    (ha : ancs? = SymEntities.ancestorsOfType εs ety₁ ety₂) (hwε : εs.WellFormed) (h1 : t.NoSetAll = true) (h2 : ts.NoSetAll = true) : (compileInₛ t ts ancs?).NoSetAll = true := by
+  simp only [compileInₛ]
+  apply noSetAll_or
+  · delta SymCC.compileInₛ.isIn₁; split <;> first | exact noSetAll_set_member h1 h2 | simp [Term.NoSetAll]
+  · delta SymCC.compileInₛ.isIn₂; split
+    · exact noSetAll_set_intersects h2 (noSetAll_app_uf (wf_εs_implies_wf_ancs hwε ha.symm).left h1)
+    · simp [Term.NoSetAll]
+theorem anyAllItTyped_compileInₛ {ety' : TermType} {t ts : Term} {ancs? : Option UnaryFunction} {εs : SymEntities} {ety₁ ety₂ : EntityType}
+    (ha : ancs? = SymEntities.ancestorsOfType εs ety₁ ety₂) (hwε : εs.WellFormed) (h1 : t.anyAllItTyped ety' = true) (h2 : ts.anyAllItTyped ety' = true) : (compileInₛ t ts ancs?).anyAllItTyped ety' = true := by
+  simp only [compileInₛ]
+  apply anyAllItTyped_or
+  · delta SymCC.compileInₛ.isIn₁; split <;> first | exact anyAllItTyped_set_member h1 h2 | simp [Term.anyAllItTyped]
+  · delta SymCC.compileInₛ.isIn₂; split
+    · exact anyAllItTyped_set_intersects h2 (anyAllItTyped_app_uf (wf_εs_implies_wf_ancs hwε ha.symm).left h1)
+    · simp [Term.anyAllItTyped]
+
+theorem noSetAll_compileHasTag {e tg r : Term} {τs? : Option (Option SymTags)} {εs : SymEntities} {ety : EntityType}
+    (hτ : τs? = εs.tags ety) (hwε : εs.WellFormed) (he : e.NoSetAll = true) (ht : tg.NoSetAll = true)
+    (hok : compileHasTag e tg τs? = Except.ok r) : r.NoSetAll = true := by
+  unfold compileHasTag at hok
+  split at hok <;> simp only [someOf, Except.ok.injEq, reduceCtorEq] at hok <;> subst hok
+  · exact noSetAll_someOf (by simp [Term.NoSetAll])
+  · rename_i τs
+    exact noSetAll_someOf (noSetAll_symTags_hasTag (wf_εs_implies_wf_tags hwε (by rw [← hτ])) he ht)
+theorem anyAllItTyped_compileHasTag {ety' : TermType} {e tg r : Term} {τs? : Option (Option SymTags)} {εs : SymEntities} {ety : EntityType}
+    (hτ : τs? = εs.tags ety) (hwε : εs.WellFormed) (he : e.anyAllItTyped ety' = true) (ht : tg.anyAllItTyped ety' = true)
+    (hok : compileHasTag e tg τs? = Except.ok r) : r.anyAllItTyped ety' = true := by
+  unfold compileHasTag at hok
+  split at hok <;> simp only [someOf, Except.ok.injEq, reduceCtorEq] at hok <;> subst hok
+  · exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped])
+  · rename_i τs
+    exact anyAllItTyped_someOf (anyAllItTyped_symTags_hasTag (wf_εs_implies_wf_tags hwε (by rw [← hτ])) he ht)
+
+theorem noSetAll_compileGetTag {e tg r : Term} {τs? : Option (Option SymTags)} {εs : SymEntities} {ety : EntityType}
+    (hτ : τs? = εs.tags ety) (hwε : εs.WellFormed) (he : e.NoSetAll = true) (ht : tg.NoSetAll = true)
+    (hok : compileGetTag e tg τs? = Except.ok r) : r.NoSetAll = true := by
+  unfold compileGetTag at hok
+  split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok <;> subst hok
+  rename_i τs
+  exact noSetAll_symTags_getTag (wf_εs_implies_wf_tags hwε (by rw [← hτ])) he ht
+theorem anyAllItTyped_compileGetTag {ety' : TermType} {e tg r : Term} {τs? : Option (Option SymTags)} {εs : SymEntities} {ety : EntityType}
+    (hτ : τs? = εs.tags ety) (hwε : εs.WellFormed) (he : e.anyAllItTyped ety' = true) (ht : tg.anyAllItTyped ety' = true)
+    (hok : compileGetTag e tg τs? = Except.ok r) : r.anyAllItTyped ety' = true := by
+  unfold compileGetTag at hok
+  split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok <;> subst hok
+  rename_i τs
+  exact anyAllItTyped_symTags_getTag (wf_εs_implies_wf_tags hwε (by rw [← hτ])) he ht
+
+/-! ### compileApp₂ -/
+
+theorem noSetAll_compileApp₂ {op₂ : BinaryOp} {t₁ t₂ r : Term} {εs : SymEntities}
+    (hwε : εs.WellFormed) (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true)
+    (hok : compileApp₂ op₂ t₁ t₂ εs = Except.ok r) : r.NoSetAll = true := by
+  unfold compileApp₂ at hok
+  split at hok
+  all_goals (try simp only [bind, Except.bind, someOf, Except.ok.injEq, reduceCtorEq] at hok)
+  all_goals (try (exact noSetAll_compileHasTag rfl hwε h1 h2 hok))
+  all_goals (try (exact noSetAll_compileGetTag rfl hwε h1 h2 hok))
+  all_goals (try (first
+    | (cases hre : reducibleEq t₁.typeOf t₂.typeOf <;>
+        simp only [hre, bind, Except.bind, pure, someOf, Except.ok.injEq, reduceCtorEq] at hok <;>
+        (try split at hok) <;> simp only [Except.ok.injEq, reduceCtorEq] at hok <;> subst hok <;>
+        first | exact noSetAll_someOf (noSetAll_eq h1 h2) | exact noSetAll_someOf (by simp [Term.NoSetAll]))
+    | (split at hok <;> simp only [someOf, Except.ok.injEq, reduceCtorEq] at hok <;> subst hok <;>
+        first | exact noSetAll_someOf (noSetAll_set_member h2 h1)
+              | exact noSetAll_someOf (noSetAll_set_subset h2 h1)
+              | exact noSetAll_someOf (noSetAll_set_intersects h1 h2))
+    | (subst hok; first
+        | exact noSetAll_someOf (noSetAll_bvslt h1 h2)
+        | exact noSetAll_someOf (noSetAll_bvsle h1 h2)
+        | exact noSetAll_someOf (noSetAll_bvslt (noSetAll_ext_datetime_val h1) (noSetAll_ext_datetime_val h2))
+        | exact noSetAll_someOf (noSetAll_bvsle (noSetAll_ext_datetime_val h1) (noSetAll_ext_datetime_val h2))
+        | exact noSetAll_someOf (noSetAll_bvslt (noSetAll_ext_duration_val h1) (noSetAll_ext_duration_val h2))
+        | exact noSetAll_someOf (noSetAll_bvsle (noSetAll_ext_duration_val h1) (noSetAll_ext_duration_val h2))
+        | exact noSetAll_ifFalse (noSetAll_bvsaddo h1 h2) (noSetAll_bvadd h1 h2)
+        | exact noSetAll_ifFalse (noSetAll_bvssubo h1 h2) (noSetAll_bvsub h1 h2)
+        | exact noSetAll_ifFalse (noSetAll_bvsmulo h1 h2) (noSetAll_bvmul h1 h2)
+        | exact noSetAll_someOf (noSetAll_compileInₑ rfl hwε h1 h2)
+        | exact noSetAll_someOf (noSetAll_compileInₛ rfl hwε h1 h2))))
+  all_goals (exact absurd hok (by simp [reduceCtorEq]))
+theorem anyAllItTyped_compileApp₂ {ety' : TermType} {op₂ : BinaryOp} {t₁ t₂ r : Term} {εs : SymEntities}
+    (hwε : εs.WellFormed) (h1 : t₁.anyAllItTyped ety' = true) (h2 : t₂.anyAllItTyped ety' = true)
+    (hok : compileApp₂ op₂ t₁ t₂ εs = Except.ok r) : r.anyAllItTyped ety' = true := by
+  unfold compileApp₂ at hok
+  split at hok
+  all_goals (try simp only [bind, Except.bind, someOf, Except.ok.injEq, reduceCtorEq] at hok)
+  all_goals (try (exact anyAllItTyped_compileHasTag rfl hwε h1 h2 hok))
+  all_goals (try (exact anyAllItTyped_compileGetTag rfl hwε h1 h2 hok))
+  all_goals (try (first
+    | (cases hre : reducibleEq t₁.typeOf t₂.typeOf <;>
+        simp only [hre, bind, Except.bind, pure, someOf, Except.ok.injEq, reduceCtorEq] at hok <;>
+        (try split at hok) <;> simp only [Except.ok.injEq, reduceCtorEq] at hok <;> subst hok <;>
+        first | exact anyAllItTyped_someOf (anyAllItTyped_eq h1 h2) | exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped]))
+    | (split at hok <;> simp only [someOf, Except.ok.injEq, reduceCtorEq] at hok <;> subst hok <;>
+        first | exact anyAllItTyped_someOf (anyAllItTyped_set_member h2 h1)
+              | exact anyAllItTyped_someOf (anyAllItTyped_set_subset h2 h1)
+              | exact anyAllItTyped_someOf (anyAllItTyped_set_intersects h1 h2))
+    | (subst hok; first
+        | exact anyAllItTyped_someOf (anyAllItTyped_bvslt h1 h2)
+        | exact anyAllItTyped_someOf (anyAllItTyped_bvsle h1 h2)
+        | exact anyAllItTyped_someOf (anyAllItTyped_bvslt (anyAllItTyped_ext_datetime_val h1) (anyAllItTyped_ext_datetime_val h2))
+        | exact anyAllItTyped_someOf (anyAllItTyped_bvsle (anyAllItTyped_ext_datetime_val h1) (anyAllItTyped_ext_datetime_val h2))
+        | exact anyAllItTyped_someOf (anyAllItTyped_bvslt (anyAllItTyped_ext_duration_val h1) (anyAllItTyped_ext_duration_val h2))
+        | exact anyAllItTyped_someOf (anyAllItTyped_bvsle (anyAllItTyped_ext_duration_val h1) (anyAllItTyped_ext_duration_val h2))
+        | exact anyAllItTyped_ifFalse (anyAllItTyped_bvsaddo h1 h2) (anyAllItTyped_bvadd h1 h2)
+        | exact anyAllItTyped_ifFalse (anyAllItTyped_bvssubo h1 h2) (anyAllItTyped_bvsub h1 h2)
+        | exact anyAllItTyped_ifFalse (anyAllItTyped_bvsmulo h1 h2) (anyAllItTyped_bvmul h1 h2)
+        | exact anyAllItTyped_someOf (anyAllItTyped_compileInₑ rfl hwε h1 h2)
+        | exact anyAllItTyped_someOf (anyAllItTyped_compileInₛ rfl hwε h1 h2))))
+  all_goals (exact absurd hok (by simp [reduceCtorEq]))
 
 end Cedar.Thm
