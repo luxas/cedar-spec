@@ -26,6 +26,8 @@ public import Cedar.Thm.SymCC.Term.WF
 import all Cedar.Thm.SymCC.Term.WF -- proving things about the internals of `Interpretation` functions and we need access to not only internal functions in `SymCC/Interpretation.lean`, but also lemmas about them in `Thm/SymCC/Term/WF.lean`
 import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 import all Cedar.Thm.SymCC.Interpretation -- proving things about the internals of `Interpretation` functions and we need access to not only internal functions in `SymCC/Interpretation.lean`, but also lemmas about them in `Thm/SymCC/Interpretation.lean`
+import Cedar.Thm.Data.Map
+import Cedar.Thm.Data.Set
 
 /-!
 # Interpretation preserves well-formedness of Terms
@@ -771,5 +773,61 @@ public theorem interpretWith_someOf {σ : Option Term} {I : Interpretation} {t :
 public theorem interpretWith_noneOf {σ : Option Term} {I : Interpretation} {ty : TermType} :
     (Factory.noneOf ty).interpretWith σ I = Factory.noneOf ty := by
   simp only [Factory.noneOf, Term.interpretWith]
+
+/-- Extend an interpretation to bind the reserved `!anyall!it` element variable to `v` (D-67). -/
+def extInterp (I : Interpretation) (v : Term) : Interpretation :=
+  { I with vars := fun w => if w.id = "!anyall!it" then v else I.vars w }
+
+/-- `Op.interpret` ignores the `.vars` field, so it is insensitive to `extInterp`. -/
+theorem op_interpret_extInterp {I : Interpretation} {v : Term} {op : Op} {ts : List Term} {ty : TermType} :
+    Op.interpret (extInterp I v) op ts ty = Op.interpret I op ts ty := by rfl
+
+/-- D-67 key lemma: interpreting with the bound element substituted (`interpretWith (some v)`) equals
+interpreting under the extended interpretation `extInterp I v`, for terms with no `set.all` node. The only
+differing arm is `.var` (the reserved var → `v` on both sides); `Op.interpret` ignores `.vars`. This lets
+every existing `interpret_*` / `compile_interpret` argument apply unchanged at `extInterp I v`, so no
+interpretWith-versions of the Factory commutation lemmas are needed. -/
+theorem interpretWith_some_eq_interpret_ext {I : Interpretation} {v : Term} :
+    ∀ t : Term, t.NoSetAll = true →
+      Term.interpretWith (some v) I t = Term.interpret (extInterp I v) t
+  | .prim p, _ => by simp only [Term.interpretWith, Term.interpret]
+  | .var w, _ => by simp only [Term.interpretWith, Term.interpret, extInterp]
+  | .none ty, _ => by simp only [Term.interpretWith, Term.interpret]
+  | .some t, hs => by
+    simp only [Term.NoSetAll] at hs
+    simp only [Term.interpretWith, Term.interpret, someOf, interpretWith_some_eq_interpret_ext t hs]
+  | .set ts ty, hs => by
+    simp only [Term.NoSetAll, Set.all₁_eq_all, Set.all_eq_true] at hs
+    simp only [Term.interpretWith, Term.interpret, Set.map₁_eq_map]
+    congr 1
+    apply Set.map_congr
+    intro x hx; exact interpretWith_some_eq_interpret_ext x (hs x hx)
+  | .record ats, hs => by
+    simp only [Term.NoSetAll, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hs
+    simp only [Term.interpretWith, Term.interpret]
+    congr 1
+    simp only [Map.mapOnValues₂_eq_mapOnValues]
+    apply Map.mapOnValues_congr
+    intro w hw
+    have ⟨a, hmem⟩ := Map.in_values_exists_key hw
+    exact interpretWith_some_eq_interpret_ext w (hs a w hmem)
+  | .app op ts ty, hs => by
+    have hop : op ≠ Op.set.all := by intro heq; subst heq; simp only [Term.NoSetAll, Bool.false_eq_true] at hs
+    have ⟨_, hsargs⟩ := noSetAll_app hs
+    rw [interpretWith_app_ne_setAll hop, interpret_app_ne_setAll hop, op_interpret_extInterp]
+    congr 1
+    simp only [List.map₁_eq_map]
+    apply List.map_congr_left
+    intro x hx
+    exact interpretWith_some_eq_interpret_ext x (hsargs x hx)
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_,_) ∈ Map.toList ats›; have h2 := Map.sizeOf_lt_of_toList ats; simp only [Prod.mk.sizeOf_spec] at h1; omega)
 
 end Cedar.Thm
