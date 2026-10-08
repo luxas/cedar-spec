@@ -378,6 +378,45 @@ decreasing_by
          have h2 := Map.sizeOf_lt_of_toList ats
          simp only [Prod.mk.sizeOf_spec] at h1; omega)
 
+/-- `Term.interpret` fixes well-formed literals. Self-contained (no Lit import). -/
+theorem interpret_lit_id {εs : SymEntities} {I : Interpretation} :
+  ∀ t : Term, t.WellFormed εs → t.isLiteral = true → Term.interpret I t = t
+  | .prim _, _, _ => by simp only [interpret_term_prim]
+  | .none _, _, _ => by simp only [interpret_term_none]
+  | .some t, hw, h => by
+    cases hw with | some_wf hw' =>
+    have : t.isLiteral = true := by simp only [Term.isLiteral] at h; exact h
+    simp only [interpret_term_some, interpret_lit_id t hw' this]
+  | .set s ty, hw, h => by
+    cases hw with | set_wf hw' _ _ hswf =>
+    simp only [Term.isLiteral, Set.all₁_eq_all, Set.all_eq_true] at h
+    rw [interpret_term_set]
+    have hmc : s.map (Term.interpret I) = s.map id := by
+      apply Set.map_congr
+      intro t ht; simp only [id_eq]; exact interpret_lit_id t (hw' t ht) (h t ht)
+    rw [hmc, Set.map_id s hswf]
+  | .record ats, hw, h => by
+    cases hw with | record_wf hw' hawf =>
+    simp only [Term.isLiteral, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h
+    rw [interpret_term_record]
+    apply congrArg Term.record
+    apply Map.mapOnValues_restricted_id
+    intro w hw2
+    rcases Map.in_values_exists_key hw2 with ⟨a, ha⟩
+    exact interpret_lit_id w (hw' a w ha) (h a w ha)
+  | .var _, _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+  | .app _ _ _, _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts s; have := List.sizeOf_lt_of_mem ‹_ ∈ s.elts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+
 /--
 **WellTyped transport.** `Op.WellTyped` depends only on argument types, which
 `substAnyAllIt v` preserves (`substAnyAllIt_typeOf`), so it transports across the
