@@ -24,6 +24,8 @@ import all Cedar.Thm.SymCC.Compiler.Invert -- we require some lemmas from Compil
 public import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Term.TypeOf
 import Cedar.Thm.SymCC.Term.WF
+import all Cedar.Thm.SymCC.Compiler.SetAllWF
+import all Cedar.Thm.SymCC.Compiler.CompilePredWF
 
 /-!
 This file proves that both `compile` and `evaluate` preserve well-formedness.
@@ -884,6 +886,29 @@ private theorem compile_call_wf {f : ExtFun} {xs : List Expr} {εnv : SymEnv} {t
   intro t ht
   replace ⟨x, hx, heq⟩ := List.forall₂_implies_all_right heq t ht
   simp only [@ih x hx εnv t (hwf x hx) heq]
+
+public theorem compileIf_wf {εs : SymEntities} {t₁ t : Term} {r₂ r₃ : SymCC.Result Term}
+  (hw₁ : t₁.WellFormed εs) (hty₁ : t₁.typeOf = .option .bool)
+  (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ ∃ ty, t₂.typeOf = .option ty)
+  (hr₃ : ∀ t₃, r₃ = .ok t₃ → t₃.WellFormed εs ∧ ∃ ty, t₃.typeOf = .option ty)
+  (hok : compileIf t₁ r₂ r₃ = .ok t) : t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty := by
+  rw [compileIf.eq_def] at hok
+  split at hok
+  · exact hr₂ t hok
+  · exact hr₃ t hok
+  · cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    cases he3 : r₃ <;> simp only [he3, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₂ t₃
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    rename_i hteq
+    have ⟨hw₂, ty₂, ht₂⟩ := hr₂ t₂ he2
+    have ⟨hw₃, ty₃, ht₃⟩ := hr₃ t₃ he3
+    have hg := wf_option_get hw₁ hty₁
+    have hite := wf_ite hg.left hw₂ hw₃ hg.right hteq
+    have h := wf_ifSome_option hw₁ hite.left (by rw [hite.right]; exact ht₂)
+    exact ⟨h.left, ty₂, h.right⟩
+  · simp only [reduceCtorEq] at hok
 
 public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
   εnv.WellFormedFor x →
