@@ -299,45 +299,69 @@ def defineApp (tyEnc : String) (op : Op) (tEncs : List String) (ts : List Term):
   | .uuf f         => defineTerm tyEnc s!"({← encodeUUF f} {args})"
   | _              => defineTerm tyEnc s!"({encodeOp op} {args})"
 
+/-- Does the term mention the reserved `.all` bound element variable `!anyall!it`?
+A subterm that does not can be safely A-normal-form-lifted (encoded with
+`encodeTerm`) even inside the `set.filter` lambda body (it is closed w.r.t. the
+binder); only subterms that do must be encoded inline (D-53). -/
+partial def Term.mentionsAnyAllIt : Term → Bool
+  | .var v        => v.id = "!anyall!it"
+  | .prim _       => false
+  | .none _       => false
+  | .some t       => Term.mentionsAnyAllIt t
+  | .set ts _     => ts.elts.any (fun t => Term.mentionsAnyAllIt t)
+  | .record ats   => ats.toList.any (fun p => Term.mentionsAnyAllIt p.2)
+  | .app _ ts _   => ts.any (fun t => Term.mentionsAnyAllIt t)
+
 mutual
 /--
-Encode a Term *inline* (not in A-normal form), i.e. as a single nested
-S-expression with no `define-fun` lifting. Required inside a `set.filter` lambda
-body (the `set.all` encoding, D-52): lifting a subterm to a top-level
-`define-fun` would move it out of the bound variable's scope. The reserved
-element variable `anyAllItVar` is emitted as the bound SMT name `!anyall!it`
-(never declared as a global). Supported here is the first-order,
-non-dereferencing predicate fragment produced by `compilePred`; anything outside
-it throws (sound: the trusted encoder never emits an unverified shape). Record /
-entity dereference inside a predicate body is a follow-up (D-53). -/
+Encode a Term *inline* (not in A-normal form) for use inside a `set.filter`
+lambda body (the `set.all` encoding, D-52/D-53). Subterms that do NOT mention the
+reserved bound variable `!anyall!it` are closed w.r.t. the binder and delegated
+to the ANF `encodeTerm` (returning a top-level id, valid inside the lambda); only
+subterms that mention it are inlined. Covers the full `compilePred` fragment:
+`record.get` (record & entity attribute access), `uuf` applications (entity
+attributes / ancestors / tags), `string.like`, extension ops, `option.get`,
+`eq`/`ite`/`and`/`or`/`not`, bitvector ops, and set membership/subset/inter. -/
 partial def encodeTermInline (t : Term) : EncoderM String := do
+  if !(Term.mentionsAnyAllIt t) then return (← encodeTerm t)
   match t with
   | .var v =>
-    if v.id = "!anyall!it" then return "!anyall!it"
-    else return (← encodeTerm t)   -- a free (environment) variable: ANF-encode and reference its id
-  | .prim p =>
-    match p with
-    | .bool b    => return if b then "true" else "false"
-    | .bitvec bv => return encodeBitVec bv
-    | .string s  => return s!"\"{← encodeString s}\""
-    | _          => throw (IO.userError "encodeTermInline: unsupported primitive in predicate body")
-  | .none ty  => return s!"(as none {← encodeType ty})"
-  | .some t₁  => return s!"(some {← encodeTermInline t₁})"
-  | .app .eq [a, b] _  => return s!"(= {← encodeTermInline a} {← encodeTermInline b})"
-  | .app .not [a] _    => return s!"(not {← encodeTermInline a})"
-  | .app .and [a, b] _ => return s!"(and {← encodeTermInline a} {← encodeTermInline b})"
-  | .app .or  [a, b] _ => return s!"(or {← encodeTermInline a} {← encodeTermInline b})"
-  | .app .ite [a, b, c] _ => return s!"(ite {← encodeTermInline a} {← encodeTermInline b} {← encodeTermInline c})"
-  | .app Op.option.get [a] _    => return s!"(val {← encodeTermInline a})"
-  | .app Op.set.member [a, b] _ => return s!"(set.member {← encodeTermInline a} {← encodeTermInline b})"
-  | .app op args@(_ :: _) _ =>
-    match op with
-    | .bvneg | .bvadd | .bvsub | .bvmul | .bvsdiv | .bvudiv | .bvsrem | .bvsmod
-    | .bvurem | .bvshl | .bvlshr | .bvslt | .bvsle | .bvult | .bvule =>
+    if v.id = "!anyall!it" then return "!anyall!it" else return (← encodeTerm t)
+  | .some t₁ => return s!"(some {← encodeTermInline t₁})"
+  | .set ts ety =>
+    let encs ← ts.elts.mapM encodeTermInline
+    if encs.isEmpty then return s!"(as set.empty {← encodeType (.set ety)})"
+    else return s!"(set.insert {String.intercalate " " encs} (as set.empty {← encodeType (.set ety)}))"
+  | .app op args _ =>
+    match op, args with
+    | Op.record.get a, [r] =>
+      let rEnc ← encodeTermInline r
+      let aIdx ← indexOfAttrInline a r.typeOf
+      return s!"({aIdx} {rEnc})"
+    | Op.string.like p, [a] => return s!"(str.in_re {← encodeTermInline a} {← encodePattern p})"
+    | Op.option.get, [a]    => return s!"(val {← encodeTermInline a})"
+    | .uuf f, [a]           => return s!"({← encodeUUF f} {← encodeTermInline a})"
+    | .ext xop, [a]         => return s!"({encodeExtOp xop} {← encodeTermInline a})"
+    | .eq, [a, b]           => return s!"(= {← encodeTermInline a} {← encodeTermInline b})"
+    | .zero_extend n, [a]   => return s!"((_ zero_extend {n}) {← encodeTermInline a})"
+    | _, _ =>
       let encs ← args.mapM encodeTermInline
       return s!"({encodeOp op} {String.intercalate " " encs})"
-    | _ => throw (IO.userError s!"encodeTermInline: unsupported op {op.mkName} in predicate body")
-  | _ => throw (IO.userError "encodeTermInline: unsupported term shape in predicate body")
+  | _ => throw (IO.userError "encodeTermInline: unexpected term shape mentioning the bound variable")
+
+/-- Inline analogue of `indexOfAttr`/`defineRecordGet`: resolve the SMT selector
+id `R_a<idx>` for attribute `a` of record type `ty`. -/
+partial def indexOfAttrInline (a : Attr) (ty : TermType) : EncoderM String := do
+  match ty with
+  | .record (.mk rty) =>
+    match rty.findIdx? (Prod.fst · = a) with
+    | .some attrIdx =>
+      let rId ← match (← get).types.get? ty with
+        | .some rId => pure rId
+        | .none => throw (IO.userError "record.get on unencoded type in quantifier body")
+      return recordAttrId rId attrIdx
+    | .none => throw (IO.userError s!"Unknown record attribute `{a}` in quantifier body")
+  | _ => throw (IO.userError "record.get on non-record type in quantifier body")
 
 partial def encodeTerm (t : Term) : EncoderM String := do
   if let (.some enc) := (← get).terms.get? t then return enc
