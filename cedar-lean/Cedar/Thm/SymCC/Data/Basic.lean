@@ -620,15 +620,19 @@ public def SymRequest.WellFormed (εs : SymEntities) (req : SymRequest) : Prop :
   req.principal.WellFormed εs ∧
   req.principal.typeOf.isEntityType ∧
   req.principal.NoAnyAllItVar ∧
+  req.principal.NoSetAll ∧
   req.action.WellFormed εs ∧
   req.action.typeOf.isEntityType ∧
   req.action.NoAnyAllItVar ∧
+  req.action.NoSetAll ∧
   req.resource.WellFormed εs ∧
   req.resource.typeOf.isEntityType ∧
   req.resource.NoAnyAllItVar ∧
+  req.resource.NoSetAll ∧
   req.context.WellFormed εs ∧
   req.context.typeOf.isCedarRecordType ∧
-  req.context.NoAnyAllItVar
+  req.context.NoAnyAllItVar ∧
+  req.context.NoSetAll
 
 @[expose]
 public def SymTags.WellFormed (εs : SymEntities) (ety : EntityType) (τs : SymTags) : Prop :=

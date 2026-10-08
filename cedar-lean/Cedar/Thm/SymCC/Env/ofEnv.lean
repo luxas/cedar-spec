@@ -569,6 +569,8 @@ theorem ofEnv_request_is_wf
   · simp only [Term.typeOf, TermType.isEntityType]
   -- Principal no reserved var
   · simp [Term.NoAnyAllItVar]
+  -- Principal no set.all
+  · simp [Term.NoSetAll]
   -- Action well-formed
   · constructor
     constructor
@@ -581,6 +583,8 @@ theorem ofEnv_request_is_wf
   · simp only [typeOf_term_prim_entity, TermType.isEntityType]
   -- Action no reserved var
   · simp [Term.NoAnyAllItVar]
+  -- Action no set.all
+  · simp [Term.NoSetAll]
   -- Resource well-formed
   · constructor
     constructor
@@ -589,6 +593,8 @@ theorem ofEnv_request_is_wf
   · simp only [Term.typeOf, TermType.isEntityType]
   -- Resource no reserved var
   · simp [Term.NoAnyAllItVar]
+  -- Resource no set.all
+  · simp [Term.NoSetAll]
   -- Context well-formed
   · constructor
     exact ofType_wf hwf hwf_ctx
@@ -599,6 +605,8 @@ theorem ofEnv_request_is_wf
     simp [this, CedarType.liftBoolTypes]
   -- Context no reserved var
   · simp [Term.NoAnyAllItVar]
+  -- Context no set.all
+  · simp [Term.NoSetAll]
 
 theorem ofEnv_request_is_basic
   {Γ : TypeEnv} :

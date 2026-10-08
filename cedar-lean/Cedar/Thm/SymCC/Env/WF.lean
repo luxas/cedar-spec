@@ -588,12 +588,12 @@ public theorem wf_ρeq_same_domain {εs₁ εs₂ : SymEntities} {ρeq : SymRequ
 := by
   simp only [SymRequest.WellFormed]
   intro h₁ h₂
-  have ⟨hp, hp', hpn, ha, ha', han, hr, hr', hrn, hc, hc', hcn⟩ := h₂
+  have ⟨hp, hp', hpn, hps, ha, ha', han, has, hr, hr', hrn, hrs, hc, hc', hcn, hcs⟩ := h₂
   simp only [and_self,
-    wf_term_same_domain h₁ hp, hp', hpn,
-    wf_term_same_domain h₁ ha, ha', han,
-    wf_term_same_domain h₁ hr, hr', hrn,
-    wf_term_same_domain h₁ hc, hc', hcn]
+    wf_term_same_domain h₁ hp, hp', hpn, hps,
+    wf_term_same_domain h₁ ha, ha', han, has,
+    wf_term_same_domain h₁ hr, hr', hrn, hrs,
+    wf_term_same_domain h₁ hc, hc', hcn, hcs]
 
 public theorem wf_uf_same_domain {εs₁ εs₂ : SymEntities} {f : UnaryFunction} :
   SameDomain εs₁ εs₂ →
