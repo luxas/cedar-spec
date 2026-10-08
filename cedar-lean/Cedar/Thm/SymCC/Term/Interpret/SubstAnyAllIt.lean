@@ -379,6 +379,77 @@ decreasing_by
          have h2 := Map.sizeOf_lt_of_toList ats
          simp only [Prod.mk.sizeOf_spec] at h1; omega)
 
+/-- A literal term mentions no reserved `!anyall!it` variable (D-62). -/
+theorem isLiteral_noAnyAllItVar : ∀ t : Term, t.isLiteral = true → Term.NoAnyAllItVar t = true
+  | .prim _, _ => by simp only [Term.NoAnyAllItVar]
+  | .none _, _ => by simp only [Term.NoAnyAllItVar]
+  | .some t, h => by
+    have : t.isLiteral = true := by simp only [Term.isLiteral] at h; exact h
+    simp only [Term.NoAnyAllItVar, isLiteral_noAnyAllItVar t this]
+  | .set ts _, h => by
+    simp only [Term.isLiteral, Set.all₁_eq_all, Set.all_eq_true] at h
+    simp only [Term.NoAnyAllItVar, Set.all₁_eq_all, Set.all_eq_true]
+    intro t ht; exact isLiteral_noAnyAllItVar t (h t ht)
+  | .record ats, h => by
+    simp only [Term.isLiteral, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h
+    simp only [Term.NoAnyAllItVar, List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+    intro a t ht; exact isLiteral_noAnyAllItVar t (h a t ht)
+  | .var _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+  | .app _ _ _, h => by simp only [Term.isLiteral, Bool.false_eq_true] at h
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+
+/-- A term with no reserved `!anyall!it` variable is `anyAllItTyped` for every `ety`
+(there is no reserved occurrence to constrain). D-62 bridge. -/
+theorem noAnyAllItVar_anyAllItTyped {ety : TermType} :
+    ∀ t : Term, t.NoAnyAllItVar = true → Term.anyAllItTyped ety t = true
+  | .prim _, _ => by simp only [Term.anyAllItTyped]
+  | .none _, _ => by simp only [Term.anyAllItTyped]
+  | .var w, h => by
+    simp only [Term.NoAnyAllItVar, ne_eq, decide_not, Bool.not_eq_true', decide_eq_false_iff_not] at h
+    simp only [Term.anyAllItTyped]
+    split
+    · rename_i heq; exact absurd heq h
+    · rfl
+  | .some t, h => by
+    simp only [Term.NoAnyAllItVar] at h
+    simp only [Term.anyAllItTyped, noAnyAllItVar_anyAllItTyped t h]
+  | .set ts _, h => by
+    simp only [Term.NoAnyAllItVar, Set.all₁_eq_all, Set.all_eq_true] at h
+    simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true]
+    intro t ht; exact noAnyAllItVar_anyAllItTyped t (h t ht)
+  | .record ats, h => by
+    simp only [Term.NoAnyAllItVar, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h
+    simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+    intro a t ht; exact noAnyAllItVar_anyAllItTyped t (h a t ht)
+  | .app op ts ty, h => by
+    simp only [Term.NoAnyAllItVar] at h
+    rw [List.all_eq_true] at h
+    simp only [Term.anyAllItTyped]
+    rw [List.all_eq_true]
+    rintro ⟨t, ht⟩ _
+    have hmem : t ∈ ts := ht
+    exact noAnyAllItVar_anyAllItTyped t (h ⟨t, ht⟩ (List.mem_attach ts ⟨t, ht⟩))
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_, _) ∈ Map.toList ats›
+         have h2 := Map.sizeOf_lt_of_toList ats
+         simp only [Prod.mk.sizeOf_spec] at h1; omega)
+
 /-- `Term.interpret` fixes well-formed literals. Self-contained (no Lit import). -/
 theorem interpret_lit_id {εs : SymEntities} {I : Interpretation} :
   ∀ t : Term, t.WellFormed εs → t.isLiteral = true → Term.interpret I t = t

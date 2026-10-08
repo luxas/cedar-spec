@@ -619,12 +619,16 @@ public def UnaryFunction.WellFormed (εs : SymEntities) : UnaryFunction → Prop
 public def SymRequest.WellFormed (εs : SymEntities) (req : SymRequest) : Prop :=
   req.principal.WellFormed εs ∧
   req.principal.typeOf.isEntityType ∧
+  req.principal.NoAnyAllItVar ∧
   req.action.WellFormed εs ∧
   req.action.typeOf.isEntityType ∧
+  req.action.NoAnyAllItVar ∧
   req.resource.WellFormed εs ∧
   req.resource.typeOf.isEntityType ∧
+  req.resource.NoAnyAllItVar ∧
   req.context.WellFormed εs ∧
-  req.context.typeOf.isCedarRecordType
+  req.context.typeOf.isCedarRecordType ∧
+  req.context.NoAnyAllItVar
 
 @[expose]
 public def SymTags.WellFormed (εs : SymEntities) (ety : EntityType) (τs : SymTags) : Prop :=

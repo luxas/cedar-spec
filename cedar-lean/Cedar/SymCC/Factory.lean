@@ -115,6 +115,30 @@ decreasing_by
       | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
       | omega
 
+/--
+`Term.NoAnyAllItVar t` holds iff `t` contains no occurrence of the reserved
+bound element variable `!anyall!it` (D-62). A well-formed `SymRequest`'s
+principal/action/resource/context must satisfy this: otherwise a receiver term
+mentioning `!anyall!it` would let `s.all(...)` capture the request variable when
+the `set.all` encoding binds it, which is unsound. It implies
+`Term.anyAllItTyped ety` for every `ety` (there is no reserved var to type). -/
+public def Term.NoAnyAllItVar : Term → Bool
+  | .prim _      => true
+  | .var w       => w.id ≠ "!anyall!it"
+  | .none _      => true
+  | .some t      => Term.NoAnyAllItVar t
+  | .set ts _    => ts.all₁ λ ⟨t, _⟩ => Term.NoAnyAllItVar t
+  | .record ats  => ats.toList.attach₂.all λ ⟨(_, t), _⟩ => Term.NoAnyAllItVar t
+  | .app _ ts _  => ts.attach.all λ ⟨t, _⟩ => Term.NoAnyAllItVar t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
+      | omega
+
 
 namespace Factory
 

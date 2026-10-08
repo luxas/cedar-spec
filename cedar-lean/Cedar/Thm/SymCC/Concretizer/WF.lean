@@ -272,7 +272,7 @@ private theorem concretize?_ρ_implies {ρ : SymRequest} {uids : Set EntityUID} 
   replace hc := term_recordValue?_some_same hc
   simp only [same_values_def] at hc
   rw [term_value?_some_implies_eq_entityUIDs hc] at huids
-  replace hw := hw.right.right.right.right.right.right.left
+  replace hw := hw.right.right.right.right.right.right.right.right.right.left
   simp only [
     Set.mem_subset_mem (term_entityUID?_some_mem_entityUIDs hp) huidsₚ,
     Set.mem_subset_mem (term_entityUID?_some_mem_entityUIDs ha) huidsₐ,

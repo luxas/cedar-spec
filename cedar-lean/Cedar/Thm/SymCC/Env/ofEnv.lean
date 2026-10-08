@@ -567,6 +567,8 @@ theorem ofEnv_request_is_wf
     exact ofEnv_wf_entity hwf hwf_princ
   -- Principal well-typed
   · simp only [Term.typeOf, TermType.isEntityType]
+  -- Principal no reserved var
+  · simp [Term.NoAnyAllItVar]
   -- Action well-formed
   · constructor
     constructor
@@ -577,12 +579,16 @@ theorem ofEnv_request_is_wf
     simp only [hm]
   -- Action well-typed
   · simp only [typeOf_term_prim_entity, TermType.isEntityType]
+  -- Action no reserved var
+  · simp [Term.NoAnyAllItVar]
   -- Resource well-formed
   · constructor
     constructor
     exact ofEnv_wf_entity hwf hwf_res
   -- Resource well-typed
   · simp only [Term.typeOf, TermType.isEntityType]
+  -- Resource no reserved var
+  · simp [Term.NoAnyAllItVar]
   -- Context well-formed
   · constructor
     exact ofType_wf hwf hwf_ctx
@@ -591,6 +597,8 @@ theorem ofEnv_request_is_wf
     have := wf_ofType_right_inverse_cedarType? hwf hwf_ctx
     simp only [TermType.ofType] at this
     simp [this, CedarType.liftBoolTypes]
+  -- Context no reserved var
+  · simp [Term.NoAnyAllItVar]
 
 theorem ofEnv_request_is_basic
   {Γ : TypeEnv} :

@@ -125,13 +125,13 @@ private theorem concretize?_wfl_ρ_implies_some {ρ : SymRequest} {εs : SymEnti
   intro hwρ hlit
   simp only [SymRequest.concretize?, Option.bind_eq_bind, Option.bind_eq_some_iff, Option.some.injEq]
   simp only [SymRequest.isLiteral, Bool.and_eq_true] at hlit
-  replace ⟨hw, hty, hwρ⟩ := hwρ
+  replace ⟨hw, hty, _, hwρ⟩ := hwρ
   have ⟨p, hp⟩ := wfl_term_isEntityType_implies_entityUID?_some (And.intro hw hlit.left.left.left) hty
-  replace ⟨hw, hty, hwρ⟩ := hwρ
+  replace ⟨hw, hty, _, hwρ⟩ := hwρ
   have ⟨a, ha⟩ := wfl_term_isEntityType_implies_entityUID?_some (And.intro hw hlit.left.left.right) hty
-  replace ⟨hw, hty, hwρ⟩ := hwρ
+  replace ⟨hw, hty, _, hwρ⟩ := hwρ
   have ⟨r, hr⟩ := wfl_term_isEntityType_implies_entityUID?_some (And.intro hw hlit.left.right) hty
-  replace ⟨hw, hty⟩ := hwρ
+  replace ⟨hw, hty, _⟩ := hwρ
   have ⟨c, hc⟩ := wfl_term_isCedarRecordType_implies_recordValue?_some (And.intro hw hlit.right) hty
   simp only [hp, Option.some.injEq, ha, hr, hc, exists_eq_left', exists_eq']
 
@@ -218,7 +218,7 @@ private theorem wf_ρ_implies_valid_uids {ρ : SymRequest} {εs : SymEntities} :
 := by
   intro hwρ uid hin
   simp only [SymRequest.entityUIDs, Set.mem_union] at hin
-  have ⟨hp, _, ha, _, hr, _, hc, _⟩ := hwρ
+  have ⟨hp, _, _, ha, _, _, hr, _, _, hc, _, _⟩ := hwρ
   rcases hin with ((hin | hin) | hin) | hin
   · exact (wf_term_implies_valid_uids hp) uid hin
   · exact (wf_term_implies_valid_uids ha) uid hin
