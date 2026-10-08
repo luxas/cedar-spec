@@ -84,7 +84,7 @@ private theorem compile_interpret_prods {axs : List (Attr × Expr)} {εnv : SymE
       simp only [hhd]
     · exact compile_interpret_prods htl h₃
 
-private theorem prod_snd_comp_prod_map_eq {f : α → γ} {g : β → δ} :
+theorem prod_snd_comp_prod_map_eq {f : α → γ} {g : β → δ} :
   Prod.snd ∘ Prod.map f g = g ∘ Prod.snd
 := by
   unfold Prod.map
@@ -151,7 +151,7 @@ theorem interpret_attr_terms_wfls {ats : List (Attr × Term)} {I : Interpretatio
   simp only [hwl, true_and]
   exists ty
 
-private theorem compile_interpret_record_ifAllSome {εs : SymEntities} {I : Interpretation} {ats : List (Attr × Term)}
+theorem compile_interpret_record_ifAllSome {εs : SymEntities} {I : Interpretation} {ats : List (Attr × Term)}
   (hI  : Interpretation.WellFormed I εs)
   (hwφ : ∀ a t, (a, t) ∈ ats → Term.WellFormed εs t ∧ ∃ ty, Term.typeOf t = TermType.option ty) :
   ifAllSome (List.map (Term.interpret I ∘ Prod.snd) ats)

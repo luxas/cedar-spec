@@ -534,4 +534,103 @@ theorem compilePred_interpret_extHasAttr {x₁ : PredExpr} {a : Attr} {l : List 
   rw [compileExtHasAttr_eq_compileExtHasAttrRec]
   exact compileExtHasAttrRec_interpret hI hwε.right hwt₁ ⟨ty₁, hty₁⟩ hok
 
+/-- Per-element interpret commutation for the `.record` attribute list, carrying the forall-IH. -/
+theorem compilePred_interpret_record_ihs {axs : List (Attr × PredExpr)} {ats : List (Attr × Term)}
+    {it : Term} {εnv : SymEnv} {I : Interpretation} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (ih : ∀ a x, (a, x) ∈ axs → ∀ {t}, compilePred x it εnv = .ok t →
+            compilePred x (it.interpret I) (εnv.interpret I) = .ok (t.interpret I))
+    (hok : List.Forall₂ (λ px pt => px.fst = pt.fst ∧ compilePred px.snd it εnv = Except.ok pt.snd) axs ats) :
+    List.Forall₂ (λ (ax : Attr × PredExpr) (at' : Attr × Term) =>
+      ax.fst = at'.fst ∧ compilePred ax.snd (it.interpret I) (εnv.interpret I) = .ok (at'.snd.interpret I)) axs ats := by
+  cases axs
+  case nil =>
+    simp only [List.not_mem_nil, false_implies, forall_const, List.forall₂_nil_left_iff] at *
+    exact hok
+  case cons xhd xtl =>
+    simp only [List.mem_cons, forall_eq_or_imp, List.forall₂_cons_left_iff, exists_and_left] at *
+    replace ⟨(a, t), heq, ttl, hok, htl⟩ := hok
+    exists (a, t)
+    have ih₁ := ih xhd.fst xhd.snd
+    simp only [true_or, forall_const] at ih₁
+    simp only [heq.left, ih₁ heq.right, and_self, true_and]
+    exists ttl
+    simp only [htl, and_true]
+    apply compilePred_interpret_record_ihs hI hwε hitw hitty _ hok
+    intro a x h
+    apply ih a x
+    exact Or.inr h
+
+theorem compilePred_interpret_record_prods {axs : List (Attr × PredExpr)} {it : Term} {εnv : SymEnv} {I : Interpretation} {ats ats' : List (Attr × Term)}
+    (h₁ : List.Forall₂ (λ (ax : Attr × PredExpr) (at' : Attr × Term) => ax.fst = at'.fst ∧ compilePred ax.snd (it.interpret I) (εnv.interpret I) = Except.ok (at'.snd.interpret I)) axs ats)
+    (h₂ : List.Forall₂ (λ (q : Attr × PredExpr) t' => (do Except.ok (q.fst, ← compilePred q.snd (it.interpret I) (εnv.interpret I))) = Except.ok t') axs ats') :
+    ats' = ats.map (Prod.map id (Term.interpret I)) := by
+  cases h₁
+  case nil =>
+    simp only [List.forall₂_nil_left_iff] at *
+    exact h₂
+  case cons xhd thd xtl ttl hhd htl =>
+    simp only [List.forall₂_cons_left_iff] at *
+    replace ⟨_, ttl', h₂, h₃, h₄⟩ := h₂
+    simp only [hhd.right, Except.bind_ok, Except.ok.injEq] at h₂
+    subst h₂ h₄
+    simp only [List.map_cons, List.cons.injEq]
+    constructor
+    · unfold Prod.map id; simp only [hhd]
+    · exact compilePred_interpret_record_prods htl h₃
+
+theorem compilePred_interpret_record {axs : List (Attr × PredExpr)} {it : Term} {εnv : SymEnv} {I : Interpretation} {pt : Term} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hok : compilePred (.record axs) it εnv = .ok pt)
+    (ih : ∀ a x, (a, x) ∈ axs → ∀ {t}, compilePred x it εnv = .ok t →
+            compilePred x (it.interpret I) (εnv.interpret I) = .ok (t.interpret I)) :
+    compilePred (.record axs) (it.interpret I) (εnv.interpret I) = .ok (pt.interpret I) := by
+  simp only [compilePred] at hok
+  simp_do_let (axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do Except.ok (a₁, ← compilePred x₁ it εnv))) at hok
+  rename_i ats hts
+  simp only [List.mapM₂_eq_mapM λ (q : Attr × PredExpr) => do Except.ok (q.fst, ← compilePred q.snd it εnv),
+    List.mapM_ok_iff_forall₂] at hts
+  -- per-attr WF of ats
+  have hwφ : ∀ a t, (a, t) ∈ ats → t.WellFormed εnv.entities ∧ ∃ ty, t.typeOf = .option ty := by
+    intro a t hmem
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts (a, t) hmem
+    cases hxv : compilePred px.snd it εnv <;>
+      simp only [hxv, Except.bind_err, Except.bind_ok, reduceCtorEq, Except.ok.injEq] at hp
+    rename_i tv
+    have hwv := compilePred_wf (p := px.snd) hwε hitw hitty hxv
+    simp only [Prod.mk.injEq] at hp
+    obtain ⟨_, rfl⟩ := hp
+    exact hwv
+  -- strip Forall₂ to the compile-ok form for the ihs helper
+  have htsf : List.Forall₂ (λ px pt => px.fst = pt.fst ∧ compilePred px.snd it εnv = Except.ok pt.snd) axs ats := by
+    apply List.Forall₂.imp _ hts
+    intro px pt hp
+    cases hxv : compilePred px.snd it εnv with
+    | error e => simp only [hxv, Except.bind_err, reduceCtorEq] at hp
+    | ok tv =>
+      simp only [hxv, Except.bind_ok, Except.ok.injEq] at hp
+      subst hp
+      refine ⟨rfl, ?_⟩
+      simpa using hxv
+  replace ih := compilePred_interpret_record_ihs hI hwε hitw hitty ih htsf
+  simp only [Except.ok.injEq] at hok; subst hok
+  simp only [compilePred, List.mapM₂_eq_mapM λ (p : Attr × PredExpr) => do Except.ok (p.fst, ← compilePred p.snd (Term.interpret I it) (SymEnv.interpret I εnv))]
+  simp_do_let (axs.mapM λ (a₁, x₁) => do Except.ok (a₁, ← compilePred x₁ (Term.interpret I it) (SymEnv.interpret I εnv)))
+  case error he =>
+    replace ⟨ax, hmem, he⟩ := List.mapM_error_implies_exists_error he
+    replace ⟨_, _, ih⟩ := List.forall₂_implies_all_left ih ax hmem
+    simp only [ih, Except.bind_ok, reduceCtorEq] at he
+  case ok ats'' hok' =>
+    rw [List.mapM_ok_iff_forall₂] at hok'
+    replace ih := compilePred_interpret_record_prods ih hok'
+    subst ih
+    simp only [compileRecord, someOf, Except.ok.injEq]
+    have hwg := wf_prods_implies_wf_map_snd (wf_prods_option_implies_wf_prods hwφ)
+    have ⟨hwo, ty, hty⟩ := wf_some_recordOf_map (wf_option_get_mem_of_type_snd hwφ)
+    simp only [interpret_ifAllSome hI hwg hwo hty, interpret_term_some,
+      interpret_recordOf, List.map_map, prod_snd_comp_prod_map_eq, prod_map_id_comp_eq]
+    exact compile_interpret_record_ifAllSome hI hwφ
+
 end Cedar.Thm
