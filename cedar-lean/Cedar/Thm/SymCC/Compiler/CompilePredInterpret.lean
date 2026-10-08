@@ -688,4 +688,58 @@ theorem compilePred_interpret_call {xfn : ExtFun} {xs : List PredExpr} {it : Ter
     subst hteq
     exact compileCall_interpret hI hwφ hok
 
+/-- Dispatcher: `compilePred` commutes with interpretation on a well-formed `it`. -/
+theorem compilePred_interpret {p : PredExpr} {it : Term} {εnv : SymEnv} {I : Interpretation} {pt : Term} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hok : compilePred p it εnv = .ok pt) :
+    compilePred p (it.interpret I) (εnv.interpret I) = .ok (pt.interpret I) := by
+  match p with
+  | .item => exact compilePred_interpret_item hok
+  | .lit l => exact compilePred_interpret_lit hok
+  | .var v => exact compilePred_interpret_var hI hwε hok
+  | .ite x₁ x₂ x₃ =>
+    exact compilePred_interpret_ite hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .and x₁ x₂ =>
+    exact compilePred_interpret_and hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .or x₁ x₂ =>
+    exact compilePred_interpret_or hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .unaryApp op₁ x₁ =>
+    exact compilePred_interpret_unaryApp hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .binaryApp op₂ x₁ x₂ =>
+    exact compilePred_interpret_binaryApp hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .hasAttr x₁ a =>
+    exact compilePred_interpret_hasAttr hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .extHasAttr x₁ a l =>
+    exact compilePred_interpret_extHasAttr hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .getAttr x₁ a =>
+    exact compilePred_interpret_getAttr hI hwε hitw hitty hok
+      (fun h => compilePred_interpret hI hwε hitw hitty h)
+  | .record axs =>
+    exact compilePred_interpret_record hI hwε hitw hitty hok
+      (fun a x hpx {t} h => compilePred_interpret hI hwε hitw hitty h)
+  | .call xfn xs =>
+    exact compilePred_interpret_call hI hwε hitw hitty hok
+      (fun x hpx {t} h => compilePred_interpret hI hwε hitw hitty h)
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
+      | (have := List.sizeOf_lt_of_mem hpx; omega)
+
 end Cedar.Thm
