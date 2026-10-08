@@ -267,6 +267,24 @@ public def set.isEmpty : Term → Term
 public def set.intersects (ts₁ ts₂ : Term) : Term :=
   not (set.isEmpty (set.inter ts₁ ts₂))
 
+/--
+The reserved bound-element variable for the `.all` set-quantifier encoding
+(D-51). Its `id` cannot be produced by the compiler for any Cedar variable, so
+it never clashes with a free symbolic variable; `set.all` binds it. `elemTy` is
+the set's element type.
+-/
+public def anyAllItVar (elemTy : TermType) : TermVar :=
+  { id := "!anyall!it", ty := elemTy }
+
+/--
+Smart constructor for the `.all` set-quantifier term (D-34/D-51). `set` is the
+compiled receiver (type `.set elemTy`), `pred`/`err` are boolean Terms over
+`anyAllItVar elemTy` (the per-element predicate value and error). The result is `.option .bool` (tri-valued, D-35); it encodes via two
+`set.filter` comprehensions under `HO_ALL` (D-52). Always builds the symbolic
+`.app` form; literal-set constant folding is an optimizer concern. -/
+public def set.all (set pred err : Term) : Term :=
+  .app Op.set.all [set, pred, err] (.option .bool)
+
 ---------- Core ADT operators with a trusted mapping to SMT ----------
 
 public def option.get : Term → Term

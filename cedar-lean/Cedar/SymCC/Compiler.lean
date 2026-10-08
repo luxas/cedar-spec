@@ -280,6 +280,53 @@ def compileCall (xfn : ExtFun) (ts : List Term) : Result Term := do
   | _, _                          => .error .typeError
 
 /--
+Compile a quantifier predicate (`PredExpr`, the body of `.all`) over the reserved
+element term `it` (a `.option elemTy` term standing for the current element,
+always present). Mirrors `compile` for the set-free predicate fragment; `.item`
+resolves to `it`. Produces an `.option`-typed term exactly like `compile`. -/
+def compilePred (p : PredExpr) (it : Term) (εnv : SymEnv) : Result Term := do
+  match p with
+  | .item => .ok it
+  | .lit l => compilePrim l εnv.entities
+  | .var v => compileVar v εnv.request
+  | .ite x₁ x₂ x₃ =>
+    compileIf (← compilePred x₁ it εnv) (compilePred x₂ it εnv) (compilePred x₃ it εnv)
+  | .and x₁ x₂ =>
+    compileAnd (← compilePred x₁ it εnv) (compilePred x₂ it εnv)
+  | .or x₁ x₂ =>
+    compileOr (← compilePred x₁ it εnv) (compilePred x₂ it εnv)
+  | .unaryApp op₁ x₁ =>
+    let t₁ ← compilePred x₁ it εnv
+    ifSome t₁ (← compileApp₁ op₁ (option.get t₁))
+  | .binaryApp op₂ x₁ x₂ =>
+    let t₁ ← compilePred x₁ it εnv
+    let t₂ ← compilePred x₂ it εnv
+    ifSome t₁ (ifSome t₂ (← compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities))
+  | .hasAttr x a =>
+    let t ← compilePred x it εnv
+    ifSome t (← compileHasAttr (option.get t) a εnv.entities)
+  | .extHasAttr x a as =>
+    let t ← compilePred x it εnv
+    compileExtHasAttr t (a :: as) εnv.entities
+  | .getAttr x a =>
+    let t ← compilePred x it εnv
+    ifSome t (← compileGetAttr (option.get t) a εnv.entities)
+  | .record axs =>
+    let ats ← axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do .ok (a₁, ← compilePred x₁ it εnv))
+    compileRecord ats
+  | .call xfn xs =>
+    let ts ← xs.mapM₁ (λ ⟨x₁, _⟩ => compilePred x₁ it εnv)
+    compileCall xfn ts
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (rename_i h; replace h := List.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+      | omega
+
+/--
 Given an expression `x` that has type `τ` with respect to a type environment
 `Γ`, and given a well-formed symbolic environment `εnv` that conforms to `Γ`,
 `compile x εnv` succeeds and produces a well-formed term of type `.option τ.toTermType`.
@@ -319,8 +366,17 @@ def compile (x : Expr) (εnv : SymEnv) : Result Term := do
   | .call xfn xs =>
     let ts ← xs.mapM₁ (λ ⟨x₁, _⟩ => compile x₁ εnv)
     compileCall xfn ts
-  -- Symbolic compilation of the `.all` set quantifier is Phase 5 of the
-  -- anyall feature; until then it is conservatively unsupported.
-  | .all _ _ => .error .unsupportedError
+  -- `.all` (D-34/D-51): compile the receiver to a set term, bind the element
+  -- variable, compile the predicate over it, and build the bounded-quantifier
+  -- term. Error propagates from the receiver via `ifSome`; the per-element
+  -- predicate value / error feed the tri-valued `set.all`.
+  | .all x₁ p =>
+    let t ← compile x₁ εnv
+    match (option.get t).typeOf with
+    | .set elemTy =>
+      let itVar : Term := Factory.someOf (.var (Factory.anyAllItVar elemTy))
+      let pt ← compilePred p itVar εnv
+      ifSome t (Factory.set.all (option.get t) (option.get pt) (not (isSome pt)))
+    | _ => .error .typeError
 
 namespace Cedar.SymCC

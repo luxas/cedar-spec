@@ -299,7 +299,47 @@ def defineApp (tyEnc : String) (op : Op) (tEncs : List String) (ts : List Term):
   | .uuf f         => defineTerm tyEnc s!"({← encodeUUF f} {args})"
   | _              => defineTerm tyEnc s!"({encodeOp op} {args})"
 
-def encodeTerm (t : Term) : EncoderM String := do
+mutual
+/--
+Encode a Term *inline* (not in A-normal form), i.e. as a single nested
+S-expression with no `define-fun` lifting. Required inside a `set.filter` lambda
+body (the `set.all` encoding, D-52): lifting a subterm to a top-level
+`define-fun` would move it out of the bound variable's scope. The reserved
+element variable `anyAllItVar` is emitted as the bound SMT name `!anyall!it`
+(never declared as a global). Supported here is the first-order,
+non-dereferencing predicate fragment produced by `compilePred`; anything outside
+it throws (sound: the trusted encoder never emits an unverified shape). Record /
+entity dereference inside a predicate body is a follow-up (D-53). -/
+partial def encodeTermInline (t : Term) : EncoderM String := do
+  match t with
+  | .var v =>
+    if v.id = "!anyall!it" then return "!anyall!it"
+    else return (← encodeTerm t)   -- a free (environment) variable: ANF-encode and reference its id
+  | .prim p =>
+    match p with
+    | .bool b    => return if b then "true" else "false"
+    | .bitvec bv => return encodeBitVec bv
+    | .string s  => return s!"\"{← encodeString s}\""
+    | _          => throw (IO.userError "encodeTermInline: unsupported primitive in predicate body")
+  | .none ty  => return s!"(as none {← encodeType ty})"
+  | .some t₁  => return s!"(some {← encodeTermInline t₁})"
+  | .app .eq [a, b] _  => return s!"(= {← encodeTermInline a} {← encodeTermInline b})"
+  | .app .not [a] _    => return s!"(not {← encodeTermInline a})"
+  | .app .and [a, b] _ => return s!"(and {← encodeTermInline a} {← encodeTermInline b})"
+  | .app .or  [a, b] _ => return s!"(or {← encodeTermInline a} {← encodeTermInline b})"
+  | .app .ite [a, b, c] _ => return s!"(ite {← encodeTermInline a} {← encodeTermInline b} {← encodeTermInline c})"
+  | .app Op.option.get [a] _    => return s!"(val {← encodeTermInline a})"
+  | .app Op.set.member [a, b] _ => return s!"(set.member {← encodeTermInline a} {← encodeTermInline b})"
+  | .app op args@(_ :: _) _ =>
+    match op with
+    | .bvneg | .bvadd | .bvsub | .bvmul | .bvsdiv | .bvudiv | .bvsrem | .bvsmod
+    | .bvurem | .bvshl | .bvlshr | .bvslt | .bvsle | .bvult | .bvule =>
+      let encs ← args.mapM encodeTermInline
+      return s!"({encodeOp op} {String.intercalate " " encs})"
+    | _ => throw (IO.userError s!"encodeTermInline: unsupported op {op.mkName} in predicate body")
+  | _ => throw (IO.userError "encodeTermInline: unsupported term shape in predicate body")
+
+partial def encodeTerm (t : Term) : EncoderM String := do
   if let (.some enc) := (← get).terms.get? t then return enc
   let tyEnc ← encodeType t.typeOf
   let enc ←
@@ -331,8 +371,23 @@ def encodeTerm (t : Term) : EncoderM String := do
         -- we could put anything here and be sound, because `bvnego` should only be
         -- applied to Terms of type .bitvec
         return "false"
+    | .app Op.set.all [setT, predT, errT] _ =>
+      -- D-52 tri-valued set.filter encoding (HO_ALL):
+      -- ite (not (set.filter (λ it. ERR[it]) S = ∅)) none (some (set.filter (λ it. P[it]) S = S))
+      let elemTyEnc ← match setT.typeOf with
+        | .set ety => encodeType ety
+        | _        => throw (IO.userError "set.all: receiver is not a set")
+      let sEnc ← encodeTerm setT
+      let predEnc ← encodeTermInline predT
+      let errEnc ← encodeTermInline errT
+      let valFilter := s!"(set.filter (lambda ((!anyall!it {elemTyEnc})) {predEnc}) {sEnc})"
+      let errFilter := s!"(set.filter (lambda ((!anyall!it {elemTyEnc})) {errEnc}) {sEnc})"
+      let v := s!"(= {valFilter} {sEnc})"
+      let e := s!"(not (= {errFilter} (as set.empty (Set {elemTyEnc}))))"
+      defineTerm tyEnc s!"(ite {e} (as none {tyEnc}) (some {v}))"
     | .app op ts _      => defineApp tyEnc op (← ts.mapM₁ (λ ⟨tᵢ, _⟩ => encodeTerm tᵢ)) ts
   modifyGet λ state => (enc, {state with terms := state.terms.insert t enc})
+end
 
 /--
 Once you've generated `Asserts` with one of the functions in Verifier.lean, you
@@ -351,7 +406,7 @@ etc.
 public def encode (ts : List Term) (εnv : SymEnv) (produceModels : Bool := false) : SolverM EncoderState := do
   Solver.reset
   Solver.setOptionProduceModels produceModels
-  Solver.setLogic "ALL"
+  Solver.setLogic "HO_ALL"
   Solver.declareDatatype "Option" ["X"] ["(none)", "(some (val X))"]
   let (ids, s) ← ts.mapM encodeTerm |>.run (EncoderState.init εnv)
   for id in ids do

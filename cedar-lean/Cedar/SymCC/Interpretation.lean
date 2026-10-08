@@ -149,6 +149,14 @@ public def Term.interpret (I : Interpretation) : Term → Term
   | .set ts ty    =>
     let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
     .set ts' ty
+  | .app Op.set.all [setT, predT, errT] ty =>
+    -- Capture-safe (D-52): interpret the set and the predicate/error bodies, but
+    -- pin the reserved bound element variable to itself so the model `I` cannot
+    -- substitute it (it is a bound, not a free environment, variable).
+    let elemTy := match setT.typeOf with | .set e => e | _ => TermType.bool
+    let I' : Interpretation :=
+      { I with vars := fun v => if v = Factory.anyAllItVar elemTy then .var v else I.vars v }
+    .app Op.set.all [setT.interpret I, predT.interpret I', errT.interpret I'] ty
   | .app op ts ty =>
     let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
     op.interpret I ts' ty
@@ -156,13 +164,11 @@ public def Term.interpret (I : Interpretation) : Term → Term
     .record $ ats.mapOnValues₂ (λ ⟨t, _⟩ => t.interpret I)
 decreasing_by
   all_goals simp_wf
-  · rename t ∈ ts => h
-    have := Set.sizeOf_lt_of_mem h
-    omega
-  · rename t ∈ ts => h
-    have := List.sizeOf_lt_of_mem h
-    omega
-  · omega
+  all_goals
+    first
+      | omega
+      | (rename_i h; have := Set.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; have := List.sizeOf_lt_of_mem h; omega)
 
 @[expose]
 public def SymRequest.interpret (I : Interpretation) (req : SymRequest)  : SymRequest :=
