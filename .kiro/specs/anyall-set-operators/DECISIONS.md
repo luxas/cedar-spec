@@ -91,5 +91,6 @@ the Levels/slicing proofs.
    implements the real rule; the Phase 6 validation differential excludes
    `.all` (or expects Lean rejection). Req 6.4 stays unmet.
 
-**Current choice: 3**, because it is sound and reversible and blocks nothing
-in Phases 3–5. Phases 3–8 proceed on it unless you pick 1 or 2.
+**Choice: 1 (Full)**, chosen by the user on 2026-10-08 when Phase 5 showed
+SymCC cannot be non-vacuous without it (D-33). Option 3 was the interim
+choice through Phase 4. Implemented as part A of `phase5-anyall-symcc` (D-37).
