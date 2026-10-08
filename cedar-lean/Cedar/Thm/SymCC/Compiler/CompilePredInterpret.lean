@@ -517,4 +517,21 @@ theorem compilePred_interpret_ite {x₁ x₂ x₃ : PredExpr} {it : Term} {εnv 
         pe_ifSome_some hty',
         option.get']
 
+theorem compilePred_interpret_extHasAttr {x₁ : PredExpr} {a : Attr} {l : List Attr} {it : Term} {εnv : SymEnv} {I : Interpretation} {pt : Term} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hok : compilePred (.extHasAttr x₁ a l) it εnv = .ok pt)
+    (ih₁ : ∀ {t₁}, compilePred x₁ it εnv = .ok t₁ →
+            compilePred x₁ (it.interpret I) (εnv.interpret I) = .ok (t₁.interpret I)) :
+    compilePred (.extHasAttr x₁ a l) (it.interpret I) (εnv.interpret I) = .ok (pt.interpret I) := by
+  simp only [compilePred] at hok ⊢
+  cases hok₁ : compilePred x₁ it εnv <;> simp only [hok₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  rename_i t₁
+  rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
+  have ⟨hwt₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  simp only [ih₁ hok₁, Except.bind_ok]
+  simp only [SymEnv.interpret]
+  rw [compileExtHasAttr_eq_compileExtHasAttrRec]
+  exact compileExtHasAttrRec_interpret hI hwε.right hwt₁ ⟨ty₁, hty₁⟩ hok
+
 end Cedar.Thm

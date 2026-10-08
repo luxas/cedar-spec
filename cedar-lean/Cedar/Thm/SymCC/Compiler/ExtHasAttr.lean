@@ -489,7 +489,7 @@ private theorem compileAnd_interpret {t₁ t₂ t : Term} {εnv : SymEnv} {I : I
     case h_3 hty =>
       rw [hty₁] at hty; simp at hty
 
-private theorem compileExtHasAttrRec_interpret {t₁ : Term} {attrs : List Attr} {εnv : SymEnv} {I : Interpretation} {t : Term}
+theorem compileExtHasAttrRec_interpret {t₁ : Term} {attrs : List Attr} {εnv : SymEnv} {I : Interpretation} {t : Term}
   (hI : I.WellFormed εnv.entities)
   (hwε : εnv.entities.WellFormed)
   (hw₁ : t₁.WellFormed εnv.entities) (hty₁ : ∃ ty, t₁.typeOf = .option ty)
