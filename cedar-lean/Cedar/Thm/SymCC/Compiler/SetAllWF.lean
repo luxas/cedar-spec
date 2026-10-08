@@ -23,6 +23,7 @@ public import Cedar.SymCC.Term
 import Cedar.Thm.SymCC.Data
 import Cedar.Thm.Data.Map
 import Cedar.Thm.Data.Set
+import Cedar.Thm.SymCC.Term.WF
 import all Cedar.SymCC.Factory
 import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 
@@ -515,5 +516,45 @@ theorem noSetAll_bvsrem {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t�
 theorem anyAllItTyped_bvsrem {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsrem t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
 theorem noSetAll_bvsmod {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Factory.bvsmod t₁ t₂).NoSetAll = true := noSetAll_bvapp (by intro h; cases h) h1 h2
 theorem anyAllItTyped_bvsmod {ety : TermType} {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Factory.bvsmod t₁ t₂).anyAllItTyped ety = true := anyAllItTyped_bvapp h1 h2
+
+/-! ### wf_set_all — WellFormed of the Factory.set.all smart constructor (D-64 guarded) -/
+
+theorem wf_set_all {εs : SymEntities} {S P E : Term} {ety : TermType}
+    (hSwf : S.WellFormed εs) (hSty : S.typeOf = .set ety)
+    (hPwf : P.WellFormed εs) (hPty : P.typeOf = .bool)
+    (hEwf : E.WellFormed εs) (hEty : E.typeOf = .bool)
+    (hPn : P.NoSetAll = true) (hEn : E.NoSetAll = true)
+    (hPa : P.anyAllItTyped ety = true) (hEa : E.anyAllItTyped ety = true) :
+    (Factory.set.all S P E).WellFormed εs ∧ (Factory.set.all S P E).typeOf = .option .bool := by
+  unfold Factory.set.all
+  split
+  · rename_i vs ety'
+    split
+    · rename_i hlit
+      cases hSwf with | set_wf h₁ h₂ h₃ h₄ =>
+      simp only [Term.typeOf, TermType.set.injEq] at hSty
+      simp only [List.all_eq_true] at hlit
+      have hvi : ∀ vi ∈ (Set.mk vs).elts, vi.NoSetAll = true ∧ vi.anyAllItTyped ety = true ∧ vi.WellFormed εs ∧ vi.typeOf = ety := by
+        intro vi hmem
+        have hil : vi.isLiteral = true := hlit vi (by simpa [Set.elts] using hmem)
+        refine ⟨isLiteral_noSetAll _ hil, isLiteral_anyAllItTyped _ hil, h₁ vi hmem, ?_⟩
+        rw [h₂ vi hmem, hSty]
+      have hconj := foldr_and_wf (g := fun vi => Term.substAnyAllIt vi P) vs (by
+        intro vi hmem
+        have ⟨hn, ha, hw, ht⟩ := hvi vi (by simpa [Set.elts] using hmem)
+        have hava : ∀ e, vi.anyAllItTyped e = true := fun e => isLiteral_anyAllItTyped _ (hlit vi (by simpa [Set.elts] using hmem))
+        refine ⟨substAnyAllIt_wf hw hn hava P hPwf (ht ▸ hPa), ?_⟩
+        rw [substAnyAllIt_typeOf P (ht ▸ hPa), hPty])
+      have hanyErr := foldr_or_wf (g := fun vi => Term.substAnyAllIt vi E) vs (by
+        intro vi hmem
+        have ⟨hn, ha, hw, ht⟩ := hvi vi (by simpa [Set.elts] using hmem)
+        have hava : ∀ e, vi.anyAllItTyped e = true := fun e => isLiteral_anyAllItTyped _ (hlit vi (by simpa [Set.elts] using hmem))
+        refine ⟨substAnyAllIt_wf hw hn hava E hEwf (ht ▸ hEa), ?_⟩
+        rw [substAnyAllIt_typeOf E (ht ▸ hEa), hEty])
+      have hwi := wf_ite hanyErr.left (Term.WellFormed.none_wf (ty := .bool) TermType.WellFormed.bool_wf) (Term.WellFormed.some_wf hconj.left) hanyErr.right (by simp only [Term.typeOf, hconj.right])
+      simp only []
+      exact ⟨hwi.left, hwi.right.trans (by simp only [Factory.noneOf, Term.typeOf])⟩
+    · exact mkApp_set_all_wf hSwf hSty hPwf hPty hEwf hEty hPn hEn hPa hEa
+  · exact mkApp_set_all_wf hSwf hSty hPwf hPty hEwf hEty hPn hEn hPa hEa
 
 end Cedar.Thm
