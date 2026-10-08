@@ -63,7 +63,7 @@ Until Phase 4 (T4.3), serializing a policy containing `.all`/`.any` under
 `--features protobufs,anyall` panics via `unimplemented!`. Phase 4 replaces
 this with the real proto form and a round-trip test.
 
-### D-11 — Lean type rule and soundness for `.all` (req 6.4) — NEEDS DECISION
+### D-11 — Lean type rule and soundness for `.all` (req 6.4) — RESOLVED 2026-10-08: Full rule (user), see D-33, D-37
 **Where it stands.** Phase 2 landed the Lean node, the evaluator (RFC 0021
 semantics, 16 unit tests) and every proof repair, with the Lean `typeOf`
 conservatively returning a type error for `.all`. That is sound (the
