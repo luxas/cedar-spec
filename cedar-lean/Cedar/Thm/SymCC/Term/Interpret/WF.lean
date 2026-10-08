@@ -485,7 +485,7 @@ private theorem interpret_term_app_wf_set_all {εs : SymEntities} {I : Interpret
   cases h₁ with
   | app_wf hargs hwt =>
     cases hwt with
-    | set.all_wt hset hpred herr =>
+    | set.all_wt hset hpred herr hpn hen hpty hety =>
       next setT predT errT elemTy =>
       have ihset := ih setT (by simp)
       simp only [InterpretTermWF, Term.interpret, Term.typeOf]
