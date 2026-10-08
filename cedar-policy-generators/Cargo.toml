@@ -21,3 +21,7 @@ indexmap = { version = "2.12.0", features = ["arbitrary"] }
 
 [features]
 cedar-policy = ["dep:cedar-policy"]
+
+# Non-nested `.any`/`.all` set operators (spec: anyall-set-operators). Passthrough
+# to cedar-policy-core; inert until the generator arm lands in Phase 6. Off by default.
+anyall = ["cedar-policy-core/anyall"]

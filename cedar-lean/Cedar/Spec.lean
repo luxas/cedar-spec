@@ -21,6 +21,7 @@ public import Cedar.Spec.Entities
 public import Cedar.Spec.Evaluator
 public import Cedar.Spec.Expr
 public import Cedar.Spec.Ext
+public import Cedar.Spec.Features
 public import Cedar.Spec.Policy
 public import Cedar.Spec.Request
 public import Cedar.Spec.Response

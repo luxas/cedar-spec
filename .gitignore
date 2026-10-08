@@ -4,6 +4,10 @@
 # Don't check in ide settings by accident
 .idea
 .kiro
+# ...but DO track spec-driven dev documents so spec updates land in the git log.
+!.kiro/
+!.kiro/specs/
+!.kiro/specs/**
 .claude
 # VSCode settings -- use .vscode/settings.json.default for recommended config;
 # local .vscode/ is ignored so developer overrides stay untracked
