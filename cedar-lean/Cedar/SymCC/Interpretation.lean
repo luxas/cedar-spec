@@ -141,28 +141,39 @@ def Op.interpret (I : Interpretation) (op : Op) (ts : List Term) (ty : TermType)
   | .ext xop, [t₁]        => xop.interpret I t₁
   | _, _                  => .app op ts ty
 
-public def Term.interpret (I : Interpretation) : Term → Term
+/--
+`Term.interpretWith σ I` interprets a term under model `I`, additionally
+substituting the reserved bound element variable `anyAllItVar` by `σ` when `σ`
+is `some v` (used inside the `set.all` concrete fold, D-55). It is structural on
+the term and otherwise identical to `interpret` — every arm calls the same
+Factory / `op.interpret` constructors, so it re-normalises (e.g. `bvslt 0 1`
+folds to `true`). `Term.interpret I := interpretWith none I`. -/
+public def Term.interpretWith (σ : Option Term) (I : Interpretation) : Term → Term
   | .prim p       => .prim p
-  | .var v        => I.vars v
+  | .var v        => match σ with
+                     | Option.some v' => if v.id = "!anyall!it" then v' else I.vars v
+                     | Option.none    => I.vars v
   | .none ty      => noneOf ty
-  | .some t       => someOf (t.interpret I)
+  | .some t       => someOf (Term.interpretWith σ I t)
   | .set ts ty    =>
-    let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
+    let ts' := ts.map₁ (λ ⟨t, _⟩ => Term.interpretWith σ I t)
     .set ts' ty
   | .app Op.set.all [setT, predT, errT] ty =>
-    -- Interpret only the receiver; the predicate/error bodies are left
-    -- uninterpreted so the model `I` never substitutes the bound variable
-    -- `anyAllItVar` (interpreting under `I` would replace it with a literal,
-    -- changing the quantifier's meaning — why D-54 was REJECTED). This is sound
-    -- and WF-preserving. The concrete fold of a literal receiver to a literal
-    -- result (D-55) requires a substitute-then-renormalize pass (`interpretWith`)
-    -- and is tracked separately.
-    .app Op.set.all [setT.interpret I, predT, errT] ty
+    -- D-55 final semantics: interpret the receiver; if it is a literal set, fold
+    -- element-by-element (bound var substituted by each element, free vars
+    -- interpreted) to a literal, matching `evalAll`. Otherwise keep the symbolic
+    -- node, interpreting free vars in the bodies but leaving the bound var.
+    match Term.interpretWith σ I setT with
+    | .set (Set.mk vs) _ =>
+      let conj   := vs.foldr (fun vi acc => Factory.and (Term.interpretWith (some vi) I predT) acc) (true : Term)
+      let anyErr := vs.foldr (fun vi acc => Factory.or  (Term.interpretWith (some vi) I errT)  acc) (false : Term)
+      Factory.ite anyErr (Factory.noneOf .bool) (Factory.someOf conj)
+    | setT' => .app Op.set.all [setT', Term.interpretWith Option.none I predT, Term.interpretWith Option.none I errT] ty
   | .app op ts ty =>
-    let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
+    let ts' := ts.map₁ (λ ⟨t, _⟩ => Term.interpretWith σ I t)
     op.interpret I ts' ty
   | .record ats   =>
-    .record $ ats.mapOnValues₂ (λ ⟨t, _⟩ => t.interpret I)
+    .record $ ats.mapOnValues₂ (λ ⟨t, _⟩ => Term.interpretWith σ I t)
 decreasing_by
   all_goals simp_wf
   all_goals
@@ -170,6 +181,9 @@ decreasing_by
       | omega
       | (rename_i h; have := Set.sizeOf_lt_of_mem h; omega)
       | (rename_i h; have := List.sizeOf_lt_of_mem h; omega)
+
+@[expose]
+public def Term.interpret (I : Interpretation) (t : Term) : Term := Term.interpretWith Option.none I t
 
 @[expose]
 public def SymRequest.interpret (I : Interpretation) (req : SymRequest)  : SymRequest :=

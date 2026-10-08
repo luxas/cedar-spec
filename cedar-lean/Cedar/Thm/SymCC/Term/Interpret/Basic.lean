@@ -40,28 +40,30 @@ open Batteries Data Spec SymCC Factory
 @[simp]
 public theorem interpret_term_prim {I : Interpretation} {p : TermPrim} :
   (Term.prim p).interpret I = Term.prim p
-:= by simp only [Term.interpret]
+:= by simp only [Term.interpret, Term.interpretWith]
 
 @[simp]
 public theorem interpret_term_var {I : Interpretation} {v : TermVar} :
   (Term.var v).interpret I = I.vars v
-:= by simp only [Term.interpret]
+:= by simp only [Term.interpret, Term.interpretWith]
 
 @[simp]
 public theorem interpret_term_none {I : Interpretation} {ty : TermType} :
   (Term.none ty).interpret I = Term.none ty
-:= by simp only [Term.interpret, noneOf]
+:= by simp only [Term.interpret, Term.interpretWith, noneOf]
 
 @[simp]
 public theorem interpret_term_some {I : Interpretation} {t : Term} :
   (Term.some t).interpret I = Term.some (t.interpret I)
-:= by simp only [Term.interpret, someOf]
+:= by simp only [Term.interpret, Term.interpretWith, someOf]
 
 @[simp]
 public theorem interpret_term_set {I : Interpretation} {s : Set Term} {ty : TermType} :
   (Term.set s ty).interpret I =
   Term.set (s.map (Term.interpret I)) ty
-:= by simp [Term.interpret, Set.map₁_eq_map]
+:= by
+  simp only [Term.interpret, Term.interpretWith, Set.map₁_eq_map]
+  rfl
 
 @[simp]
 public theorem interpret_term_set_empty {ty : TermType} :
@@ -79,7 +81,9 @@ public theorem interpret_term_set_mk_nil {ty : TermType} :
 public theorem interpret_term_record {I : Interpretation} {r : Map Attr Term} :
   (Term.record r).interpret I =
   Term.record (r.mapOnValues (Term.interpret I))
-:= by simp [Term.interpret]
+:= by
+  simp only [Term.interpret, Term.interpretWith, Map.mapOnValues₂_eq_mapOnValues]
+  rfl
 
 /--
 This tactic discharges proofs in lemmas of the form `interpret_term_app_*`,
@@ -90,7 +94,7 @@ local syntax "simp_interpret_term_app" : tactic
 local macro_rules
 | `(tactic| simp_interpret_term_app) =>
   `(tactic|
-    simp only [Term.interpret, List.map₁_eq_map, List.map_cons, List.map_nil] ;
+    simp only [Term.interpret, Term.interpretWith, List.map₁_eq_map, List.map_cons, List.map_nil] ;
     simp only [Op.interpret] -- Faster proof when this is a separate simp
     )
 
