@@ -24,6 +24,7 @@ import all Cedar.Thm.SymCC.Compiler.SetAllWF
 import Cedar.Thm.SymCC.Data.Basic
 import Cedar.Thm.Data.Map
 import all Cedar.Thm.SymCC.Compiler.Invert
+import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.Tactics
 
 /-! Per-helper `NoSetAll` / `anyAllItTyped` preservation lemmas for the `compilePred`
@@ -276,5 +277,58 @@ theorem anyAllItTyped_app_uf {ety : TermType} {uf : UnaryFunction} {t : Term} {�
       intro p hp
       have := hwf.right.right.right p.1 p.2 (by cases p; exact hp)
       exact ⟨isLiteral_anyAllItTyped _ this.left.right, isLiteral_anyAllItTyped _ this.right.right.left.right⟩
+
+/-! ### compileAttrsOf / compileHasAttr / compileGetAttr -/
+
+theorem noSetAll_compileAttrsOf {t r : Term} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.NoSetAll = true) (hok : compileAttrsOf t εs = Except.ok r) : r.NoSetAll = true := by
+  rcases compileAttrsOf_ok_implies hok with ⟨rty, _, rfl⟩ | ⟨ety, fₐ, _, hf, rfl⟩
+  · exact h
+  · exact noSetAll_app_uf (wf_εs_implies_wf_attrs hwε hf).left h
+theorem anyAllItTyped_compileAttrsOf {ety' : TermType} {t r : Term} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.anyAllItTyped ety' = true) (hok : compileAttrsOf t εs = Except.ok r) : r.anyAllItTyped ety' = true := by
+  rcases compileAttrsOf_ok_implies hok with ⟨rty, _, rfl⟩ | ⟨ety, fₐ, _, hf, rfl⟩
+  · exact h
+  · exact anyAllItTyped_app_uf (wf_εs_implies_wf_attrs hwε hf).left h
+
+theorem noSetAll_compileHasAttr {t r : Term} {a : Attr} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.NoSetAll = true) (hok : compileHasAttr t a εs = Except.ok r) : r.NoSetAll = true := by
+  obtain ⟨t₂, rty, hA, hR⟩ := compileHasAttr_ok_implies hok
+  have h2 := noSetAll_compileAttrsOf hwε h hA
+  unfold RecordHasAttr at hR
+  obtain ⟨_, hR⟩ := hR
+  split at hR <;> subst hR
+  · exact noSetAll_someOf (noSetAll_isSome (noSetAll_record_get h2))
+  · exact noSetAll_someOf (by simp [Term.NoSetAll])
+  · exact noSetAll_someOf (by simp [Term.NoSetAll])
+theorem anyAllItTyped_compileHasAttr {ety' : TermType} {t r : Term} {a : Attr} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.anyAllItTyped ety' = true) (hok : compileHasAttr t a εs = Except.ok r) : r.anyAllItTyped ety' = true := by
+  obtain ⟨t₂, rty, hA, hR⟩ := compileHasAttr_ok_implies hok
+  have h2 := anyAllItTyped_compileAttrsOf hwε h hA
+  unfold RecordHasAttr at hR
+  obtain ⟨_, hR⟩ := hR
+  split at hR <;> subst hR
+  · exact anyAllItTyped_someOf (anyAllItTyped_isSome (anyAllItTyped_record_get h2))
+  · exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped])
+  · exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped])
+
+theorem noSetAll_compileGetAttr {t r : Term} {a : Attr} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.NoSetAll = true) (hok : compileGetAttr t a εs = Except.ok r) : r.NoSetAll = true := by
+  obtain ⟨t₂, rty, hA, hR⟩ := compileGetAttr_ok_implies hok
+  have h2 := noSetAll_compileAttrsOf hwε h hA
+  unfold RecordGetAttr at hR
+  obtain ⟨_, tyₐ, _, hR⟩ := hR
+  split at hR <;> subst hR
+  · exact noSetAll_record_get h2
+  · exact noSetAll_someOf (noSetAll_record_get h2)
+theorem anyAllItTyped_compileGetAttr {ety' : TermType} {t r : Term} {a : Attr} {εs : SymEntities} (hwε : εs.WellFormed)
+    (h : t.anyAllItTyped ety' = true) (hok : compileGetAttr t a εs = Except.ok r) : r.anyAllItTyped ety' = true := by
+  obtain ⟨t₂, rty, hA, hR⟩ := compileGetAttr_ok_implies hok
+  have h2 := anyAllItTyped_compileAttrsOf hwε h hA
+  unfold RecordGetAttr at hR
+  obtain ⟨_, tyₐ, _, hR⟩ := hR
+  split at hR <;> subst hR
+  · exact anyAllItTyped_record_get h2
+  · exact anyAllItTyped_someOf (anyAllItTyped_record_get h2)
 
 end Cedar.Thm
