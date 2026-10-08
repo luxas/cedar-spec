@@ -172,8 +172,8 @@ public def Term.interpretWith (σ : Option Term) (I : Interpretation) : Term →
       -- the `else` is a dead proof-convenience fallback carrying its own typing
       -- evidence, exactly like the non-literal-receiver branch below.
       if vs.all (·.isLiteral) then
-        let conj   := vs.foldr (fun vi acc => Factory.and (Term.interpretWith (some vi) I predT) acc) (true : Term)
-        let anyErr := vs.foldr (fun vi acc => Factory.or  (Term.interpretWith (some vi) I errT)  acc) (false : Term)
+        let conj   := vs.foldr (fun vi acc => Factory.and (Term.interpretWith (Option.some vi) I predT) acc) (true : Term)
+        let anyErr := vs.foldr (fun vi acc => Factory.or  (Term.interpretWith (Option.some vi) I errT)  acc) (false : Term)
         Factory.ite anyErr (Factory.noneOf .bool) (Factory.someOf conj)
       else
         let p' := Term.interpretWith Option.none I predT
