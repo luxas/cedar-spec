@@ -116,4 +116,96 @@ theorem compilePred_interpret_hasAttr {x₁ : PredExpr} {a : Attr} {it : Term} {
     rw [← (interpret_term_wf hI hwφ₃).right] at hty₃
     exact pe_ifSome_ok_get_eq_get' I (compileHasAttr · a (SymEntities.interpret I εnv.entities)) hwφ₂ hty₃ hty₄ hi heq
 
+theorem compilePred_interpret_getAttr {x₁ : PredExpr} {a : Attr} {it : Term} {εnv : SymEnv} {I : Interpretation} {pt : Term} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hok : compilePred (.getAttr x₁ a) it εnv = .ok pt)
+    (ih₁ : ∀ {t₁}, compilePred x₁ it εnv = .ok t₁ →
+            compilePred x₁ (it.interpret I) (εnv.interpret I) = .ok (t₁.interpret I)) :
+    compilePred (.getAttr x₁ a) (it.interpret I) (εnv.interpret I) = .ok (pt.interpret I) := by
+  have hwε' := interpret_εntities_wf hwε.right hI
+  simp only [compilePred] at hok ⊢
+  cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  rename_i t₂
+  cases ha : compileGetAttr (option.get t₂) a εnv.entities <;> simp only [ha, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  simp only [Except.ok.injEq] at hok; subst hok
+  have ⟨hwφ₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty h1
+  have hwo := wf_option_get hwφ₁ hty₁
+  have hi := interpret_compileGetAttr hwε.right hI hwo.left ha
+  simp only [ih₁ h1, Except.bind_ok]
+  simp_do_let (compileGetAttr (option.get (Term.interpret I t₂)) a (SymEnv.interpret I εnv).entities) <;>
+  rename_i heq <;>
+  simp only [SymEnv.interpret] at heq
+  case error =>
+    have ⟨_, hok'⟩ := compileGetAttr_interpret_ok hI hwε.right hwφ₁ hty₁ hi
+    simp only [hok', reduceCtorEq] at heq
+  case ok t₄ =>
+    have ⟨hwφ₂, tyₐ, hty₂⟩ := compileGetAttr_wf hwε.right hwo.left ha
+    simp only [interpret_ifSome hI hwφ₁ hwφ₂, Except.ok.injEq]
+    rw [interpret_option_get I hwφ₁ hty₁] at hi
+    have hwφ₃  := interpret_term_wfl hI hwφ₁ ; rw [hty₁] at hwφ₃
+    have hty₄ : t₄.typeOf = .option tyₐ := by
+      have hwo'  := wf_option_get hwφ₃.left.left hwφ₃.right
+      have hwo'' := wf_option_get' hI hwφ₃.left.left hwφ₃.right
+      have hwφ₄  := wf_term_same_domain (interpret_entities_same_domain εnv.entities I) hwo'.left
+      have hwφ₄' := wf_term_same_domain (interpret_entities_same_domain εnv.entities I) hwo''.left
+      have h := compileGetAttr_ok_typeOf_eq hwε' hwφ₄' hwφ₄ (by simp only [hwo''.right, hwo'.right]) hi heq
+      simp only [interpret_term_wf hI hwφ₂] at h
+      simp only [h, hty₂]
+    rw [← (interpret_term_wf hI hwφ₂).right] at hty₂
+    exact pe_ifSome_ok_get_eq_get' I (compileGetAttr · a (SymEntities.interpret I εnv.entities)) hwφ₃ hty₂ hty₄ hi heq
+
+theorem compilePred_interpret_binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr} {it : Term} {εnv : SymEnv} {I : Interpretation} {pt : Term} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hok : compilePred (.binaryApp op₂ x₁ x₂) it εnv = .ok pt)
+    (ih₁ : ∀ {t₁}, compilePred x₁ it εnv = .ok t₁ →
+            compilePred x₁ (it.interpret I) (εnv.interpret I) = .ok (t₁.interpret I))
+    (ih₂ : ∀ {t₂}, compilePred x₂ it εnv = .ok t₂ →
+            compilePred x₂ (it.interpret I) (εnv.interpret I) = .ok (t₂.interpret I)) :
+    compilePred (.binaryApp op₂ x₁ x₂) (it.interpret I) (εnv.interpret I) = .ok (pt.interpret I) := by
+  simp only [compilePred] at hok ⊢
+  cases hok₁ : compilePred x₁ it εnv <;> simp only [hok₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  cases hok₂ : compilePred x₂ it εnv <;> simp only [hok₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  rename_i t₁ t₂
+  cases hcA : compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities <;> simp only [hcA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  simp only [Except.ok.injEq] at hok; subst hok
+  have ⟨hwφ₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo₁ := wf_option_get hwφ₁ hty₁
+  have hwφ₁' := interpret_term_wfl hI hwφ₁ ; rw [hty₁] at hwφ₁'
+  have hwo₁' := wf_option_get hwφ₁'.left.left hwφ₁'.right
+  rw [eq_comm, ← hwo₁.right] at hwo₁'
+  have ⟨hwφ₂, ty₂, hty₂⟩ := compilePred_wf hwε hitw hitty hok₂
+  have hwo₂ := wf_option_get hwφ₂ hty₂
+  have hwφ₂' := interpret_term_wfl hI hwφ₂ ; rw [hty₂] at hwφ₂'
+  have hwo₂' := wf_option_get hwφ₂'.left.left hwφ₂'.right
+  rw [eq_comm, ← hwo₂.right] at hwo₂'
+  simp only [ih₁ hok₁, ih₂ hok₂, Except.bind_ok]
+  have hi := interpret_compileApp₂ hwε.right hI hwo₁.left hwo₂.left hcA
+  simp_do_let (compileApp₂ op₂ (option.get (Term.interpret I t₁)) (option.get (Term.interpret I t₂)) (SymEnv.interpret I εnv).entities) <;>
+  rename_i heq
+  case error =>
+    simp only [SymEnv.interpret] at heq
+    have ⟨_, hok'⟩ := compileApp₂_ok_typeOf I hwo₁'.right hwo₂'.right hcA
+    simp only [heq, reduceCtorEq] at hok'
+  case ok t₄ =>
+    simp only [SymEnv.interpret] at heq
+    have ⟨hwφ₃, ty₃, hty₃⟩ := compileApp₂_wf hwε.right hwo₁.left hwo₂.left hcA
+    have hwφ₄ := wf_ifSome_option hwφ₂ hwφ₃ hty₃
+    simp only [interpret_ifSome hI hwφ₁ hwφ₄.left, interpret_ifSome hI hwφ₂ hwφ₃, Except.ok.injEq]
+    rw [interpret_option_get I hwφ₁ hty₁, interpret_option_get I hwφ₂ hty₂] at hi
+    have hty₄ : Term.typeOf t₄ = TermType.option ty₃ := by
+      rw [← hty₃, ← (interpret_term_wf hI hwφ₃).right]
+      have hdom := interpret_entities_same_domain εnv.entities I
+      have hty₅ : (option.get' I (Term.interpret I t₁)).typeOf = (option.get (Term.interpret I t₁)).typeOf := by
+        simp only [wf_option_get' hI hwφ₁'.left.left hwφ₁'.right, ← hwo₁.right, ← hwo₁'.right]
+      exact compileApp₂_ok_typeOf_eq (interpret_εntities_wf hwε.right hI)
+        (wf_term_same_domain hdom (wf_option_get' hI hwφ₁'.left.left hwφ₁'.right).left)
+        (wf_term_same_domain hdom (wf_option_get' hI hwφ₂'.left.left hwφ₂'.right).left)
+        (wf_term_same_domain hdom hwo₁'.left)
+        (wf_term_same_domain hdom hwo₂'.left)
+        hty₅ hi heq
+    rw [← (interpret_term_wf hI hwφ₃).right] at hty₃
+    exact pe_ifSome_ok_get_eq_get'₂ I (compileApp₂ op₂ · · (SymEntities.interpret I εnv.entities)) hwφ₁' hwφ₂' hty₃ hty₄ hi heq
+
 end Cedar.Thm
