@@ -28,6 +28,9 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-18 | 3 | `subexpressions()`/`slots()`/visitors stay receiver-only (`PredExpr` has no `Slot`/`Unknown`); `level_validate` descends into the predicate. | SETTLED |
 | D-19 | 3 | Validator types predicates with a parallel `typecheck_pred(it_ty)`, which also enforces req 1.5 (no set-typed subterm). | SETTLED |
 | D-20 | 3 | Req 1.4 (no nesting) and 1.6 (`it` outside a predicate) are unrepresentable in the Rust AST; they are enforced by the Phase 4 parser / EST→AST conversion, not by `try_validate`. | SETTLED |
+| D-21 | 3 | The validator types a predicate by instantiating `it` with a reserved unknown (`__cedar::anyall::it`) that a nested typechecker types as the element type, instead of a parallel `typecheck_pred` (refines D-19). Reuses every existing typing rule; the reserved name cannot be written in policy text. | SETTLED |
+| D-22 | 3 | In the Rust evaluator, a `RecursionLimit` error inside a predicate propagates unchanged rather than becoming `QuantifierError` (it is an implementation limit with no Lean counterpart). | OPEN — check in Phase 6 differential |
+| D-23 | 3 | Level validation: dereferencing `it` is charged the level of the receiver's elements (max over a set literal's elements). | SETTLED |
 
 ## Details
 
