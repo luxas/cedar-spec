@@ -639,6 +639,40 @@ public theorem prim_valid_refs_same_domain {εs₁ εs₂ : SymEntities} {p : Pr
   rw [h₁.left uid] at h₂
   exact h₂
 
+public theorem pred_valid_refs_same_domain {εs₁ εs₂ : SymEntities} {p : PredExpr} :
+  SameDomain εs₁ εs₂ →
+  p.ValidRefs (εs₁.isValidEntityUID · = true) →
+  p.ValidRefs (εs₂.isValidEntityUID · = true)
+:= by
+  intro h₁ h₂
+  induction h₂
+  case item_valid =>
+    exact PredExpr.ValidRefs.item_valid
+  case lit_valid h =>
+    exact PredExpr.ValidRefs.lit_valid (prim_valid_refs_same_domain h₁ h)
+  case var_valid =>
+    exact PredExpr.ValidRefs.var_valid
+  case ite_valid ih₁ ih₂ ih₃ =>
+    exact PredExpr.ValidRefs.ite_valid ih₁ ih₂ ih₃
+  case and_valid ih₁ ih₂ =>
+    exact PredExpr.ValidRefs.and_valid ih₁ ih₂
+  case or_valid ih₁ ih₂ =>
+    exact PredExpr.ValidRefs.or_valid ih₁ ih₂
+  case binaryApp_valid ih₁ ih₂ =>
+    exact PredExpr.ValidRefs.binaryApp_valid ih₁ ih₂
+  case unaryApp_valid ih₁ =>
+    exact PredExpr.ValidRefs.unaryApp_valid ih₁
+  case hasAttr_valid ih₁ =>
+    exact PredExpr.ValidRefs.hasAttr_valid ih₁
+  case extHasAttr_valid ih₁ =>
+    exact PredExpr.ValidRefs.extHasAttr_valid ih₁
+  case getAttr_valid ih₁ =>
+    exact PredExpr.ValidRefs.getAttr_valid ih₁
+  case record_valid ih₁ =>
+    exact PredExpr.ValidRefs.record_valid ih₁
+  case call_valid ih₁ =>
+    exact PredExpr.ValidRefs.call_valid ih₁
+
 public theorem expr_valid_refs_same_domain {εs₁ εs₂ : SymEntities} {x : Expr} :
   SameDomain εs₁ εs₂ →
   x.ValidRefs (εs₁.isValidEntityUID · = true) →
@@ -672,6 +706,8 @@ public theorem expr_valid_refs_same_domain {εs₁ εs₂ : SymEntities} {x : Ex
     exact Expr.ValidRefs.record_valid ih₁
   case call_valid ih₁ =>
     exact Expr.ValidRefs.call_valid ih₁
+  case all_valid h₂ ih₁ =>
+    exact Expr.ValidRefs.all_valid ih₁ (pred_valid_refs_same_domain h₁ h₂)
 
 /--
 `SymEnv` being well-formed implies that any

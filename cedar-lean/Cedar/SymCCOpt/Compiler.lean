@@ -408,5 +408,7 @@ def compile (x : Expr) (εnv : SymEnv) : Result CompileResult := do
   | .call xfn xs =>
     let ress ← xs.mapM₁ (λ ⟨x₁, _⟩ => compile x₁ εnv)
     compileCall xfn ress
+  -- Unsupported until anyall Phase 5 (mirrors `SymCC.compile`).
+  | .all _ _ => .error .unsupportedError
 
 namespace Cedar.SymCC

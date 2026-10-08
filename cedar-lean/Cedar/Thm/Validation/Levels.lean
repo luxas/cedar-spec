@@ -112,6 +112,8 @@ theorem level_based_slicing_is_sound_expr {e : Expr} {n : Nat} {tx : TypedExpr} 
         omega
       exact @level_based_slicing_is_sound_expr x.snd
     exact level_based_slicing_is_sound_record hc hr ht hl ih
+  case all =>
+    simp [typeOf] at ht
 termination_by e
 
 theorem typecheck_policy_with_level_is_sound {p : Policy} {tx : TypedExpr} {n : Nat} {env : TypeEnv} {request : Request} {entities : Entities}

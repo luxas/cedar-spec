@@ -225,6 +225,47 @@ private theorem wf_ρ_implies_valid_uids {ρ : SymRequest} {εs : SymEntities} :
   · exact (wf_term_implies_valid_uids hr) uid hin
   · exact (wf_term_implies_valid_uids hc) uid hin
 
+private theorem pred_valid_refs_implies_valid_uids {p : PredExpr} {εs : SymEntities} :
+  p.ValidRefs (λ y => εs.isValidEntityUID y) →
+  ∀ uid ∈ p.entityUIDs, εs.isValidEntityUID uid
+:= by
+  intro hvr uid hin
+  induction hvr <;> simp only [PredExpr.entityUIDs] at hin
+  case item_valid | var_valid =>
+    have _ := Set.not_mem_empty uid
+    contradiction
+  case lit_valid p h =>
+    simp only [Prim.entityUIDs] at hin
+    split at hin
+    · simp only [Prim.ValidRef] at h
+      rw [Set.mem_singleton] at hin
+      subst hin
+      exact h
+    · have _ := Set.not_mem_empty uid
+      contradiction
+  case and_valid ih₁ ih₂ | or_valid ih₁ ih₂ | binaryApp_valid ih₁ ih₂ =>
+    rw [Set.mem_union] at hin
+    rcases hin with hin | hin
+    · exact ih₁ hin
+    · exact ih₂ hin
+  case unaryApp_valid ih | hasAttr_valid ih | extHasAttr_valid ih | getAttr_valid ih =>
+    exact ih hin
+  case ite_valid ih₁ ih₂ ih₃ =>
+    simp only [Set.mem_union] at hin
+    rcases hin with (hin | hin) | hin
+    · exact ih₁ hin
+    · exact ih₂ hin
+    · exact ih₃ hin
+  case call_valid ih =>
+    simp only [List.mapUnion₁_eq_mapUnion, List.mem_mapUnion_iff_mem_exists] at hin
+    replace ⟨x', hin', hin⟩ := hin
+    exact ih x' hin' hin
+  case record_valid ih =>
+    simp only [List.mapUnion₂_eq_mapUnion λ x : Attr × PredExpr => x.snd.entityUIDs,
+      List.mem_mapUnion_iff_mem_exists] at hin
+    replace ⟨ax', hin', hin⟩ := hin
+    exact ih ax' hin' hin
+
 private theorem valid_refs_implies_valid_uids {x : Expr} {εs : SymEntities} :
   x.ValidRefs (λ y => εs.isValidEntityUID y) →
   ∀ uid ∈ x.entityUIDs, εs.isValidEntityUID uid
@@ -265,6 +306,11 @@ private theorem valid_refs_implies_valid_uids {x : Expr} {εs : SymEntities} :
       List.mem_mapUnion_iff_mem_exists] at hin
     replace ⟨ax', hin', hin⟩ := hin
     exact ih ax' hin' hin
+  case all_valid hp ih =>
+    rw [Set.mem_union] at hin
+    rcases hin with hin | hin
+    · exact ih hin
+    · exact pred_valid_refs_implies_valid_uids hp uid hin
 
 private theorem εs_find?_δ_implies_mems_valid_uids {δ : SymEntityData} {ety : EntityType} {εs : SymEntities} :
   Map.find? εs ety = some δ →

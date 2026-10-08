@@ -1157,6 +1157,7 @@ theorem Opt.compile.correctness (x : Expr) (εnv : SymEnv) :
   case set xs             => exact Opt.compile.correctness.set xs εnv
   case record m           => exact Opt.compile.correctness.record m εnv
   case call xfn args      => exact Opt.compile.correctness.call xfn args εnv
+  case all x p            => simp [Opt.compile, SymCC.compile]
 termination_by 2 * sizeOf x
 
 end

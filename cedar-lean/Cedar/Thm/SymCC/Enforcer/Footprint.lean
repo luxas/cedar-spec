@@ -172,6 +172,9 @@ theorem mem_footprint_option_entity {x : Expr} {εnv : SymEnv} {t : Term} :
     replace ⟨(aᵢ, xᵢ), hinᵢ, hin⟩ := hin
     simp only at hin ih
     exact ih aᵢ xᵢ (List.sizeOf_attach₂ hinᵢ) hin
+  case case14 =>
+    have _ := Set.not_mem_empty t
+    contradiction
 
 private theorem mem_footprint_exists_wf_prop {p : Expr → Prop} {x : Expr} {tₑ : Term} {εnv : SymEnv}
   (hwε : εnv.WellFormedFor x)
@@ -251,6 +254,9 @@ private theorem mem_footprint_exists_wf_prop {p : Expr → Prop} {x : Expr} {t�
     replace ⟨(aᵢ, xᵢ), hinᵢ, hin⟩ := hin
     simp only at hin ih
     exact ih aᵢ xᵢ (List.sizeOf_attach₂ hinᵢ) (hwε _ hinᵢ) (hwe _ hinᵢ) hin
+  case case14 =>
+    have _ := Set.not_mem_empty tₑ
+    contradiction
 
 theorem mem_footprint_exists_wf {x : Expr} {tₑ : Term} {env : Env} {εnv : SymEnv} :
   εnv.WellFormedFor x →

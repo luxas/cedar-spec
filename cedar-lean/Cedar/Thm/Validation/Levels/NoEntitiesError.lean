@@ -770,6 +770,8 @@ theorem level_based_no_dne_expr {e : Expr} {n : Nat} {tx : TypedExpr} {c c₁ : 
         omega
       exact @level_based_no_dne_expr x.snd
     exact level_based_no_dne_record hc hr hcl ht hl ih
+  case all =>
+    simp [typeOf] at ht
 termination_by e
 
 /-! ## Policy- and validator-level wrappers

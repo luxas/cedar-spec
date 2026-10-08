@@ -239,6 +239,17 @@ theorem substitute_action_preserves_valid_refs
       apply List.mem_map.mpr
       exists ⟨e, hmem_e⟩
       simp [substituteAction]
+  | all e _ =>
+    simp only [substituteAction, mapOnVars]
+    constructor
+    · intros hrefs
+      cases hrefs
+      rename_i hrefs hp
+      exact Expr.ValidRefs.all_valid ((substitute_action_preserves_valid_refs hinst).mp hrefs) hp
+    · intros hrefs
+      cases hrefs
+      rename_i hrefs hp
+      exact Expr.ValidRefs.all_valid ((substitute_action_preserves_valid_refs hinst).mpr hrefs) hp
   | record rec =>
     simp only [substituteAction, mapOnVars]
     constructor

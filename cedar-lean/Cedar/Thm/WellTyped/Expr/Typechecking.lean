@@ -1700,5 +1700,8 @@ theorem typechecked_is_well_typed_after_lifting
     exact typechecked_is_well_typed_after_lifting_record hᵢ
   case _ hᵢ =>
     exact typechecked_is_well_typed_after_lifting_call hᵢ
+  case _ =>
+    intro h
+    simp [typeOf] at h
 
 end Cedar.Thm

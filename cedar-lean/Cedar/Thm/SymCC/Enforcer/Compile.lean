@@ -307,6 +307,8 @@ theorem compile_interpret_in_footprint {x : Expr} {εnv : SymEnv} {I : Interpret
   case' case13 =>
     have hty := typeOf_compile_call_option_types hwε hok
     rcases hty with hty | ⟨_, hty⟩ | hty
+  case' case14 =>
+    simp [compile] at hok
   all_goals {
     have hty' := compile_isOptionEntityType hwε hI hok ht
     simp only [TermType.isOptionEntityType, hty, Bool.false_eq_true] at hty'
@@ -1141,5 +1143,7 @@ theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv
     exact compile_interpret_record_on_footprint hwε hI₁ hI₂ hsm hft hok (λ a₁ x₁ hsizeOf t hwε _ _ _ => ih a₁ x₁ hsizeOf hwε)
   case case13 ih =>
     exact compile_interpret_call_on_footprint hwε hI₁ hI₂ hsm hft hok (λ x₁ hmem _ hwε _ _ _ => ih x₁ hmem hwε)
+  case case14 =>
+    simp [compile] at hok
 
 end Cedar.Thm

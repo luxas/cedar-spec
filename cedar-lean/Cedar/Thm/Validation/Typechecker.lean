@@ -105,6 +105,7 @@ theorem type_of_is_sound {e : Expr} {c₁ c₂ : Capabilities} {env : TypeEnv} {
       intro xᵢ _
       exact @type_of_is_sound xᵢ
     exact type_of_call_is_sound h₁ h₂ h₃ ih
+  | .all _ _ => simp [typeOf] at h₃
 termination_by sizeOf e
 
 /-- The type checker, if succeeds, should produce a typed expression that
@@ -460,5 +461,7 @@ theorem type_of_preserves_evaluation_results {e : Expr} {c₁ c₂ : Capabilitie
     simp [List.mapM₁_eq_mapM fun x => justType (typeOf x c₁ env), List.mapM_ok_iff_forall₂] at h₃₁
     have h₄ := type_of_ok_list h₃₁ (λ x₁ h => hᵢ x₁ h h₁)
     exact type_of_preserves_evaluation_results_call h₃₂ (List.forall₂_implies_mapM_eq _ _ h₄)
+  case _ =>
+    simp [typeOf] at h₃
 
 end Cedar.Thm

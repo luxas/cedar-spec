@@ -169,6 +169,24 @@ theorem ways_and_can_error {e₁ e₂ : Expr} {request : Request} {entities : En
     simp [h_e₁, evaluate, Result.as, Coe.coe, Value.asBool] at h₁
     simp [h₁]
 
+/-- The `.all` set quantifier always produces a boolean when it succeeds. -/
+theorem evalAll_ok_bool {s : Set Value} {f : Value → Result Value} {v : Value} :
+  evalAll s f = .ok v → ∃ b, v = .prim (.bool b)
+:= by
+  intro h
+  simp only [evalAll] at h
+  split at h <;> simp only [Except.ok.injEq, reduceCtorEq] at h
+  exact ⟨_, h.symm⟩
+
+theorem all_produces_bool {x : Expr} {p : PredExpr} {request : Request} {entities : Entities} {v : Value} :
+  evaluate (Expr.all x p) request entities = .ok v → ∃ b, v = .prim (.bool b)
+:= by
+  intro h
+  simp only [evaluate] at h
+  cases h₁ : Result.as (Data.Set Value) (evaluate x request entities) <;>
+    simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+  exact evalAll_ok_bool h
+
 /--
   Every `and` expression produces either .ok bool or .error
 -/

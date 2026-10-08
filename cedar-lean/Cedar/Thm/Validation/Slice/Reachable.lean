@@ -249,6 +249,12 @@ theorem checked_eval_entity_reachable {e : Expr} {n nmax: Nat} {c c' : Capabilit
   case call xfn args =>
     exfalso
     exact call_not_euid_via_path he ha
+
+  case all =>
+    exfalso
+    have ⟨_, hv⟩ := all_produces_bool he
+    subst hv
+    cases ha
 termination_by e
 
 theorem in_work_then_in_slice {entities : Entities} {work : Set EntityUID} {euid : EntityUID} {n : Nat}

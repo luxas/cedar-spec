@@ -109,6 +109,64 @@ public def bindAttr [Monad m] (a : Attr) (res : m α) : m (Attr × α) := do
   let v ← res
   pure (a, v)
 
+/--
+Evaluate a set-quantifier predicate with the element keyword `it` bound to the
+value `it`. Mirrors `evaluate`; `.item` resolves to the bound element.
+-/
+public def evaluatePred (p : PredExpr) (it : Value) (req : Request) (es : Entities) : Result Value :=
+  match p with
+  | .item            => .ok it
+  | .lit l           => .ok l
+  | .var v           => match v with
+    | .principal     => .ok req.principal
+    | .action        => .ok req.action
+    | .resource      => .ok req.resource
+    | .context       => .ok req.context
+  | .ite x₁ x₂ x₃    => do
+    let b ← (evaluatePred x₁ it req es).as Bool
+    if b then evaluatePred x₂ it req es else evaluatePred x₃ it req es
+  | .and x₁ x₂       => do
+    let b ← (evaluatePred x₁ it req es).as Bool
+    if !b then .ok b else (evaluatePred x₂ it req es).as Bool
+  | .or x₁ x₂        => do
+    let b ← (evaluatePred x₁ it req es).as Bool
+    if b then .ok b else (evaluatePred x₂ it req es).as Bool
+  | .unaryApp op₁ x₁ => do
+    let v₁ ← evaluatePred x₁ it req es
+    apply₁ op₁ v₁
+  | .binaryApp op₂ x₁ x₂ => do
+    let v₁ ← evaluatePred x₁ it req es
+    let v₂ ← evaluatePred x₂ it req es
+    apply₂ op₂ v₁ v₂ es
+  | .hasAttr x₁ a    => do
+    let v₁ ← evaluatePred x₁ it req es
+    hasAttr v₁ a es
+  | .extHasAttr x₁ a l  => do
+    let v₁ ← evaluatePred x₁ it req es
+    hasAttrs v₁ a l es
+  | .getAttr x₁ a    => do
+    let v₁ ← evaluatePred x₁ it req es
+    getAttr v₁ a es
+  | .record axs      => do
+    let avs ← axs.mapM₂ (fun ⟨(a₁, x₁), _⟩ => bindAttr a₁ (evaluatePred x₁ it req es))
+    .ok (Map.make avs)
+  | .call xfn xs     => do
+    let vs ← xs.mapM₁ (fun ⟨x₁, _⟩ => evaluatePred x₁ it req es)
+    call xfn vs
+
+/--
+The `.all` set quantifier (RFC 0021 semantics, requirements 2.1-2.8): every
+element's predicate result is computed; if any element errors (including a
+non-boolean result), the whole expression is the single, payload-free
+`quantifierError`, independent of iteration order and of other elements being
+`false`. Otherwise the result is the conjunction (`true` on the empty set).
+There is no short-circuit on `false`: `mapM` stops only at an error.
+-/
+public def evalAll (s : Set Value) (f : Value → Result Value) : Result Value :=
+  match s.toList.mapM (fun v => (f v).as Bool) with
+  | .error _ => .error .quantifierError
+  | .ok bs   => .ok (bs.all id)
+
 public def evaluate (x : Expr) (req : Request) (es : Entities) : Result Value :=
   match x with
   | .lit l           => .ok l
@@ -151,6 +209,9 @@ public def evaluate (x : Expr) (req : Request) (es : Entities) : Result Value :=
   | .call xfn xs     => do
     let vs ← xs.mapM₁ (fun ⟨x₁, _⟩ => evaluate x₁ req es)
     call xfn vs
+  | .all x₁ p        => do
+    let s ← (evaluate x₁ req es).as (Set Value)
+    evalAll s (fun v => evaluatePred p v req es)
 
 end
 
