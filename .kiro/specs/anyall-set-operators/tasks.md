@@ -26,7 +26,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 1 | `phase1-anyall-rust-ast` | DONE — review converged (3 rounds) |
 | 2 | `phase2-anyall-lean-spec` | DONE — review converged (2 rounds); T2.3 type rule deferred (D-11) |
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
-| 4 | `phase4-anyall-surface-syntax` | in progress |
+| 4 | `phase4-anyall-surface-syntax` | implemented; review round 1 running |
 | 5 | `phase5-anyall-symcc` | not started |
 | 6 | `phase6-anyall-drt-differential` | not started |
 | 6.5 | `phase6_5-anyall-tpe` | not started |
@@ -141,6 +141,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
   Keep `it` an ordinary identifier when the flag is off (1.3).
   _Green check:_ core parser tests with and without `anyall`.
   _Satisfies:_ 1.1, 1.2, 1.3, 2.3.
+  _Status:_ DONE (cedar `0ee7bc97`). As built, the parser lowers `.any` itself via `not` + `all` (the builder trait has no `any`, D-05); `it` is not reserved but a bare-value `it` lowers to `item()` and a stray `it` is rejected (D-26). 15 parser tests + 2 off-build tests.
 
 - **T4.2 EST (JSON) + `Display` pretty-printer (gated).**
   Add an EST `All { expr, pred }` form whose `pred` is a **full `Expr`** (EST stays simple — no
@@ -150,11 +151,13 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
   (structural non-nesting at EST) is a possible future tightening.
   _Green check:_ core roundtrip tests with `anyall`.
   _Satisfies:_ 4.1, 4.3.
+  _Status:_ DONE (cedar `408ced71`): EST `all`/`it` nodes, PST `All` (D-30); Display prints `.any` lowered (D-28).
 
 - **T4.3 Protobuf schema + round-trip (gated).**
   Add the `All` message to the protobuf schema and the encode/decode mapping; round-trip test.
   _Green check:_ core protobuf tests with `anyall`.
   _Satisfies:_ 4.2.
+  _Status:_ DONE (cedar `23056938`): fields 17 `All`, 18 `Item`; decode re-checks the predicate (D-27). Lean decoder deferred to Phase 6 (D-29). Note: proto lives in `cedar-policy`, not core.
 
 ## Phase 5 — SymCC analyzability, gated
 
