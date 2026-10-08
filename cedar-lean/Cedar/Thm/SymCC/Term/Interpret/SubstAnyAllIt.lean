@@ -552,4 +552,52 @@ decreasing_by
          simp only [Prod.mk.sizeOf_spec] at h1
          omega)
 
+/-- WF of a right fold of `Factory.and` over bool-WF terms. -/
+theorem foldr_and_wf {εs : SymEntities} {α} {g : α → Term} :
+  ∀ (vs : List α), (∀ x ∈ vs, (g x).WellFormed εs ∧ (g x).typeOf = .bool) →
+    (vs.foldr (fun x acc => Factory.and (g x) acc) (true : Term)).WellFormed εs ∧
+    (vs.foldr (fun x acc => Factory.and (g x) acc) (true : Term)).typeOf = .bool
+  | [], _ => by
+    refine ⟨Term.WellFormed.prim_wf TermPrim.WellFormed.bool_wf, ?_⟩
+    simp only [List.foldr_nil, Term.typeOf, TermPrim.typeOf]
+  | x :: xs, hx => by
+    have hhd := hx x (by simp)
+    have htl := foldr_and_wf xs (fun y hy => hx y (by simp [hy]))
+    simp only [List.foldr_cons]
+    exact wf_and hhd.left htl.left hhd.right htl.right
+
+/-- WF of a right fold of `Factory.or` over bool-WF terms. -/
+theorem foldr_or_wf {εs : SymEntities} {α} {g : α → Term} :
+  ∀ (vs : List α), (∀ x ∈ vs, (g x).WellFormed εs ∧ (g x).typeOf = .bool) →
+    (vs.foldr (fun x acc => Factory.or (g x) acc) (false : Term)).WellFormed εs ∧
+    (vs.foldr (fun x acc => Factory.or (g x) acc) (false : Term)).typeOf = .bool
+  | [], _ => by
+    refine ⟨Term.WellFormed.prim_wf TermPrim.WellFormed.bool_wf, ?_⟩
+    simp only [List.foldr_nil, Term.typeOf, TermPrim.typeOf]
+  | x :: xs, hx => by
+    have hhd := hx x (by simp)
+    have htl := foldr_or_wf xs (fun y hy => hx y (by simp [hy]))
+    simp only [List.foldr_cons]
+    exact wf_or hhd.left htl.left hhd.right htl.right
+
+/-- A `set.all` node built from WF, `.bool`-typed, `NoSetAll`, `anyAllItTyped ety`
+bodies over a WF receiver of type `.set ety` is WF with type `.option .bool`. -/
+theorem mkApp_set_all_wf {εs : SymEntities} {S P E : Term} {ety : TermType}
+  (hSwf : S.WellFormed εs) (hSty : S.typeOf = .set ety)
+  (hPwf : P.WellFormed εs) (hPty : P.typeOf = .bool)
+  (hEwf : E.WellFormed εs) (hEty : E.typeOf = .bool)
+  (hPn : P.NoSetAll = true) (hEn : E.NoSetAll = true)
+  (hPa : P.anyAllItTyped ety = true) (hEa : E.anyAllItTyped ety = true) :
+  (Term.app Op.set.all [S, P, E] (.option .bool)).WellFormed εs ∧
+  (Term.app Op.set.all [S, P, E] (.option .bool)).typeOf = (.option .bool) := by
+  refine ⟨Term.WellFormed.app_wf ?_ ?_, ?_⟩
+  · intro t ht
+    simp only [List.mem_cons, List.mem_singleton, List.not_mem_nil, or_false] at ht
+    rcases ht with h | h | h <;> subst h
+    · exact hSwf
+    · exact hPwf
+    · exact hEwf
+  · exact Op.WellTyped.set.all_wt hSty hPty hEty hPn hEn hPa hEa
+  · simp only [Term.typeOf]
+
 end Cedar.Thm
