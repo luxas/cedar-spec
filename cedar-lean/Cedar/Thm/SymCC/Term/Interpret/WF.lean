@@ -486,11 +486,8 @@ private theorem interpret_term_app_wf_set_all {εs : SymEntities} {I : Interpret
   | app_wf hargs hwt =>
     cases hwt with
     | set.all_wt hset hpred herr =>
-      rename_i setT predT errT elemTy
-      -- interpret unfolds (D-54) to app set.all over the three interpreted args
+      next setT predT errT elemTy =>
       have ihset := ih setT (by simp)
-      have ihpred := ih predT (by simp)
-      have iherr := ih errT (by simp)
       simp only [InterpretTermWF, Term.interpret, Term.typeOf]
       refine ⟨?_, ?_⟩
       · apply Term.WellFormed.app_wf
@@ -498,12 +495,9 @@ private theorem interpret_term_app_wf_set_all {εs : SymEntities} {I : Interpret
           simp only [List.mem_cons, List.mem_singleton, List.not_mem_nil, or_false] at ht
           rcases ht with h | h | h <;> subst h
           · exact ihset.left
-          · exact ihpred.left
-          · exact iherr.left
-        · exact Op.WellTyped.set.all_wt
-            (by rw [ihset.right]; exact hset)
-            (by rw [ihpred.right]; exact hpred)
-            (by rw [iherr.right]; exact herr)
+          · exact hargs _ (by simp)
+          · exact hargs _ (by simp)
+        · exact Op.WellTyped.set.all_wt (by rw [ihset.right]; exact hset) hpred herr
       · trivial
 
 public theorem interpret_term_app_wf {εs : SymEntities} {I : Interpretation} {op : Op} {ts : List Term} {ty : TermType}

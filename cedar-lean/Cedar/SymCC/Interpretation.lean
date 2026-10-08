@@ -150,13 +150,14 @@ public def Term.interpret (I : Interpretation) : Term → Term
     let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
     .set ts' ty
   | .app Op.set.all [setT, predT, errT] ty =>
-    -- D-54: interpret all three arguments under `I`. The bound element variable
-    -- `anyAllItVar` is handled uniformly as any other variable here; its binding
-    -- role is enforced by the encoder (it is emitted as the `set.filter` lambda
-    -- parameter) and by the `set.all` Op's semantics, not by a special-cased
-    -- interpretation. This keeps `interpret` compositional (so WF-preservation
-    -- follows from the per-argument IH, no non-well-formed pinned interpretation).
-    .app Op.set.all [setT.interpret I, predT.interpret I, errT.interpret I] ty
+    -- Interpret only the receiver; the predicate/error bodies are left
+    -- uninterpreted so the model `I` never substitutes the bound variable
+    -- `anyAllItVar` (interpreting under `I` would replace it with a literal,
+    -- changing the quantifier's meaning — why D-54 was REJECTED). This is sound
+    -- and WF-preserving. The concrete fold of a literal receiver to a literal
+    -- result (D-55) requires a substitute-then-renormalize pass (`interpretWith`)
+    -- and is tracked separately.
+    .app Op.set.all [setT.interpret I, predT, errT] ty
   | .app op ts ty =>
     let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
     op.interpret I ts' ty

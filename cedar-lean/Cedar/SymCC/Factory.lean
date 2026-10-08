@@ -18,6 +18,7 @@ module
 
 import Cedar.Spec
 public import Cedar.SymCC.Function
+import Cedar.Data.SizeOf
 
 /-!
 This file defines an API for construcing well-formed Terms. In this basic
@@ -277,13 +278,44 @@ public def anyAllItVar (elemTy : TermType) : TermVar :=
   { id := "!anyall!it", ty := elemTy }
 
 /--
+Capture-free substitution of the reserved bound element variable `anyAllItVar`
+(by its `id` `!anyall!it`) with a term `v` throughout `t` (D-55). Used by the
+concrete fold of `set.all` over a literal receiver: predicate bodies are
+non-nested (they contain no further `set.all` binder), so this is a plain
+structural replacement with no capture concern. -/
+public def Term.substAnyAllIt (v : Term) : Term → Term
+  | .var w        => if w.id = "!anyall!it" then v else .var w
+  | .prim p       => .prim p
+  | .none ty      => .none ty
+  | .some t       => .some (Term.substAnyAllIt v t)
+  | .set ts ty    => .set (ts.map₁ (fun ⟨t, _⟩ => Term.substAnyAllIt v t)) ty
+  | .record ats   => .record (ats.mapOnValues₂ (fun ⟨t, _⟩ => Term.substAnyAllIt v t))
+  | .app op ts ty => .app op (ts.map₁ (fun ⟨t, _⟩ => Term.substAnyAllIt v t)) ty
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (rename_i h; have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; have := List.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; have := Map.sizeOf_lt_of_toList ats; have := List.sizeOf_lt_of_mem h; omega)
+
+/--
 Smart constructor for the `.all` set-quantifier term (D-34/D-51). `set` is the
 compiled receiver (type `.set elemTy`), `pred`/`err` are boolean Terms over
 `anyAllItVar elemTy` (the per-element predicate value and error). The result is `.option .bool` (tri-valued, D-35); it encodes via two
 `set.filter` comprehensions under `HO_ALL` (D-52). Always builds the symbolic
 `.app` form; literal-set constant folding is an optimizer concern. -/
 public def set.all (set pred err : Term) : Term :=
-  .app Op.set.all [set, pred, err] (.option .bool)
+  match set with
+  | .set (Set.mk vs) _ =>
+    -- D-55 concrete fold over a literal receiver, matching `evalAll`:
+    -- empty ⇒ some true; any element errors ⇒ none (quantifierError);
+    -- otherwise some (conjunction of the per-element predicate), no short-circuit.
+    let conj   := vs.foldr (fun vi acc => and (Term.substAnyAllIt vi pred) acc) (true : Term)
+    let anyErr := vs.foldr (fun vi acc => or (Term.substAnyAllIt vi err) acc) (false : Term)
+    ite anyErr (noneOf .bool) (someOf conj)
+  | _ => .app Op.set.all [set, pred, err] (.option .bool)
 
 ---------- Core ADT operators with a trusted mapping to SMT ----------
 
