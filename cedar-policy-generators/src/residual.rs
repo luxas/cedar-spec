@@ -130,6 +130,15 @@ fn residual_of_expr(e: Expr, u: &mut Unstructured<'_>) -> Result<Residual> {
         },
         // We can't translate these, but on the principle that it's better not to error when generating
         // inputs, we'll use `true` as a place holder.
+        // `Residual` has no quantifier node until TPE supports `.all` (anyall
+        // Phase 6.5), and the generator does not produce `.all` yet (Phase 6).
+        #[cfg(feature = "anyall")]
+        ExprKind::All { .. } => {
+            return Ok(Residual::Concrete {
+                value: Value::from(true),
+                ty: Type::primitive_boolean(),
+            })
+        }
         ExprKind::Unknown(_) | ExprKind::Slot(_) => {
             return Ok(Residual::Concrete {
                 value: Value::from(true),
