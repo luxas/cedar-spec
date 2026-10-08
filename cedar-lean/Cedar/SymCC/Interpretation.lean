@@ -168,7 +168,23 @@ public def Term.interpretWith (σ : Option Term) (I : Interpretation) : Term →
       let conj   := vs.foldr (fun vi acc => Factory.and (Term.interpretWith (some vi) I predT) acc) (true : Term)
       let anyErr := vs.foldr (fun vi acc => Factory.or  (Term.interpretWith (some vi) I errT)  acc) (false : Term)
       Factory.ite anyErr (Factory.noneOf .bool) (Factory.someOf conj)
-    | setT' => .app Op.set.all [setT', Term.interpretWith Option.none I predT, Term.interpretWith Option.none I errT] ty
+    | setT' =>
+      -- D-59: the receiver did not interpret to a literal set. This branch is
+      -- unreachable under a well-formed interpretation (an interpretation makes
+      -- every term of set type a literal set), so it exists only to keep
+      -- `interpretWith` total. We still interpret the bodies' free variables, but
+      -- only adopt the interpreted bodies when they carry the `set.all` typing
+      -- evidence (`NoSetAll` + `anyAllItTyped`) that a well-formed `set.all` node
+      -- requires; otherwise we fall back to the original bodies, which carry that
+      -- evidence by the node's own well-formedness. Both shapes are well-formed.
+      let p' := Term.interpretWith Option.none I predT
+      let e' := Term.interpretWith Option.none I errT
+      match setT'.typeOf with
+      | .set elemTy =>
+        if p'.NoSetAll && e'.NoSetAll && p'.anyAllItTyped elemTy && e'.anyAllItTyped elemTy
+        then .app Op.set.all [setT', p', e'] ty
+        else .app Op.set.all [setT', predT, errT] ty
+      | _ => .app Op.set.all [setT', predT, errT] ty
   | .app op ts ty =>
     let ts' := ts.map₁ (λ ⟨t, _⟩ => Term.interpretWith σ I t)
     op.interpret I ts' ty
