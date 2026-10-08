@@ -31,6 +31,7 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-21 | 3 | The validator types a predicate by instantiating `it` with a reserved unknown (`__cedar::anyall::it`) that a nested typechecker types as the element type, instead of a parallel `typecheck_pred` (refines D-19). Reuses every existing typing rule; the reserved name cannot be written in policy text. | SETTLED |
 | D-22 | 3 | In the Rust evaluator, a `RecursionLimit` error inside a predicate propagates unchanged rather than becoming `QuantifierError` (it is an implementation limit with no Lean counterpart). | OPEN — check in Phase 6 differential |
 | D-23 | 3 | Level validation: dereferencing `it` is charged the level of the receiver's elements (max over a set literal's elements). | SETTLED |
+| D-24 | 3 | When an `.all` receiver is not a set, the predicate is still typechecked with `it : Never`, which can add cascade errors next to the "expected set" error. Sound (the policy is rejected); diagnostics could be tightened later. | OPEN — diagnostic quality |
 
 ## Details
 
