@@ -18,6 +18,7 @@ module
 
 public import Cedar.SymCC.Compiler
 import all Cedar.SymCC.Compiler
+import all Cedar.SymCC.ExtFun
 import all Cedar.SymCC.Factory
 import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 import all Cedar.Thm.SymCC.Compiler.SetAllWF
@@ -492,4 +493,278 @@ theorem anyAllItTyped_compileApp₂ {ety' : TermType} {op₂ : BinaryOp} {t₁ t
         | exact anyAllItTyped_someOf (anyAllItTyped_compileInₛ rfl hwε h1 h2))))
   all_goals (exact absurd hok (by simp [reduceCtorEq]))
 
+/-! ### ext encoders (NoSetAll) -/
+
+private theorem lit_ns {t : Term} (h : t.isLiteral = true) : t.NoSetAll = true := isLiteral_noSetAll t h
+
+theorem ns_Decimal_lessThan {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Decimal.lessThan t₁ t₂).NoSetAll = true := by
+  unfold Decimal.lessThan; exact noSetAll_bvslt (noSetAll_ext_decimal_val h1) (noSetAll_ext_decimal_val h2)
+theorem ns_Decimal_lessThanOrEqual {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Decimal.lessThanOrEqual t₁ t₂).NoSetAll = true := by
+  unfold Decimal.lessThanOrEqual; exact noSetAll_bvsle (noSetAll_ext_decimal_val h1) (noSetAll_ext_decimal_val h2)
+theorem ns_Decimal_greaterThan {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Decimal.greaterThan t₁ t₂).NoSetAll = true := by
+  unfold Decimal.greaterThan; exact ns_Decimal_lessThan h2 h1
+theorem ns_Decimal_greaterThanOrEqual {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (Decimal.greaterThanOrEqual t₁ t₂).NoSetAll = true := by
+  unfold Decimal.greaterThanOrEqual; exact ns_Decimal_lessThanOrEqual h2 h1
+
+theorem ns_IPAddr_isIpv4 {t : Term} (h : t.NoSetAll = true) : (IPAddr.isIpv4 t).NoSetAll = true := by
+  unfold IPAddr.isIpv4; exact noSetAll_ext_ipaddr_isV4 h
+theorem ns_IPAddr_isIpv6 {t : Term} (h : t.NoSetAll = true) : (IPAddr.isIpv6 t).NoSetAll = true := by
+  unfold IPAddr.isIpv6; exact noSetAll_not (noSetAll_ext_ipaddr_isV4 h)
+theorem ns_IPAddr_subnetWidth {w : Nat} {ipPre : Term} (h : ipPre.NoSetAll = true) : (IPAddr.subnetWidth w ipPre).NoSetAll = true := by
+  unfold IPAddr.subnetWidth
+  exact noSetAll_ite (noSetAll_isNone h) (lit_ns (by simp [Term.isLiteral])) (noSetAll_bvsub (lit_ns (by simp [Term.isLiteral])) (noSetAll_zero_extend (noSetAll_option_get h)))
+theorem ns_IPAddr_range {w : Nat} {ipAddr ipPre : Term} (ha : ipAddr.NoSetAll = true) (hp : ipPre.NoSetAll = true) :
+    (IPAddr.range w ipAddr ipPre).1.NoSetAll = true ∧ (IPAddr.range w ipAddr ipPre).2.NoSetAll = true := by
+  unfold IPAddr.range
+  have hw := ns_IPAddr_subnetWidth (w := w) hp
+  have hlo : (Factory.bvshl (Factory.bvlshr ipAddr (IPAddr.subnetWidth w ipPre)) (IPAddr.subnetWidth w ipPre)).NoSetAll = true :=
+    noSetAll_bvshl (noSetAll_bvlshr ha hw) hw
+  exact ⟨hlo, noSetAll_bvsub (noSetAll_bvadd hlo (noSetAll_bvshl (lit_ns (by simp [Term.isLiteral])) hw)) (lit_ns (by simp [Term.isLiteral]))⟩
+theorem ns_IPAddr_inRange {rng : Term → Term × Term} {t₁ t₂ : Term}
+    (hr : ∀ t, t.NoSetAll = true → (rng t).1.NoSetAll = true ∧ (rng t).2.NoSetAll = true)
+    (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (IPAddr.inRange rng t₁ t₂).NoSetAll = true := by
+  unfold IPAddr.inRange
+  exact noSetAll_and (noSetAll_bvule (hr t₁ h1).2 (hr t₂ h2).2) (noSetAll_bvule (hr t₂ h2).1 (hr t₁ h1).1)
+theorem ns_IPAddr_inRangeV {isIp : Term → Term} {rng : Term → Term × Term} {t₁ t₂ : Term}
+    (hip : ∀ t, t.NoSetAll = true → (isIp t).NoSetAll = true)
+    (hr : ∀ t, t.NoSetAll = true → (rng t).1.NoSetAll = true ∧ (rng t).2.NoSetAll = true)
+    (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (IPAddr.inRangeV isIp rng t₁ t₂).NoSetAll = true := by
+  unfold IPAddr.inRangeV
+  exact noSetAll_and (hip t₁ h1) (noSetAll_and (hip t₂ h2) (ns_IPAddr_inRange hr h1 h2))
+theorem ns_IPAddr_rangeV4 {t : Term} (h : t.NoSetAll = true) : (IPAddr.rangeV4 t).1.NoSetAll = true ∧ (IPAddr.rangeV4 t).2.NoSetAll = true := by
+  unfold IPAddr.rangeV4; exact ns_IPAddr_range (noSetAll_ext_ipaddr_addrV4 h) (noSetAll_ext_ipaddr_prefixV4 h)
+theorem ns_IPAddr_rangeV6 {t : Term} (h : t.NoSetAll = true) : (IPAddr.rangeV6 t).1.NoSetAll = true ∧ (IPAddr.rangeV6 t).2.NoSetAll = true := by
+  unfold IPAddr.rangeV6; exact ns_IPAddr_range (noSetAll_ext_ipaddr_addrV6 h) (noSetAll_ext_ipaddr_prefixV6 h)
+theorem ns_IPAddr_isInRange {t₁ t₂ : Term} (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) : (IPAddr.isInRange t₁ t₂).NoSetAll = true := by
+  unfold IPAddr.isInRange
+  exact noSetAll_or (ns_IPAddr_inRangeV (fun _ h => ns_IPAddr_isIpv4 h) (fun _ h => ns_IPAddr_rangeV4 h) h1 h2)
+                    (ns_IPAddr_inRangeV (fun _ h => ns_IPAddr_isIpv6 h) (fun _ h => ns_IPAddr_rangeV6 h) h1 h2)
+theorem ns_IPAddr_ipTerm {ip} : (IPAddr.ipTerm ip).NoSetAll = true := by unfold IPAddr.ipTerm; simp [Term.NoSetAll]
+theorem ns_IPAddr_inRangeLit {t : Term} {c4 c6} (h : t.NoSetAll = true) : (IPAddr.inRangeLit t c4 c6).NoSetAll = true := by
+  unfold IPAddr.inRangeLit
+  exact noSetAll_ite (ns_IPAddr_isIpv4 h) (ns_IPAddr_inRange (fun _ h => ns_IPAddr_rangeV4 h) h ns_IPAddr_ipTerm) (ns_IPAddr_inRange (fun _ h => ns_IPAddr_rangeV6 h) h ns_IPAddr_ipTerm)
+theorem ns_IPAddr_isLoopback {t : Term} (h : t.NoSetAll = true) : (IPAddr.isLoopback t).NoSetAll = true := by
+  unfold IPAddr.isLoopback; exact ns_IPAddr_inRangeLit h
+theorem ns_IPAddr_isMulticast {t : Term} (h : t.NoSetAll = true) : (IPAddr.isMulticast t).NoSetAll = true := by
+  unfold IPAddr.isMulticast; exact ns_IPAddr_inRangeLit h
+
+theorem ns_Duration_toMilliseconds {t : Term} (h : t.NoSetAll = true) : (Duration.toMilliseconds t).NoSetAll = true := by
+  unfold Duration.toMilliseconds; exact noSetAll_ext_duration_val h
+theorem ns_Duration_toSeconds {t : Term} (h : t.NoSetAll = true) : (Duration.toSeconds t).NoSetAll = true := by
+  unfold Duration.toSeconds; exact noSetAll_bvsdiv (ns_Duration_toMilliseconds h) (lit_ns (by simp [Term.isLiteral]))
+theorem ns_Duration_toMinutes {t : Term} (h : t.NoSetAll = true) : (Duration.toMinutes t).NoSetAll = true := by
+  unfold Duration.toMinutes; exact noSetAll_bvsdiv (ns_Duration_toSeconds h) (lit_ns (by simp [Term.isLiteral]))
+theorem ns_Duration_toHours {t : Term} (h : t.NoSetAll = true) : (Duration.toHours t).NoSetAll = true := by
+  unfold Duration.toHours; exact noSetAll_bvsdiv (ns_Duration_toMinutes h) (lit_ns (by simp [Term.isLiteral]))
+theorem ns_Duration_toDays {t : Term} (h : t.NoSetAll = true) : (Duration.toDays t).NoSetAll = true := by
+  unfold Duration.toDays; exact noSetAll_bvsdiv (ns_Duration_toHours h) (lit_ns (by simp [Term.isLiteral]))
+
+theorem ns_Datetime_offset {dt dur : Term} (h1 : dt.NoSetAll = true) (h2 : dur.NoSetAll = true) : (Datetime.offset dt dur).NoSetAll = true := by
+  unfold Datetime.offset
+  exact noSetAll_ifFalse (noSetAll_bvsaddo (noSetAll_ext_datetime_val h1) (noSetAll_ext_duration_val h2)) (noSetAll_ext_datetime_ofBitVec (noSetAll_bvadd (noSetAll_ext_datetime_val h1) (noSetAll_ext_duration_val h2)))
+theorem ns_Datetime_durationSince {dt₁ dt₂ : Term} (h1 : dt₁.NoSetAll = true) (h2 : dt₂.NoSetAll = true) : (Datetime.durationSince dt₁ dt₂).NoSetAll = true := by
+  unfold Datetime.durationSince
+  exact noSetAll_ifFalse (noSetAll_bvssubo (noSetAll_ext_datetime_val h1) (noSetAll_ext_datetime_val h2)) (noSetAll_ext_duration_ofBitVec (noSetAll_bvsub (noSetAll_ext_datetime_val h1) (noSetAll_ext_datetime_val h2)))
+theorem ns_Datetime_toDate {dt : Term} (h : dt.NoSetAll = true) : (Datetime.toDate dt).NoSetAll = true := by
+  unfold Datetime.toDate
+  have hv := noSetAll_ext_datetime_val h
+  have hms : (Term.prim (TermPrim.bitvec (Int64.toBitVec 86400000))).NoSetAll = true := by simp [Term.NoSetAll]
+  exact noSetAll_ifFalse (noSetAll_bvssubo hv (noSetAll_bvsmod hv hms)) (noSetAll_ext_datetime_ofBitVec (noSetAll_bvsub hv (noSetAll_bvsmod hv hms)))
+theorem ns_Datetime_toTime {dt : Term} (h : dt.NoSetAll = true) : (Datetime.toTime dt).NoSetAll = true := by
+  unfold Datetime.toTime
+  apply noSetAll_ext_duration_ofBitVec
+  have hv := noSetAll_ext_datetime_val h
+  have hz : (Term.prim (TermPrim.bitvec (Int64.toBitVec 0))).NoSetAll = true := by simp [Term.NoSetAll]
+  have hms : (Term.prim (TermPrim.bitvec (Int64.toBitVec 86400000))).NoSetAll = true := by simp [Term.NoSetAll]
+  exact noSetAll_ite (noSetAll_bvsle hz hv) (noSetAll_bvsrem hv hms) (noSetAll_ite (noSetAll_eq (noSetAll_bvsrem hv hms) hz) hz (noSetAll_bvadd (noSetAll_bvsrem hv hms) hms))
+
+/-! ### compileCall wrappers + compileCall (NoSetAll) -/
+
+theorem noSetAll_compileCall₀ {α} [Coe α Ext] {mk : String → Option α} {t r : Term} (hok : compileCall₀ mk t = Except.ok r) : r.NoSetAll = true := by
+  unfold compileCall₀ at hok
+  split at hok <;> try split at hok
+  all_goals simp only [someOf, Except.ok.injEq, reduceCtorEq] at hok
+  all_goals (subst hok; exact noSetAll_someOf (by simp [Term.NoSetAll]))
+theorem noSetAll_ccwe1 {xty enc} {t₁ r : Term} (henc : ∀ x, x.NoSetAll = true → (enc x).NoSetAll = true) (h1 : t₁.NoSetAll = true) (hok : compileCallWithError₁ xty enc t₁ = Except.ok r) : r.NoSetAll = true := by
+  unfold compileCallWithError₁ at hok
+  split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+  subst hok; exact noSetAll_ifSome h1 (henc _ (noSetAll_option_get h1))
+theorem noSetAll_ccwe2 {xty₁ xty₂ enc} {t₁ t₂ r : Term} (henc : ∀ x y, x.NoSetAll = true → y.NoSetAll = true → (enc x y).NoSetAll = true) (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) (hok : compileCallWithError₂ xty₁ xty₂ enc t₁ t₂ = Except.ok r) : r.NoSetAll = true := by
+  unfold compileCallWithError₂ at hok
+  simp only [] at hok
+  split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+  subst hok; exact noSetAll_ifSome h1 (noSetAll_ifSome h2 (henc _ _ (noSetAll_option_get h1) (noSetAll_option_get h2)))
+theorem noSetAll_cc1 {xty enc} {t₁ r : Term} (henc : ∀ x, x.NoSetAll = true → (enc x).NoSetAll = true) (h1 : t₁.NoSetAll = true) (hok : compileCall₁ xty enc t₁ = Except.ok r) : r.NoSetAll = true := by
+  unfold compileCall₁ at hok; exact noSetAll_ccwe1 (fun x hx => noSetAll_someOf (henc x hx)) h1 hok
+theorem noSetAll_cc2 {xty enc} {t₁ t₂ r : Term} (henc : ∀ x y, x.NoSetAll = true → y.NoSetAll = true → (enc x y).NoSetAll = true) (h1 : t₁.NoSetAll = true) (h2 : t₂.NoSetAll = true) (hok : compileCall₂ xty enc t₁ t₂ = Except.ok r) : r.NoSetAll = true := by
+  unfold compileCall₂ at hok; exact noSetAll_ccwe2 (fun x y hx hy => noSetAll_someOf (henc x y hx hy)) h1 h2 hok
+
+set_option maxHeartbeats 1000000 in
+theorem noSetAll_compileCall {xfn : ExtFun} {ts : List Term} {r : Term}
+    (hts : ∀ t ∈ ts, t.NoSetAll = true) (hok : compileCall xfn ts = Except.ok r) : r.NoSetAll = true := by
+  unfold compileCall at hok
+  split at hok <;>
+    rename_i heq <;>
+    first
+    | exact noSetAll_compileCall₀ hok
+    | ( -- unary (compileCall₁ / WithError₁): ts = [t₁]
+        first
+        | exact noSetAll_cc1 (fun x hx => ns_IPAddr_isIpv4 hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_IPAddr_isIpv6 hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_IPAddr_isLoopback hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_IPAddr_isMulticast hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_ccwe1 (fun x hx => ns_Datetime_toDate hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_Datetime_toTime hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_Duration_toMilliseconds hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_Duration_toSeconds hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_Duration_toMinutes hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_Duration_toHours hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc1 (fun x hx => ns_Duration_toDays hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok )
+    | ( -- binary (compileCall₂ / WithError₂): ts = [t₁, t₂]
+        first
+        | exact noSetAll_cc2 (fun x y hx hy => ns_Decimal_lessThan hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc2 (fun x y hx hy => ns_Decimal_lessThanOrEqual hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc2 (fun x y hx hy => ns_Decimal_greaterThan hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc2 (fun x y hx hy => ns_Decimal_greaterThanOrEqual hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_cc2 (fun x y hx hy => ns_IPAddr_isInRange hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_ccwe2 (fun x y hx hy => ns_Datetime_offset hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact noSetAll_ccwe2 (fun x y hx hy => ns_Datetime_durationSince hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok )
+    | exact absurd hok (by simp [reduceCtorEq])
+/-! ### ext encoders (anyAllItTyped) -/
+
+private theorem lit_aa {ety : TermType} {t : Term} (h : t.isLiteral = true) : t.anyAllItTyped ety = true := isLiteral_anyAllItTyped t h
+
+theorem aa_Decimal_lessThan {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Decimal.lessThan t₁ t₂).anyAllItTyped ety = true := by
+  unfold Decimal.lessThan; exact anyAllItTyped_bvslt (anyAllItTyped_ext_decimal_val h1) (anyAllItTyped_ext_decimal_val h2)
+theorem aa_Decimal_lessThanOrEqual {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Decimal.lessThanOrEqual t₁ t₂).anyAllItTyped ety = true := by
+  unfold Decimal.lessThanOrEqual; exact anyAllItTyped_bvsle (anyAllItTyped_ext_decimal_val h1) (anyAllItTyped_ext_decimal_val h2)
+theorem aa_Decimal_greaterThan {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Decimal.greaterThan t₁ t₂).anyAllItTyped ety = true := by
+  unfold Decimal.greaterThan; exact aa_Decimal_lessThan h2 h1
+theorem aa_Decimal_greaterThanOrEqual {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (Decimal.greaterThanOrEqual t₁ t₂).anyAllItTyped ety = true := by
+  unfold Decimal.greaterThanOrEqual; exact aa_Decimal_lessThanOrEqual h2 h1
+
+theorem aa_IPAddr_isIpv4 {t : Term} (h : t.anyAllItTyped ety = true) : (IPAddr.isIpv4 t).anyAllItTyped ety = true := by
+  unfold IPAddr.isIpv4; exact anyAllItTyped_ext_ipaddr_isV4 h
+theorem aa_IPAddr_isIpv6 {t : Term} (h : t.anyAllItTyped ety = true) : (IPAddr.isIpv6 t).anyAllItTyped ety = true := by
+  unfold IPAddr.isIpv6; exact anyAllItTyped_not (anyAllItTyped_ext_ipaddr_isV4 h)
+theorem aa_IPAddr_subnetWidth {w : Nat} {ipPre : Term} (h : ipPre.anyAllItTyped ety = true) : (IPAddr.subnetWidth w ipPre).anyAllItTyped ety = true := by
+  unfold IPAddr.subnetWidth
+  exact anyAllItTyped_ite (anyAllItTyped_isNone h) (lit_aa (by simp [Term.isLiteral])) (anyAllItTyped_bvsub (lit_aa (by simp [Term.isLiteral])) (anyAllItTyped_zero_extend (anyAllItTyped_option_get h)))
+theorem aa_IPAddr_range {w : Nat} {ipAddr ipPre : Term} (ha : ipAddr.anyAllItTyped ety = true) (hp : ipPre.anyAllItTyped ety = true) :
+    (IPAddr.range w ipAddr ipPre).1.anyAllItTyped ety = true ∧ (IPAddr.range w ipAddr ipPre).2.anyAllItTyped ety = true := by
+  unfold IPAddr.range
+  have hw := aa_IPAddr_subnetWidth (w := w) hp
+  have hlo : (Factory.bvshl (Factory.bvlshr ipAddr (IPAddr.subnetWidth w ipPre)) (IPAddr.subnetWidth w ipPre)).anyAllItTyped ety = true :=
+    anyAllItTyped_bvshl (anyAllItTyped_bvlshr ha hw) hw
+  exact ⟨hlo, anyAllItTyped_bvsub (anyAllItTyped_bvadd hlo (anyAllItTyped_bvshl (lit_aa (by simp [Term.isLiteral])) hw)) (lit_aa (by simp [Term.isLiteral]))⟩
+theorem aa_IPAddr_inRange {rng : Term → Term × Term} {t₁ t₂ : Term}
+    (hr : ∀ t, t.anyAllItTyped ety = true → (rng t).1.anyAllItTyped ety = true ∧ (rng t).2.anyAllItTyped ety = true)
+    (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (IPAddr.inRange rng t₁ t₂).anyAllItTyped ety = true := by
+  unfold IPAddr.inRange
+  exact anyAllItTyped_and (anyAllItTyped_bvule (hr t₁ h1).2 (hr t₂ h2).2) (anyAllItTyped_bvule (hr t₂ h2).1 (hr t₁ h1).1)
+theorem aa_IPAddr_inRangeV {isIp : Term → Term} {rng : Term → Term × Term} {t₁ t₂ : Term}
+    (hip : ∀ t, t.anyAllItTyped ety = true → (isIp t).anyAllItTyped ety = true)
+    (hr : ∀ t, t.anyAllItTyped ety = true → (rng t).1.anyAllItTyped ety = true ∧ (rng t).2.anyAllItTyped ety = true)
+    (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (IPAddr.inRangeV isIp rng t₁ t₂).anyAllItTyped ety = true := by
+  unfold IPAddr.inRangeV
+  exact anyAllItTyped_and (hip t₁ h1) (anyAllItTyped_and (hip t₂ h2) (aa_IPAddr_inRange hr h1 h2))
+theorem aa_IPAddr_rangeV4 {t : Term} (h : t.anyAllItTyped ety = true) : (IPAddr.rangeV4 t).1.anyAllItTyped ety = true ∧ (IPAddr.rangeV4 t).2.anyAllItTyped ety = true := by
+  unfold IPAddr.rangeV4; exact aa_IPAddr_range (anyAllItTyped_ext_ipaddr_addrV4 h) (anyAllItTyped_ext_ipaddr_prefixV4 h)
+theorem aa_IPAddr_rangeV6 {t : Term} (h : t.anyAllItTyped ety = true) : (IPAddr.rangeV6 t).1.anyAllItTyped ety = true ∧ (IPAddr.rangeV6 t).2.anyAllItTyped ety = true := by
+  unfold IPAddr.rangeV6; exact aa_IPAddr_range (anyAllItTyped_ext_ipaddr_addrV6 h) (anyAllItTyped_ext_ipaddr_prefixV6 h)
+theorem aa_IPAddr_isInRange {t₁ t₂ : Term} (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) : (IPAddr.isInRange t₁ t₂).anyAllItTyped ety = true := by
+  unfold IPAddr.isInRange
+  exact anyAllItTyped_or (aa_IPAddr_inRangeV (fun _ h => aa_IPAddr_isIpv4 h) (fun _ h => aa_IPAddr_rangeV4 h) h1 h2)
+                    (aa_IPAddr_inRangeV (fun _ h => aa_IPAddr_isIpv6 h) (fun _ h => aa_IPAddr_rangeV6 h) h1 h2)
+theorem aa_IPAddr_ipTerm {ip} : (IPAddr.ipTerm ip).anyAllItTyped ety = true := by unfold IPAddr.ipTerm; simp [Term.anyAllItTyped]
+theorem aa_IPAddr_inRangeLit {t : Term} {c4 c6} (h : t.anyAllItTyped ety = true) : (IPAddr.inRangeLit t c4 c6).anyAllItTyped ety = true := by
+  unfold IPAddr.inRangeLit
+  exact anyAllItTyped_ite (aa_IPAddr_isIpv4 h) (aa_IPAddr_inRange (fun _ h => aa_IPAddr_rangeV4 h) h aa_IPAddr_ipTerm) (aa_IPAddr_inRange (fun _ h => aa_IPAddr_rangeV6 h) h aa_IPAddr_ipTerm)
+theorem aa_IPAddr_isLoopback {t : Term} (h : t.anyAllItTyped ety = true) : (IPAddr.isLoopback t).anyAllItTyped ety = true := by
+  unfold IPAddr.isLoopback; exact aa_IPAddr_inRangeLit h
+theorem aa_IPAddr_isMulticast {t : Term} (h : t.anyAllItTyped ety = true) : (IPAddr.isMulticast t).anyAllItTyped ety = true := by
+  unfold IPAddr.isMulticast; exact aa_IPAddr_inRangeLit h
+
+theorem aa_Duration_toMilliseconds {t : Term} (h : t.anyAllItTyped ety = true) : (Duration.toMilliseconds t).anyAllItTyped ety = true := by
+  unfold Duration.toMilliseconds; exact anyAllItTyped_ext_duration_val h
+theorem aa_Duration_toSeconds {t : Term} (h : t.anyAllItTyped ety = true) : (Duration.toSeconds t).anyAllItTyped ety = true := by
+  unfold Duration.toSeconds; exact anyAllItTyped_bvsdiv (aa_Duration_toMilliseconds h) (lit_aa (by simp [Term.isLiteral]))
+theorem aa_Duration_toMinutes {t : Term} (h : t.anyAllItTyped ety = true) : (Duration.toMinutes t).anyAllItTyped ety = true := by
+  unfold Duration.toMinutes; exact anyAllItTyped_bvsdiv (aa_Duration_toSeconds h) (lit_aa (by simp [Term.isLiteral]))
+theorem aa_Duration_toHours {t : Term} (h : t.anyAllItTyped ety = true) : (Duration.toHours t).anyAllItTyped ety = true := by
+  unfold Duration.toHours; exact anyAllItTyped_bvsdiv (aa_Duration_toMinutes h) (lit_aa (by simp [Term.isLiteral]))
+theorem aa_Duration_toDays {t : Term} (h : t.anyAllItTyped ety = true) : (Duration.toDays t).anyAllItTyped ety = true := by
+  unfold Duration.toDays; exact anyAllItTyped_bvsdiv (aa_Duration_toHours h) (lit_aa (by simp [Term.isLiteral]))
+
+theorem aa_Datetime_offset {dt dur : Term} (h1 : dt.anyAllItTyped ety = true) (h2 : dur.anyAllItTyped ety = true) : (Datetime.offset dt dur).anyAllItTyped ety = true := by
+  unfold Datetime.offset
+  exact anyAllItTyped_ifFalse (anyAllItTyped_bvsaddo (anyAllItTyped_ext_datetime_val h1) (anyAllItTyped_ext_duration_val h2)) (anyAllItTyped_ext_datetime_ofBitVec (anyAllItTyped_bvadd (anyAllItTyped_ext_datetime_val h1) (anyAllItTyped_ext_duration_val h2)))
+theorem aa_Datetime_durationSince {dt₁ dt₂ : Term} (h1 : dt₁.anyAllItTyped ety = true) (h2 : dt₂.anyAllItTyped ety = true) : (Datetime.durationSince dt₁ dt₂).anyAllItTyped ety = true := by
+  unfold Datetime.durationSince
+  exact anyAllItTyped_ifFalse (anyAllItTyped_bvssubo (anyAllItTyped_ext_datetime_val h1) (anyAllItTyped_ext_datetime_val h2)) (anyAllItTyped_ext_duration_ofBitVec (anyAllItTyped_bvsub (anyAllItTyped_ext_datetime_val h1) (anyAllItTyped_ext_datetime_val h2)))
+theorem aa_Datetime_toDate {dt : Term} (h : dt.anyAllItTyped ety = true) : (Datetime.toDate dt).anyAllItTyped ety = true := by
+  unfold Datetime.toDate
+  have hv := anyAllItTyped_ext_datetime_val h
+  have hms : (Term.prim (TermPrim.bitvec (Int64.toBitVec 86400000))).anyAllItTyped ety = true := by simp [Term.anyAllItTyped]
+  exact anyAllItTyped_ifFalse (anyAllItTyped_bvssubo hv (anyAllItTyped_bvsmod hv hms)) (anyAllItTyped_ext_datetime_ofBitVec (anyAllItTyped_bvsub hv (anyAllItTyped_bvsmod hv hms)))
+theorem aa_Datetime_toTime {dt : Term} (h : dt.anyAllItTyped ety = true) : (Datetime.toTime dt).anyAllItTyped ety = true := by
+  unfold Datetime.toTime
+  apply anyAllItTyped_ext_duration_ofBitVec
+  have hv := anyAllItTyped_ext_datetime_val h
+  have hz : (Term.prim (TermPrim.bitvec (Int64.toBitVec 0))).anyAllItTyped ety = true := by simp [Term.anyAllItTyped]
+  have hms : (Term.prim (TermPrim.bitvec (Int64.toBitVec 86400000))).anyAllItTyped ety = true := by simp [Term.anyAllItTyped]
+  exact anyAllItTyped_ite (anyAllItTyped_bvsle hz hv) (anyAllItTyped_bvsrem hv hms) (anyAllItTyped_ite (anyAllItTyped_eq (anyAllItTyped_bvsrem hv hms) hz) hz (anyAllItTyped_bvadd (anyAllItTyped_bvsrem hv hms) hms))
+
+/-! ### compileCall wrappers + compileCall (anyAllItTyped) -/
+
+theorem anyAllItTyped_compileCall₀ {α} [Coe α Ext] {mk : String → Option α} {t r : Term} (hok : compileCall₀ mk t = Except.ok r) : r.anyAllItTyped ety = true := by
+  unfold compileCall₀ at hok
+  split at hok <;> try split at hok
+  all_goals simp only [someOf, Except.ok.injEq, reduceCtorEq] at hok
+  all_goals (subst hok; exact anyAllItTyped_someOf (by simp [Term.anyAllItTyped]))
+theorem anyAllItTyped_ccwe1 {xty enc} {t₁ r : Term} (henc : ∀ x, x.anyAllItTyped ety = true → (enc x).anyAllItTyped ety = true) (h1 : t₁.anyAllItTyped ety = true) (hok : compileCallWithError₁ xty enc t₁ = Except.ok r) : r.anyAllItTyped ety = true := by
+  unfold compileCallWithError₁ at hok
+  split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+  subst hok; exact anyAllItTyped_ifSome h1 (henc _ (anyAllItTyped_option_get h1))
+theorem anyAllItTyped_ccwe2 {xty₁ xty₂ enc} {t₁ t₂ r : Term} (henc : ∀ x y, x.anyAllItTyped ety = true → y.anyAllItTyped ety = true → (enc x y).anyAllItTyped ety = true) (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) (hok : compileCallWithError₂ xty₁ xty₂ enc t₁ t₂ = Except.ok r) : r.anyAllItTyped ety = true := by
+  unfold compileCallWithError₂ at hok
+  simp only [] at hok
+  split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+  subst hok; exact anyAllItTyped_ifSome h1 (anyAllItTyped_ifSome h2 (henc _ _ (anyAllItTyped_option_get h1) (anyAllItTyped_option_get h2)))
+theorem anyAllItTyped_cc1 {xty enc} {t₁ r : Term} (henc : ∀ x, x.anyAllItTyped ety = true → (enc x).anyAllItTyped ety = true) (h1 : t₁.anyAllItTyped ety = true) (hok : compileCall₁ xty enc t₁ = Except.ok r) : r.anyAllItTyped ety = true := by
+  unfold compileCall₁ at hok; exact anyAllItTyped_ccwe1 (fun x hx => anyAllItTyped_someOf (henc x hx)) h1 hok
+theorem anyAllItTyped_cc2 {xty enc} {t₁ t₂ r : Term} (henc : ∀ x y, x.anyAllItTyped ety = true → y.anyAllItTyped ety = true → (enc x y).anyAllItTyped ety = true) (h1 : t₁.anyAllItTyped ety = true) (h2 : t₂.anyAllItTyped ety = true) (hok : compileCall₂ xty enc t₁ t₂ = Except.ok r) : r.anyAllItTyped ety = true := by
+  unfold compileCall₂ at hok; exact anyAllItTyped_ccwe2 (fun x y hx hy => anyAllItTyped_someOf (henc x y hx hy)) h1 h2 hok
+
+set_option maxHeartbeats 1000000 in
+theorem anyAllItTyped_compileCall {xfn : ExtFun} {ts : List Term} {r : Term}
+    (hts : ∀ t ∈ ts, t.anyAllItTyped ety = true) (hok : compileCall xfn ts = Except.ok r) : r.anyAllItTyped ety = true := by
+  unfold compileCall at hok
+  split at hok <;>
+    rename_i heq <;>
+    first
+    | exact anyAllItTyped_compileCall₀ hok
+    | ( -- unary (compileCall₁ / WithError₁): ts = [t₁]
+        first
+        | exact anyAllItTyped_cc1 (fun x hx => aa_IPAddr_isIpv4 hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_IPAddr_isIpv6 hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_IPAddr_isLoopback hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_IPAddr_isMulticast hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_ccwe1 (fun x hx => aa_Datetime_toDate hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_Datetime_toTime hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_Duration_toMilliseconds hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_Duration_toSeconds hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_Duration_toMinutes hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_Duration_toHours hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc1 (fun x hx => aa_Duration_toDays hx) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok )
+    | ( -- binary (compileCall₂ / WithError₂): ts = [t₁, t₂]
+        first
+        | exact anyAllItTyped_cc2 (fun x y hx hy => aa_Decimal_lessThan hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc2 (fun x y hx hy => aa_Decimal_lessThanOrEqual hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc2 (fun x y hx hy => aa_Decimal_greaterThan hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc2 (fun x y hx hy => aa_Decimal_greaterThanOrEqual hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_cc2 (fun x y hx hy => aa_IPAddr_isInRange hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_ccwe2 (fun x y hx hy => aa_Datetime_offset hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok
+        | exact anyAllItTyped_ccwe2 (fun x y hx hy => aa_Datetime_durationSince hx hy) (hts _ (by simp [List.mem_cons, List.mem_singleton])) (hts _ (by simp [List.mem_cons, List.mem_singleton])) hok )
+    | exact absurd hok (by simp [reduceCtorEq])
 end Cedar.Thm
