@@ -424,7 +424,7 @@ theorem compile_well_typed_var {v : Var} {ty : CedarType} {Γ : TypeEnv} {εnv :
   CompileWellTyped (.var v ty) εnv
 := by
   have ⟨hεnv, hwt, hwf⟩ := hcond
-  have ⟨⟨⟨_, hprincipal, _, haction, _, hresource, _, hcontext⟩, _⟩, _⟩ := hwf
+  have ⟨⟨⟨_, hprincipal, _, _, _, haction, _, _, _, hresource, _, _, _, hcontext, _, _⟩, _⟩, _⟩ := hwf
   cases hwt with | var hwt =>
   cases hwt
   all_goals simp only [
