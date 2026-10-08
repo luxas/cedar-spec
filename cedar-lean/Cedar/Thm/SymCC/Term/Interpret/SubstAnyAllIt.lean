@@ -600,4 +600,66 @@ theorem mkApp_set_all_wf {εs : SymEntities} {S P E : Term} {ety : TermType}
   · exact Op.WellTyped.set.all_wt hSty hPty hEty hPn hEn hPa hEa
   · simp only [Term.typeOf]
 
+/-- `op.interpret` (non-`set.all`) of well-formed, well-typed arguments is well-formed. -/
+theorem op_interpret_wf {εs : SymEntities} {I : Interpretation} {op : Op} {ts : List Term} {ty : TermType}
+  (h₀ : I.WellFormed εs) (hwt : Op.WellTyped εs op ts ty) (hargs : ∀ t ∈ ts, t.WellFormed εs) :
+  (Op.interpret I op ts ty).WellFormed εs ∧ (Op.interpret I op ts ty).typeOf = ty := by
+  simp only [Op.interpret]
+  cases hwt with
+  | not_wt h1 => exact wf_not (hargs _ (by simp)) h1
+  | and_wt h1 h2 => exact wf_and (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | or_wt h1 h2 => exact wf_or (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | eq_wt h1 => exact wf_eq (hargs _ (by simp)) (hargs _ (by simp)) h1
+  | ite_wt h1 h2 => exact wf_ite (hargs _ (by simp)) (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | @uuf_wt f t h1 h2 =>
+    have h₅ := wf_interpretation_implies_wf_udf h₀ h2
+    have hwf := hargs t (by simp)
+    have happ := wf_app (f := .udf (I.funs f)) hwf
+      (by simp only [UnaryFunction.argType]; rw [h₅.right.left]; exact h1)
+      (by simp only [UnaryFunction.WellFormed, h₅.left])
+    refine ⟨happ.left, ?_⟩
+    rw [happ.right]
+    simp only [UnaryFunction.outType, h₅.right.right]
+  | bvneg_wt h1 => exact wf_bvneg (hargs _ (by simp)) h1
+  | bvnego_wt h1 => exact wf_bvnego (hargs _ (by simp)) h1
+  | bvadd_wt h1 h2 => exact wf_bvadd (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvsub_wt h1 h2 => exact wf_bvsub (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvmul_wt h1 h2 => exact wf_bvmul (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvsdiv_wt h1 h2 => exact wf_bvsdiv (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvudiv_wt h1 h2 => exact wf_bvudiv (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvsrem_wt h1 h2 => exact wf_bvsrem (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvsmod_wt h1 h2 => exact wf_bvsmod (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvurem_wt h1 h2 => exact wf_bvurem (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvshl_wt h1 h2 => exact wf_bvshl (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvlshr_wt h1 h2 => exact wf_bvlshr (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvsaddo_wt h1 h2 => exact wf_bvsaddo (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvssubo_wt h1 h2 => exact wf_bvssubo (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvsmulo_wt h1 h2 => exact wf_bvsmulo (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvslt_wt h1 h2 => exact wf_bvslt (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvsle_wt h1 h2 => exact wf_bvsle (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvult_wt h1 h2 => exact wf_bvult (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | bvule_wt h1 h2 => exact wf_bvule (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | zero_extend_wt h1 => exact wf_zero_extend (hargs _ (by simp)) h1
+  | set.member_wt h1 => exact wf_set_member (hargs _ (by simp)) (hargs _ (by simp)) h1
+  | set.subset_wt h1 h2 => exact wf_set_subset (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | set.inter_wt h1 h2 => exact wf_set_inter (hargs _ (by simp)) (hargs _ (by simp)) h1 h2
+  | set.all_wt h1 h2 h3 h4 h5 h6 h7 =>
+    exact mkApp_set_all_wf (hargs _ (by simp)) h1 (hargs _ (by simp)) h2 (hargs _ (by simp)) h3 h4 h5 h6 h7
+  | option.get_wt h1 => exact wf_option_get' h₀ (hargs _ (by simp)) h1
+  | record.get_wt h1 h2 => exact wf_record_get (hargs _ (by simp)) h1 h2
+  | string.like_wt h1 => exact wf_string_like (hargs _ (by simp)) h1
+  | @ext_wt xop ets ety h1 =>
+    cases h1 with
+    | decimal.val_wt he => exact wf_ext_decimal_val (hargs _ (by simp)) he
+    | ipaddr.isV4_wt he => exact wf_ext_ipaddr_isV4 (hargs _ (by simp)) he
+    | ipaddr.addrV4_wt he => exact wf_ext_ipaddr_addrV4' h₀ (hargs _ (by simp)) he
+    | ipaddr.prefixV4_wt he => exact wf_ext_ipaddr_prefixV4' h₀ (hargs _ (by simp)) he
+    | ipaddr.addrV6_wt he => exact wf_ext_ipaddr_addrV6' h₀ (hargs _ (by simp)) he
+    | ipaddr.prefixV6_wt he => exact wf_ext_ipaddr_prefixV6' h₀ (hargs _ (by simp)) he
+    | datetime.val_wt he => exact wf_ext_datetime_val (hargs _ (by simp)) he
+    | datetime.ofBitVec_wt he => exact wf_ext_datetime_ofBitVec (hargs _ (by simp)) he
+    | duration.val_wt he => exact wf_ext_duration_val (hargs _ (by simp)) he
+    | duration.ofBitVec_wt he => exact wf_ext_duration_ofBitVec (hargs _ (by simp)) he
+
+
 end Cedar.Thm
