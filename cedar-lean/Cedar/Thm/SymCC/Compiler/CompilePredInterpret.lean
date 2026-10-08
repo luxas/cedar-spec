@@ -436,4 +436,85 @@ theorem compilePred_interpret_or {x₁ x₂ : PredExpr} {it : Term} {εnv : SymE
       have hwφ₁' := (interpret_term_wf h₁ hwφ₁.left).right
       simp only [hwφ₁', ht₁, forall_const] at ht₁'
 
+theorem compilePred_interpret_ite {x₁ x₂ x₃ : PredExpr} {it : Term} {εnv : SymEnv} {I : Interpretation} {pt : Term} {elemTy : TermType}
+    (h₁ : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (h₃ : compilePred (.ite x₁ x₂ x₃) it εnv = .ok pt)
+    (ih₁ : ∀ {t₁}, compilePred x₁ it εnv = .ok t₁ →
+            compilePred x₁ (it.interpret I) (εnv.interpret I) = .ok (t₁.interpret I))
+    (ih₂ : ∀ {t₂}, compilePred x₂ it εnv = .ok t₂ →
+            compilePred x₂ (it.interpret I) (εnv.interpret I) = .ok (t₂.interpret I))
+    (ih₃ : ∀ {t₃}, compilePred x₃ it εnv = .ok t₃ →
+            compilePred x₃ (it.interpret I) (εnv.interpret I) = .ok (t₃.interpret I)) :
+    compilePred (.ite x₁ x₂ x₃) (it.interpret I) (εnv.interpret I) = .ok (pt.interpret I) := by
+  replace ⟨_, hr₁, h₃⟩ := compilePred_ite_ok_implies h₃
+  simp only [compilePred, ih₁ hr₁, Except.bind_ok]
+  clear ih₁
+  split at h₃
+  case h_1 =>
+    simp only [interpret_term_some, interpret_term_prim, someOf, compileIf]
+    rw [eq_comm] at h₃
+    exact ih₂ h₃
+  case h_2 =>
+    simp only [interpret_term_some, interpret_term_prim, someOf, compileIf]
+    rw [eq_comm] at h₃
+    exact ih₃ h₃
+  case h_3 t₁ _ h₄ h₅ =>
+    replace ⟨hopt, t₂, t₃, hr₂, hr₃, hty, h₃⟩ := h₃
+    simp only [compileIf, ih₂ hr₂, ih₃ hr₃, Except.bind_ok]
+    clear ih₂ ih₃
+    replace hwf₁ := compilePred_wf hwε hitw hitty hr₁
+    replace hwf₂ := compilePred_wf hwε hitw hitty hr₂
+    replace hwf₃ := compilePred_wf hwε hitw hitty hr₃
+    have ⟨h₆, h₇⟩ := wf_option_get hwf₁.left hopt
+    have h₈ := wf_ite h₆ hwf₂.left hwf₃.left h₇ hty
+    clear hr₁ hr₂ hr₃
+    split
+    case h_3 hopt' _ _ =>
+      have hwf₁' := wf_option_get (interpret_term_wf h₁ hwf₁.left).left hopt'
+      have hwf₂' := interpret_term_wf h₁ hwf₂.left
+      have hwf₃' := interpret_term_wf h₁ hwf₃.left
+      simp only [hwf₂'.right, hty, hwf₃'.right, ite_true, Except.ok.injEq]
+      simp only [h₃,
+        interpret_ifSome h₁ hwf₁.left h₈.left,
+        interpret_ite h₁ h₆ hwf₂.left hwf₃.left h₇ hty,
+        interpret_option_get I hwf₁.left hopt]
+
+      have h₉ := (wf_ite hwf₁'.left hwf₂'.left hwf₃'.left hwf₁'.right
+        (by simp [hwf₂'.right, hwf₃'.right, hty])).right
+
+      have h₇' := wf_option_get' h₁ hwf₁.left hopt
+      have h₈' := wf_ite h₇'.left hwf₂.left hwf₃.left h₇'.right hty
+      have h₉' := (interpret_term_wf h₁ h₈'.left).right
+      simp only [h₈'.right,
+        interpret_ite h₁ h₇'.left hwf₂.left hwf₃.left h₇'.right hty,
+        interpret_option_get' h₁ hwf₁.left hopt] at h₉'
+
+      replace ⟨_, hwf₂⟩ := hwf₂.right
+      simp only [hwf₂, hwf₂'.right] at h₉ h₉'
+      simp [pe_ifSome_get_eq_get' I
+          (Factory.ite · (Term.interpret I t₂) (Term.interpret I t₃))
+          (interpret_term_wfl h₁ hwf₁.left).left hopt' h₉ h₉']
+    case h_4 h =>
+      simp only [← (interpret_term_wf h₁ hwf₁.left).right] at hopt
+      simp only [hopt, forall_const] at h
+    case' h_1 =>
+      have ⟨_, hty'⟩ := hwf₂.right
+      simp only [← (interpret_term_wf h₁ hwf₂.left).right] at hty'
+    case' h_2 =>
+      have ⟨_, hty'⟩ := hwf₃.right
+      simp only [← (interpret_term_wf h₁ hwf₃.left).right] at hty'
+    case h_1 heq _ | h_2 heq _ =>
+      subst h₃
+      simp only [
+        heq,
+        interpret_ifSome h₁ hwf₁.left h₈.left,
+        interpret_ite h₁ h₆ hwf₂.left hwf₃.left h₇ hty,
+        interpret_option_get I hwf₁.left hopt,
+        pe_option_get_some,
+        pe_ite_true,
+        pe_ite_false,
+        pe_ifSome_some hty',
+        option.get']
+
 end Cedar.Thm
