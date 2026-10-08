@@ -11,6 +11,7 @@ import Cedar.Thm.SymCC.Compiler.Attr
 import Cedar.Thm.SymCC.Compiler.Control
 import Cedar.Thm.SymCC.Compiler.Record
 import Cedar.Thm.SymCC.Compiler.Call
+import Cedar.Thm.SymCC.Compiler.Args
 import Cedar.Thm.SymCC.Compiler.ExtHasAttr
 import Cedar.Thm.SymCC.Compiler.Invert
 import Cedar.Thm.SymCC.Compiler.WF
@@ -632,5 +633,59 @@ theorem compilePred_interpret_record {axs : List (Attr × PredExpr)} {it : Term}
     simp only [interpret_ifAllSome hI hwg hwo hty, interpret_term_some,
       interpret_recordOf, List.map_map, prod_snd_comp_prod_map_eq, prod_map_id_comp_eq]
     exact compile_interpret_record_ifAllSome hI hwφ
+
+theorem compilePred_interpret_call_ihs {xs : List PredExpr} {elemTy : TermType} {it : Term} {εnv : SymEnv} {I : Interpretation} {ts : List Term}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (ih : ∀ x, x ∈ xs → ∀ {t}, compilePred x it εnv = .ok t →
+            compilePred x (it.interpret I) (εnv.interpret I) = .ok (t.interpret I))
+    (hok : List.Forall₂ (fun x t => compilePred x it εnv = Except.ok t) xs ts) :
+    List.Forall₂ (fun x t => compilePred x (it.interpret I) (εnv.interpret I) = Except.ok (Term.interpret I t)) xs ts := by
+  cases xs
+  case nil =>
+    simp only [List.not_mem_nil, false_implies, forall_const, List.forall₂_nil_left_iff] at *
+    assumption
+  case cons xhd xtl =>
+    simp only [List.mem_cons, forall_eq_or_imp, List.forall₂_cons_left_iff, exists_and_left] at *
+    replace ⟨thd, hok, ttl, htl, hts⟩ := hok
+    subst hts
+    exists thd
+    simp only [ih.left hok, List.cons.injEq, true_and]
+    exists ttl
+    simp only [and_true]
+    exact compilePred_interpret_call_ihs hI hwε hitw hitty ih.right htl
+
+theorem compilePred_interpret_call {xfn : ExtFun} {xs : List PredExpr} {it : Term} {εnv : SymEnv} {I : Interpretation} {pt : Term} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hok : compilePred (.call xfn xs) it εnv = .ok pt)
+    (ih : ∀ x, x ∈ xs → ∀ {t}, compilePred x it εnv = .ok t →
+            compilePred x (it.interpret I) (εnv.interpret I) = .ok (t.interpret I)) :
+    compilePred (.call xfn xs) (it.interpret I) (εnv.interpret I) = .ok (pt.interpret I) := by
+  simp only [compilePred] at hok
+  simp_do_let (xs.mapM₁ (λ ⟨x₁, _⟩ => compilePred x₁ it εnv)) at hok
+  rename_i ts hts
+  simp only [List.mapM₁_eq_mapM (λ x => compilePred x it εnv), List.mapM_ok_iff_forall₂] at hts
+  -- per-arg WF
+  have hwφ : ∀ t ∈ ts, t.WellFormed εnv.entities := by
+    intro t ht
+    replace ⟨x, hx, hxok⟩ := List.forall₂_implies_all_right hts t ht
+    exact (compilePred_wf hwε hitw hitty hxok).left
+  replace ih := compilePred_interpret_call_ihs (elemTy := elemTy) hI hwε hitw hitty ih hts
+  simp only [compilePred, List.mapM₁_eq_mapM (λ x => compilePred x (it.interpret I) (εnv.interpret I))]
+  simp_do_let (List.mapM (fun x => compilePred x (it.interpret I) (εnv.interpret I)) xs)
+  case error h =>
+    replace ⟨x, hmem, h⟩ := List.mapM_error_implies_exists_error h
+    replace ⟨_, _, ih⟩ := List.forall₂_implies_all_left ih x hmem
+    simp only [h, reduceCtorEq] at ih
+  case ok ts' hok' =>
+    rw [List.mapM_ok_iff_forall₂] at hok'
+    have hteq : List.Forall₂ (λ t t' => Term.interpret I t = t') ts ts' := by
+      rw [List.forall₂_iff_map_eq] at ih hok'
+      rw [ih, ← List.forall₂_iff_map_eq] at hok'
+      simpa only [Except.ok.injEq] using hok'
+    simp only [List.forall₂_iff_map_eq, List.map_id'] at hteq
+    subst hteq
+    exact compileCall_interpret hI hwφ hok
 
 end Cedar.Thm
