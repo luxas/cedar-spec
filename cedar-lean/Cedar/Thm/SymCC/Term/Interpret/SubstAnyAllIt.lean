@@ -26,6 +26,9 @@ public import Cedar.Thm.SymCC.Term.WF
 import all Cedar.Thm.SymCC.Term.WF
 import Cedar.Thm.SymCC.Term.PE
 import all Cedar.Thm.SymCC.Interpretation
+import Cedar.Thm.Data.List
+import Cedar.Thm.Data.Map
+import Cedar.Thm.Data.Set
 
 /-! Lemmas relating `Term.substAnyAllIt` and `Term.interpretWith` (D-55). -/
 
@@ -1070,5 +1073,63 @@ decreasing_by
          simp only [Prod.mk.sizeOf_spec] at h1; omega)
       | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
 
+/-- On a term with no reserved `!anyall!it` var AND no `set.all` node, `interpretWith σ`
+agrees with `interpret` (= `interpretWith none`) for every `σ`. Request terms (D-62/D-63)
+satisfy both, so the environment side of `compilePred_interpretWith` is `σ`-independent. -/
+theorem interpretWith_eq_interpret_of_noAnyAllItVar {σ : Option Term} {I : Interpretation} :
+    ∀ t : Term, t.NoAnyAllItVar = true → t.NoSetAll = true →
+      Term.interpretWith σ I t = Term.interpret I t
+  | .prim p, _, _ => by cases σ <;> simp only [Term.interpret, Term.interpretWith]
+  | .var w, h, _ => by
+    simp only [Term.NoAnyAllItVar, ne_eq, decide_not, Bool.not_eq_true', decide_eq_false_iff_not] at h
+    cases σ with
+    | none => rfl
+    | some v => rw [Term.interpret, Term.interpretWith, Term.interpretWith]; simp only [if_neg h]
+  | .none ty, _, _ => by cases σ <;> simp only [Term.interpret, Term.interpretWith, noneOf]
+  | .some t, h, hs => by
+    simp only [Term.NoAnyAllItVar] at h; simp only [Term.NoSetAll] at hs
+    rw [Term.interpret, Term.interpretWith, Term.interpretWith,
+      interpretWith_eq_interpret_of_noAnyAllItVar t h hs, Term.interpret]
+  | .set ts ty, h, hs => by
+    simp only [Term.NoAnyAllItVar, Set.all₁_eq_all, Set.all_eq_true] at h
+    simp only [Term.NoSetAll, Set.all₁_eq_all, Set.all_eq_true] at hs
+    rw [Term.interpret, Term.interpretWith, Term.interpretWith]
+    congr 1
+    simp only [Set.map₁_eq_map]
+    apply Set.map_congr
+    intro x hx
+    exact interpretWith_eq_interpret_of_noAnyAllItVar x (h x hx) (hs x hx)
+  | .record ats, h, hs => by
+    simp only [Term.NoAnyAllItVar, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h
+    simp only [Term.NoSetAll, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hs
+    rw [Term.interpret, Term.interpretWith, Term.interpretWith]
+    congr 1
+    simp only [Map.mapOnValues₂_eq_mapOnValues]
+    apply Map.mapOnValues_congr
+    intro v hv
+    have ⟨a, hmem⟩ := Map.in_values_exists_key hv
+    exact interpretWith_eq_interpret_of_noAnyAllItVar v (h a v hmem) (hs a v hmem)
+  | .app op ts ty, h, hs => by
+    -- NoSetAll forbids op = set.all, so this is always the generic app arm.
+    have hop : op ≠ Op.set.all := by
+      intro heq; subst heq; simp only [Term.NoSetAll, Bool.false_eq_true] at hs
+    simp only [Term.NoAnyAllItVar] at h
+    rw [List.all_eq_true] at h
+    have ⟨_, hsargs⟩ := noSetAll_app hs
+    rw [interpretWith_app_ne_setAll hop, interpret_app_ne_setAll hop]
+    congr 1
+    simp only [List.map₁_eq_map]
+    apply List.map_congr_left
+    intro x hx
+    exact interpretWith_eq_interpret_of_noAnyAllItVar x (h ⟨x, hx⟩ (List.mem_attach _ _)) (hsargs x hx)
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have h1 := List.sizeOf_lt_of_mem ‹(_,_) ∈ Map.toList ats›; have h2 := Map.sizeOf_lt_of_toList ats; simp only [Prod.mk.sizeOf_spec] at h1; omega)
 
 end Cedar.Thm
