@@ -120,6 +120,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
   _Green check:_ core tests with `--features anyall`; parity unit tests mirroring the Lean ones
   (including the false-then-error ⇒ QuantifierError case, req 2.8).
   _Satisfies:_ 2.1, 2.2, 2.4, 2.5, 2.6, 2.7, 2.8.
+  _Status:_ DONE (cedar `a409133e`, `911ee3ea`): instantiation via `From<Value> for Expr` (D-14); 18 parity tests.
 
 - **T3.2 Implement the Rust validator / well-formedness checks (gated).**
   Implement the type rule for `All` (req 6.1–6.3: `E : Set<τ>`, `P : Bool` under `it : τ` ⇒
@@ -128,6 +129,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
   outside a predicate (1.6), in `Expr::try_validate` and the validator.
   _Green check:_ core tests with `--features anyall`.
   _Satisfies:_ 1.4, 1.5, 1.6, 6.1, 6.2, 6.3.
+  _Status:_ DONE for 1.5/6.1-6.3 (cedar `78c79bc5`, `05adec3d`); 1.4/1.6 are unrepresentable in the AST and enforced by the Phase 4 parser (D-20).
 
 ## Phase 4 — Rust surface syntax + roundtrip, gated
 
