@@ -154,21 +154,26 @@ decreasing_by
 **Lemma B (typeOf).** `substAnyAllIt v` preserves `typeOf` when `v` has the same
 type as every bound-variable occurrence. `.app`/`.set` store their type, so only
 `.var "!anyall!it"` leaves can change it. -/
-theorem substAnyAllIt_typeOf {v : Term}
-  (hv : ∀ w : TermVar, w.id = "!anyall!it" → v.typeOf = w.ty) :
-  ∀ t : Term, (Term.substAnyAllIt v t).typeOf = t.typeOf
-  | .prim _ => by simp only [Term.substAnyAllIt]
-  | .var w => by
+theorem substAnyAllIt_typeOf {v : Term} :
+  ∀ t : Term, Term.anyAllItTyped v.typeOf t = true → (Term.substAnyAllIt v t).typeOf = t.typeOf
+  | .prim _, _ => by simp only [Term.substAnyAllIt]
+  | .var w, ht => by
     simp only [Term.substAnyAllIt]
     by_cases h : w.id = "!anyall!it"
-    · simp only [h, reduceIte, Term.typeOf]; exact hv w h
+    · simp only [h, reduceIte, Term.typeOf]
+      simp only [Term.anyAllItTyped, h, reduceIte, decide_eq_true_eq] at ht
+      exact ht.symm
     · simp only [h, reduceIte]
-  | .none _ => by simp only [Term.substAnyAllIt]
-  | .some t => by
-    simp only [Term.substAnyAllIt, Term.typeOf, substAnyAllIt_typeOf hv t]
-  | .set _ _ => by simp only [Term.substAnyAllIt, Term.typeOf]
-  | .app _ _ _ => by simp only [Term.substAnyAllIt, Term.typeOf]
-  | .record ats => by
+  | .none _, _ => by simp only [Term.substAnyAllIt]
+  | .some t, ht => by
+    have : Term.anyAllItTyped v.typeOf t = true := by simp only [Term.anyAllItTyped] at ht; exact ht
+    simp only [Term.substAnyAllIt, Term.typeOf, substAnyAllIt_typeOf t this]
+  | .set _ _, _ => by simp only [Term.substAnyAllIt, Term.typeOf]
+  | .app _ _ _, _ => by simp only [Term.substAnyAllIt, Term.typeOf]
+  | .record ats, ht => by
+    have hmem : ∀ p ∈ ats.toList, Term.anyAllItTyped v.typeOf p.2 = true := by
+      simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at ht
+      intro p hp; exact ht p.1 p.2 hp
     simp only [Term.substAnyAllIt, Term.typeOf, Map.mapOnValues₂_eq_mapOnValues,
       Map.mapOnValues_mapOnValues]
     apply congrArg (TermType.record ·)
@@ -176,7 +181,7 @@ theorem substAnyAllIt_typeOf {v : Term}
     intro w hw
     rcases Map.in_values_exists_key hw with ⟨a, ha⟩
     simp only [Function.comp_apply]
-    exact substAnyAllIt_typeOf hv w
+    exact substAnyAllIt_typeOf w (hmem (a, w) ha)
 termination_by t => sizeOf t
 decreasing_by
   all_goals simp_wf
@@ -190,26 +195,26 @@ decreasing_by
          omega)
 
 /-- `ExtOp.WellTyped` transport across `substAnyAllIt`. -/
-theorem extOp_wellTyped_substAnyAllIt {v : Term}
-  (hv : ∀ w : TermVar, w.id = "!anyall!it" → v.typeOf = w.ty)
-  {xop : ExtOp} {ts : List Term} {ty : TermType} :
+theorem extOp_wellTyped_substAnyAllIt {v : Term} {xop : ExtOp} {ts : List Term} {ty : TermType}
+  (hta : ∀ t : Term, t ∈ ts → Term.anyAllItTyped v.typeOf t = true) :
   ExtOp.WellTyped xop ts ty →
   ExtOp.WellTyped xop (ts.map (Term.substAnyAllIt v)) ty := by
   intro hwt
-  have hT : ∀ t : Term, (Term.substAnyAllIt v t).typeOf = t.typeOf := substAnyAllIt_typeOf hv
+  have hT : ∀ t : Term, t ∈ ts → (Term.substAnyAllIt v t).typeOf = t.typeOf :=
+    fun t ht => substAnyAllIt_typeOf t (hta t ht)
   cases hwt <;>
     (try simp only [List.map_cons, List.map_nil]) <;>
     first
-      | exact ExtOp.WellTyped.decimal.val_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.ipaddr.isV4_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.ipaddr.addrV4_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.ipaddr.prefixV4_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.ipaddr.addrV6_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.ipaddr.prefixV6_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.datetime.val_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.datetime.ofBitVec_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.duration.val_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact ExtOp.WellTyped.duration.ofBitVec_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
+      | exact ExtOp.WellTyped.decimal.val_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.ipaddr.isV4_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.ipaddr.addrV4_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.ipaddr.prefixV4_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.ipaddr.addrV6_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.ipaddr.prefixV6_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.datetime.val_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.datetime.ofBitVec_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.duration.val_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact ExtOp.WellTyped.duration.ofBitVec_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
 
 /-- `substAnyAllIt v` preserves `NoSetAll` when `v` itself has no `set.all`. -/
 theorem substAnyAllIt_noSetAll {v : Term} (hvn : v.NoSetAll = true) :
@@ -323,15 +328,15 @@ decreasing_by
 `substAnyAllIt v` preserves (`substAnyAllIt_typeOf`), so it transports across the
 substitution. The `set.all` constructor also carries `NoSetAll` premises, which
 transport via `substAnyAllIt_noSetAll` (needing `v.NoSetAll`). -/
-theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term}
-  (hv : ∀ w : TermVar, w.id = "!anyall!it" → v.typeOf = w.ty)
+theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term} {op : Op} {ts : List Term} {ty : TermType}
   (hvn : v.NoSetAll = true)
   (hvty : ∀ ety : TermType, Term.anyAllItTyped ety v = true)
-  {op : Op} {ts : List Term} {ty : TermType} :
+  (hta : ∀ t : Term, t ∈ ts → Term.anyAllItTyped v.typeOf t = true) :
   Op.WellTyped εs op ts ty →
   Op.WellTyped εs op (ts.map (Term.substAnyAllIt v)) ty := by
   intro hwt
-  have hT : ∀ t : Term, (Term.substAnyAllIt v t).typeOf = t.typeOf := substAnyAllIt_typeOf hv
+  have hT : ∀ t : Term, t ∈ ts → (Term.substAnyAllIt v t).typeOf = t.typeOf :=
+    fun t ht => substAnyAllIt_typeOf t (hta t ht)
   have hN : ∀ t : Term, Term.NoSetAll t = true → Term.NoSetAll (Term.substAnyAllIt v t) = true :=
     substAnyAllIt_noSetAll hvn
   have hA : ∀ (ety : TermType) t, Term.anyAllItTyped ety t = true →
@@ -340,96 +345,107 @@ theorem op_wellTyped_substAnyAllIt {εs : SymEntities} {v : Term}
   cases hwt <;>
     (try simp only [List.map_cons, List.map_nil]) <;>
     first
-      | exact Op.WellTyped.not_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.and_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.or_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.eq_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
+      | exact Op.WellTyped.not_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.and_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.or_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.eq_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
       | (rename_i t₁ t₂ t₃ hb he
-         rw [← hT t₂]
-         exact Op.WellTyped.ite_wt (by simp only [hT]; exact hb) (by simp only [hT]; exact he))
-      | exact Op.WellTyped.uuf_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by assumption)
-      | exact Op.WellTyped.bvneg_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvnego_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvadd_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvsub_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvmul_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvsdiv_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvudiv_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvsrem_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvsmod_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvurem_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvshl_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvlshr_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvsaddo_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvssubo_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvsmulo_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvslt_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvsle_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvult_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.bvule_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.zero_extend_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.set.member_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.set.subset_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.set.inter_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.set.all_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by apply hN; assumption) (by apply hN; assumption) (by apply hA; assumption) (by apply hA; assumption)
-      | exact Op.WellTyped.option.get_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | exact Op.WellTyped.record.get_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT]) (by assumption)
-      | exact Op.WellTyped.string.like_wt (by first | (simp only [hT]; assumption) | assumption | simp only [hT])
-      | (rename_i h; exact Op.WellTyped.ext_wt (extOp_wellTyped_substAnyAllIt hv h))
+         rw [← hT t₂ (by simp)]
+         exact Op.WellTyped.ite_wt (by rw [hT _ (by simp)]; exact hb) (by rw [hT _ (by simp), hT _ (by simp)]; exact he))
+      | exact Op.WellTyped.uuf_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by assumption)
+      | exact Op.WellTyped.bvneg_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvnego_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvadd_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvsub_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvmul_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvsdiv_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvudiv_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvsrem_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvsmod_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvurem_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvshl_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvlshr_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvsaddo_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvssubo_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvsmulo_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvslt_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvsle_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvult_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.bvule_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.zero_extend_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.set.member_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.set.subset_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.set.inter_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.set.all_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by apply hN; assumption) (by apply hN; assumption) (by apply hA; assumption) (by apply hA; assumption)
+      | exact Op.WellTyped.option.get_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | exact Op.WellTyped.record.get_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption) (by assumption)
+      | exact Op.WellTyped.string.like_wt (by (try rw [hT _ (by simp)]) <;> (try rw [hT _ (by simp)]) <;> assumption)
+      | (rename_i h; exact Op.WellTyped.ext_wt (extOp_wellTyped_substAnyAllIt hta h))
 
 /--
 **Lemma B (WellFormed).** `substAnyAllIt v` preserves well-formedness when `v` is
 well-formed and shares its type with every bound-variable occurrence. -/
 theorem substAnyAllIt_wf {εs : SymEntities} {v : Term}
   (hvwf : v.WellFormed εs)
-  (hv : ∀ w : TermVar, w.id = "!anyall!it" → v.typeOf = w.ty)
   (hvn : v.NoSetAll = true)
   (hvty : ∀ ety : TermType, Term.anyAllItTyped ety v = true) :
-  ∀ t : Term, Term.WellFormed εs t → (Term.substAnyAllIt v t).WellFormed εs
-  | .prim p, h => by simp only [Term.substAnyAllIt]; exact h
-  | .var w, h => by
+  ∀ t : Term, Term.WellFormed εs t → Term.anyAllItTyped v.typeOf t = true →
+    (Term.substAnyAllIt v t).WellFormed εs
+  | .prim p, h, _ => by simp only [Term.substAnyAllIt]; exact h
+  | .var w, h, _ => by
     simp only [Term.substAnyAllIt]
     by_cases hw : w.id = "!anyall!it"
     · simp only [hw, reduceIte]; exact hvwf
     · simp only [hw, reduceIte]; exact h
-  | .none ty, h => by simp only [Term.substAnyAllIt]; exact h
-  | .some t, h => by
+  | .none ty, h, _ => by simp only [Term.substAnyAllIt]; exact h
+  | .some t, h, hat => by
     simp only [Term.substAnyAllIt]
     cases h with | some_wf h₁ =>
-    exact Term.WellFormed.some_wf (substAnyAllIt_wf hvwf hv hvn hvty t h₁)
-  | .set s ty, h => by
+    have hat' : Term.anyAllItTyped v.typeOf t = true := by simp only [Term.anyAllItTyped] at hat; exact hat
+    exact Term.WellFormed.some_wf (substAnyAllIt_wf hvwf hvn hvty t h₁ hat')
+  | .set s ty, h, hat => by
     simp only [Term.substAnyAllIt]
     cases h with | set_wf h₁ h₂ h₃ h₄ =>
+    have hmem : ∀ t ∈ s.elts, Term.anyAllItTyped v.typeOf t = true := by
+      simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true] at hat; exact hat
     apply Term.WellFormed.set_wf
     · intro t ht
       simp only [Set.map₁_eq_map, Set.mem_map] at ht
       rcases ht with ⟨t', ht', rfl⟩
-      exact substAnyAllIt_wf hvwf hv hvn hvty t' (h₁ t' ht')
+      exact substAnyAllIt_wf hvwf hvn hvty t' (h₁ t' ht') (hmem t' ht')
     · intro t ht
       simp only [Set.map₁_eq_map, Set.mem_map] at ht
       rcases ht with ⟨t', ht', rfl⟩
-      rw [substAnyAllIt_typeOf hv t']; exact h₂ t' ht'
+      rw [substAnyAllIt_typeOf t' (hmem t' ht')]; exact h₂ t' ht'
     · exact h₃
     · rw [Set.map₁_eq_map]; exact Set.map_wf _ _
-  | .record ats, h => by
+  | .record ats, h, hat => by
     simp only [Term.substAnyAllIt]
     cases h with | record_wf h₁ h₂ =>
+    have hmem : ∀ p ∈ ats.toList, Term.anyAllItTyped v.typeOf p.2 = true := by
+      simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hat
+      intro p hp; exact hat p.1 p.2 hp
     apply Term.WellFormed.record_wf
     · intro a t ht
       rw [Map.mapOnValues₂_eq_mapOnValues] at ht
       rcases Map.in_mapOnValues_in_toList' ht with ⟨t', rfl, ht'⟩
-      exact substAnyAllIt_wf hvwf hv hvn hvty t' (h₁ a t' ht')
+      exact substAnyAllIt_wf hvwf hvn hvty t' (h₁ a t' ht') (hmem (a, t') ht')
     · rw [Map.mapOnValues₂_eq_mapOnValues]; exact Map.mapOnValues_wf.mp h₂
-  | .app op ts ty, h => by
+  | .app op ts ty, h, hat => by
     simp only [Term.substAnyAllIt]
     cases h with | app_wf h₁ h₂ =>
+    have hmem : ∀ t ∈ ts, Term.anyAllItTyped v.typeOf t = true := by
+      have h' : (ts.attach.all (fun x => Term.anyAllItTyped v.typeOf x.val)) = true := by
+        simp only [Term.anyAllItTyped] at hat; exact hat
+      rw [List.all_eq_true] at h'
+      intro t ht; exact h' ⟨t, ht⟩ (List.mem_attach ts ⟨t, ht⟩)
     apply Term.WellFormed.app_wf
     · intro t ht
       simp only [List.map₁_eq_map, List.mem_map] at ht
       rcases ht with ⟨t', ht', rfl⟩
-      exact substAnyAllIt_wf hvwf hv hvn hvty t' (h₁ t' ht')
+      exact substAnyAllIt_wf hvwf hvn hvty t' (h₁ t' ht') (hmem t' ht')
     · rw [List.map₁_eq_map]
-      exact op_wellTyped_substAnyAllIt hv hvn hvty h₂
+      exact op_wellTyped_substAnyAllIt hvn hvty hmem h₂
 termination_by t => sizeOf t
 decreasing_by
   all_goals simp_wf
