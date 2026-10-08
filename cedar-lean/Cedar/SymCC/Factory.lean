@@ -385,9 +385,15 @@ public def set.all (set pred err : Term) : Term :=
     -- D-55 concrete fold over a literal receiver, matching `evalAll`:
     -- empty ⇒ some true; any element errors ⇒ none (quantifierError);
     -- otherwise some (conjunction of the per-element predicate), no short-circuit.
-    let conj   := vs.foldr (fun vi acc => and (Term.substAnyAllIt vi pred) acc) (true : Term)
-    let anyErr := vs.foldr (fun vi acc => or (Term.substAnyAllIt vi err) acc) (false : Term)
-    ite anyErr (noneOf .bool) (someOf conj)
+    -- D-64: fold ONLY when every element is a literal (mirrors the D-60 interpret
+    -- guard); otherwise build the symbolic `.app set.all` node (same semantics —
+    -- it encodes to `set.filter` over the literal set). This keeps the fold's
+    -- element terms literal, so WF/soundness reduce to the literal case.
+    if vs.all (·.isLiteral) then
+      let conj   := vs.foldr (fun vi acc => and (Term.substAnyAllIt vi pred) acc) (true : Term)
+      let anyErr := vs.foldr (fun vi acc => or (Term.substAnyAllIt vi err) acc) (false : Term)
+      ite anyErr (noneOf .bool) (someOf conj)
+    else .app Op.set.all [set, pred, err] (.option .bool)
   | _ => .app Op.set.all [set, pred, err] (.option .bool)
 
 ---------- Core ADT operators with a trusted mapping to SMT ----------
