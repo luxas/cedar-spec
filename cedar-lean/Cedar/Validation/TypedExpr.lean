@@ -47,6 +47,12 @@ public inductive TypedExpr where
   | set (ls : List TypedExpr) (ty : CedarType)
   | record (map : List (Attr × TypedExpr)) (ty : CedarType)
   | call (xfn : ExtFun) (args : List TypedExpr) (ty : CedarType)
+  /-- `expr.all(pred)`: the set-quantifier node. `expr` is the (typed) receiver,
+  `pred` is the raw (set-free) predicate — the predicate is validated by
+  `typeOfPred` with `it` pinned to the element type (D-44), but stored untyped so
+  `toExpr` reconstructs the original `Expr.all`. `ty` is the result type
+  (`.bool .anyBool`). -/
+  | all (expr : TypedExpr) (pred : PredExpr) (ty : CedarType)
 
 
 deriving instance Repr, Inhabited for TypedExpr
@@ -96,6 +102,10 @@ public def decTypedExpr (x y : TypedExpr) : Decidable (x = y) := by
     exact match decEq f f', decExprList xs ys, decEq tx ty with
     | isTrue h₁, isTrue h₂, isTrue h₃ => isTrue (by rw [h₁, h₂, h₃])
     | isFalse _, _, _ | _, isFalse _, _ | _, _, isFalse _ => isFalse (by intro h; injection h; contradiction)
+  case all.all x₁ p tx y₁ q ty =>
+    exact match decTypedExpr x₁ y₁, decEq p q, decEq tx ty with
+    | isTrue h₁, isTrue h₂, isTrue h₃ => isTrue (by rw [h₁, h₂, h₃])
+    | isFalse _, _, _ | _, isFalse _, _ | _, _, isFalse _ => isFalse (by intro h; injection h; contradiction)
 
 def decProdAttrExprList (axs ays : List (Prod Attr TypedExpr)) : Decidable (axs = ays) :=
   match axs, ays with
@@ -132,7 +142,8 @@ public def TypedExpr.typeOf : TypedExpr → CedarType
   | extHasAttr _ _ _ ty
   | set _ ty
   | record _ ty
-  | call _ _ ty => ty
+  | call _ _ ty
+  | all _ _ ty => ty
 
 public def TypedExpr.toExpr : TypedExpr → Expr
   | lit p _ => Expr.lit p
@@ -148,6 +159,7 @@ public def TypedExpr.toExpr : TypedExpr → Expr
   | set ls _ => Expr.set $ ls.map₁ (λ ⟨e, _⟩  => e.toExpr)
   | record ls _ => Expr.record $ ls.map₂ (λ ⟨(a, e), _⟩  => (a, e.toExpr))
   | call xfn args _ => Expr.call xfn $ args.map₁ (λ ⟨e, _⟩ => e.toExpr)
+  | all expr pred _ => Expr.all expr.toExpr pred
 decreasing_by
   all_goals (simp_wf ; try omega)
   all_goals
@@ -170,6 +182,7 @@ public def TypedExpr.liftBoolTypes : TypedExpr → TypedExpr
   | .set ls ty => .set (ls.map₁ (λ ⟨e, _⟩ => e.liftBoolTypes)) ty.liftBoolTypes
   | .record ls ty => .record (ls.map₂ (λ ⟨(a, e), _⟩ => (a, e.liftBoolTypes))) ty.liftBoolTypes
   | .call xfn args ty => .call xfn (args.map₁ (λ ⟨e, _⟩ => e.liftBoolTypes)) ty.liftBoolTypes
+  | .all expr pred ty => .all expr.liftBoolTypes pred ty.liftBoolTypes
 decreasing_by
   all_goals (simp_wf ; try omega)
   all_goals
@@ -177,5 +190,26 @@ decreasing_by
     try simp at h
     try replace h := List.sizeOf_lt_of_mem h
     omega
+
+/--
+True iff a typed expression contains no `.all` quantifier node. The symbolic
+compiler (SymCC) supports exactly this fragment in Part A; the SymCC encoding of
+`.all` is Part B (D-33/D-34), so SymCC completeness is stated over this fragment.
+-/
+public def TypedExpr.NoQuantifier : TypedExpr → Bool
+  | .lit _ _ => true
+  | .var _ _ => true
+  | .ite c t e _ => c.NoQuantifier && t.NoQuantifier && e.NoQuantifier
+  | .and a b _ => a.NoQuantifier && b.NoQuantifier
+  | .or a b _ => a.NoQuantifier && b.NoQuantifier
+  | .unaryApp _ e _ => e.NoQuantifier
+  | .binaryApp _ a b _ => a.NoQuantifier && b.NoQuantifier
+  | .getAttr e _ _ => e.NoQuantifier
+  | .hasAttr e _ _ => e.NoQuantifier
+  | .extHasAttr e _ _ _ => e.NoQuantifier
+  | .set ls _ => ls.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.NoQuantifier)
+  | .record m _ => m.attach₂.all (fun x => x.val.snd.NoQuantifier)
+  | .call _ args _ => args.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.NoQuantifier)
+  | .all _ _ _ => false
 
 end Cedar.Validation

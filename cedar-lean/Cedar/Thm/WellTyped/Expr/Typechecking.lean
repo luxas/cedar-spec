@@ -1663,6 +1663,93 @@ theorem typechecked_is_well_typed_after_lifting_record
   · simp only [List.map₂_eq_map λ (x : Attr × TypedExpr) => (x.fst, x.snd.liftBoolTypes)]
     exact record_lifting_make
 
+/-- A predicate accepted by `typeOfPred` is `PredExpr.WellTyped`: every entity
+literal it contains is valid in the environment. Used to discharge the predicate
+obligation of `TypedExpr.WellTyped.all`. -/
+theorem typeOfPred_implies_wellTyped {p : Cedar.Spec.PredExpr} {itTy : CedarType}
+    {c : Capabilities} {env : TypeEnv} {res : TypedExpr × Capabilities}
+    (h : typeOfPred p itTy c env = .ok res) :
+    PredExpr.WellTyped env p := by
+  induction p, c using typeOfPred.induct generalizing res with
+  | case1 c => exact .item
+  | case2 c l =>
+    cases l with
+    | entityUID uid =>
+      simp only [typeOfPred, typeOfLit] at h
+      split at h <;> simp only [ok, err, reduceCtorEq] at h
+      rename_i hvalid
+      exact .lit_entity (by rw [Bool.or_eq_true] at hvalid; exact hvalid)
+    | bool b => exact .lit_other (by intro uid; simp)
+    | int i => exact .lit_other (by intro uid; simp)
+    | string s => exact .lit_other (by intro uid; simp)
+  | case3 c v => exact .var
+  | case4 c x₁ x₂ x₃ ih₁ ih₂ ih₃ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred x₂ itTy (c ∪ r₁.snd) env <;> rw [h₂] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    rename_i r₂
+    cases h₃ : typeOfPred x₃ itTy c env <;> rw [h₃] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .ite (ih₁ h₁) (ih₂ _ h₂) (ih₃ h₃)
+  | case5 c x₁ x₂ ih₁ ih₂ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred x₂ itTy (c ∪ r₁.snd) env <;> rw [h₂] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .and (ih₁ h₁) (ih₂ _ h₂)
+  | case6 c x₁ x₂ ih₁ ih₂ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred x₂ itTy c env <;> rw [h₂] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .or (ih₁ h₁) (ih₂ h₂)
+  | case7 c op x₁ ih₁ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .unaryApp (ih₁ h₁)
+  | case8 c op x₁ x₂ ih₁ ih₂ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred x₂ itTy c env <;> rw [h₂] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .binaryApp (ih₁ h₁) (ih₂ h₂)
+  | case9 c x₁ a ih₁ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .hasAttr (ih₁ h₁)
+  | case10 c x₁ a as ih₁ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .extHasAttr (ih₁ h₁)
+  | case11 c x₁ a ih₁ =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred x₁ itTy c env <;> rw [h₁] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    exact .getAttr (ih₁ h₁)
+  | case12 c axs ih =>
+    apply PredExpr.WellTyped.record
+    intro ax hmem
+    simp only [typeOfPred] at h
+    cases hm : axs.mapM₂ (fun x => (typeOfPred x.1.2 itTy c env).map (fun r => (x.1.1, r.1)))
+      <;> rw [hm] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    rename_i atys
+    rw [List.mapM₂_eq_mapM (fun x => (typeOfPred x.2 itTy c env).map (fun r => (x.1, r.1)))] at hm
+    have hall := List.mapM_ok_implies_all_ok hm ax hmem
+    obtain ⟨y, _, hy⟩ := hall
+    cases he : typeOfPred ax.2 itTy c env <;> rw [he] at hy <;> simp [Except.map] at hy
+    exact ih ax.1 ax.2 (List.sizeOf_snd_lt_sizeOf_list hmem) he
+  | case13 c xfn xs ih =>
+    apply PredExpr.WellTyped.call
+    intro x hmem
+    simp only [typeOfPred] at h
+    cases hm : xs.mapM₁ (fun x => justType (typeOfPred x.1 itTy c env))
+      <;> rw [hm] at h <;> simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    rename_i tys
+    rw [List.mapM₁_eq_mapM (fun x => justType (typeOfPred x itTy c env))] at hm
+    have hall := List.mapM_ok_implies_all_ok hm x hmem
+    obtain ⟨y, _, hy⟩ := hall
+    cases he : typeOfPred x itTy c env <;> rw [he] at hy <;> simp [justType, Except.map] at hy
+    exact ih x hmem he
+
 /-- The type checker produces typed expressions that are well-typed after type
 lifting. TODO: move this around after the proof is fixed -/
 theorem typechecked_is_well_typed_after_lifting
@@ -1700,8 +1787,29 @@ theorem typechecked_is_well_typed_after_lifting
     exact typechecked_is_well_typed_after_lifting_record hᵢ
   case _ hᵢ =>
     exact typechecked_is_well_typed_after_lifting_call hᵢ
-  case _ =>
+  case _ hᵢ =>
+    rename_i xcap xrecv p
     intro h
-    simp [typeOf] at h
+    simp only [typeOf] at h
+    generalize hᵢr : typeOf xrecv xcap env = res₁ at h
+    cases res₁ with
+    | error => simp only [hᵢr, Except.bind_err, reduceCtorEq] at h
+    | ok tyr =>
+      simp only [hᵢr, Except.bind_ok] at h
+      simp only [typeOfAll] at h
+      split at h <;> rename_i hset
+      · cases hpred : typeOfPred p _ xcap env with
+        | error => rw [hpred] at h; simp at h
+        | ok typc =>
+          rw [hpred] at h
+          simp only [Except.bind_ok] at h
+          split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+          rcases h with ⟨h, _⟩
+          subst h
+          simp only [TypedExpr.liftBoolTypes, CedarType.liftBoolTypes, BoolType.lift]
+          exact TypedExpr.WellTyped.all (hᵢ hᵢr)
+            (by rw [type_of_after_lifted_is_lifted, hset, CedarType.liftBoolTypes])
+            (typeOfPred_implies_wellTyped hpred)
+      · simp only [err, reduceCtorEq] at h
 
 end Cedar.Thm

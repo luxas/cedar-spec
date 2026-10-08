@@ -1051,7 +1051,7 @@ private theorem typeOfExtHasAttr_bool_type_sound
                       rw [h]; constructor <;> intro _ _ hh <;> simp [Capabilities.singleton] at hh
                       · obtain ⟨hh₁, hh₂⟩ := hh; subst hh₁ hh₂
                         simp only [EvaluatesTo]
-                        refine Or.inr (Or.inr (Or.inr ?_))
+                        refine Or.inr (Or.inr (Or.inr (Or.inr ?_)))
                         simp only [evaluate, heval, hasAttr, bind, Except.bind,
                           hattrs, Map.contains]
                         rw [hfind]; rfl
@@ -1072,7 +1072,7 @@ private theorem typeOfExtHasAttr_bool_type_sound
                       rw [h]; constructor <;> intro _ _ hh <;> simp [Capabilities.singleton] at hh
                       · obtain ⟨hh₁, hh₂⟩ := hh; subst hh₁ hh₂
                         simp only [EvaluatesTo]
-                        refine Or.inr (Or.inr (Or.inr ?_))
+                        refine Or.inr (Or.inr (Or.inr (Or.inr ?_)))
                         simp only [evaluate, heval, hasAttr, bind, Except.bind,
                           hattrs, Map.contains]
                         rw [hfind]; rfl
@@ -1156,7 +1156,8 @@ theorem type_of_extHasAttr_is_sound {x₁ : Expr} {a : Attr} {attrs : List Attr}
       simp only [EvaluatesTo] at h₉
       have ⟨_, v_ih, hev_ih, hio_ih⟩ := ih h₁ h₂ hte
       simp only [EvaluatesTo] at hev_ih
-      rcases hev_ih with hev_ih | hev_ih | hev_ih | hev_ih
+      rcases hev_ih with hev_ih | hev_ih | hev_ih | hev_ih | hev_ih
+      · simp [hev_ih] at hev_x₁
       · simp [hev_ih] at hev_x₁
       · simp [hev_ih] at hev_x₁
       · simp [hev_ih] at hev_x₁
@@ -1167,7 +1168,7 @@ theorem type_of_extHasAttr_is_sound {x₁ : Expr} {a : Attr} {attrs : List Attr}
     exact typeOfExtHasAttr_gci h₂ hext₀ hloop_ev hio₁' h₁ hev_x₁
   case right =>
     simp only [EvaluatesTo] at hev₁
-    rcases hev₁ with hev₁ | hev₁ | hev₁ | hev₁
+    rcases hev₁ with hev₁ | hev₁ | hev₁ | hev₁ | hev₁
     · -- evaluate x₁ = .error .entityDoesNotExist
       have hinh := type_of_is_inhabited h₂.wf_env h₃
       obtain ⟨w, hw⟩ := hinh
@@ -1177,6 +1178,10 @@ theorem type_of_extHasAttr_is_sound {x₁ : Expr} {a : Attr} {attrs : List Attr}
       obtain ⟨w, hw⟩ := hinh
       exact ⟨w, by simp [EvaluatesTo, heval_ext, hev₁], hw⟩
     · -- evaluate x₁ = .error .arithBoundsError
+      have hinh := type_of_is_inhabited h₂.wf_env h₃
+      obtain ⟨w, hw⟩ := hinh
+      exact ⟨w, by simp [EvaluatesTo, heval_ext, hev₁], hw⟩
+    · -- evaluate x₁ = .error .quantifierError
       have hinh := type_of_is_inhabited h₂.wf_env h₃
       obtain ⟨w, hw⟩ := hinh
       exact ⟨w, by simp [EvaluatesTo, heval_ext, hev₁], hw⟩

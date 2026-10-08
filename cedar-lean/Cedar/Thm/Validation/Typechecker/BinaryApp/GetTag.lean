@@ -77,10 +77,10 @@ theorem type_of_getTag_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {e
   replace ⟨_, v₂, ih₂, hty₂⟩ := ih₂ h₁ h₂ h₅
   simp only [EvaluatesTo] at *
   simp only [GuardedCapabilitiesInvariant, evaluate]
-  rcases ih₁ with ih₁ | ih₁ | ih₁ | ih₁ <;>
+  rcases ih₁ with ih₁ | ih₁ | ih₁ | ih₁ | ih₁ <;>
   simp only [ih₁, Except.bind_ok, Except.bind_err, false_implies, Except.error.injEq, or_false, or_true, true_and, reduceCtorEq]
   any_goals (apply type_of_is_inhabited h₂.wf_env hok)
-  rcases ih₂ with ih₂ | ih₂ | ih₂ | ih₂ <;>
+  rcases ih₂ with ih₂ | ih₂ | ih₂ | ih₂ | ih₂ <;>
   simp only [ih₂, Except.bind_ok, Except.bind_err, false_implies, Except.error.injEq, or_false, or_true, true_and, reduceCtorEq]
   any_goals (apply type_of_is_inhabited h₂.wf_env hok)
   rw [h₄] at hty₁

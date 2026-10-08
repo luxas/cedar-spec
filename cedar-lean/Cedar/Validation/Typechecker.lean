@@ -381,6 +381,78 @@ public def typeOfCall (xfn : ExtFun) (tys : List TypedExpr) (xs : List Expr) : R
   | _, _                                                => err (.extensionErr xs)
 
 
+/--
+Type a predicate (`PredExpr`, the body of `.all`) with the element keyword `it`
+(`.item`) pinned to the element type `itTy` (D-44). Mirrors `typeOf`, reusing the
+same per-operator typing helpers; `.item` is a typed placeholder carrying `itTy`.
+`PredExpr` has no `set`/`all`, so a set-typed subterm cannot arise structurally
+(req 1.5 is discharged by the grammar, D-41). The capabilities it returns are the
+predicate-internal ones; `typeOfAll` drops them at the quantifier boundary (D-39).
+-/
+public def typeOfPred (p : PredExpr) (itTy : CedarType) (c : Capabilities) (env : TypeEnv) : ResultType :=
+  match p with
+  | .item => ok (.var .principal itTy)
+  | .lit l => typeOfLit l env
+  | .var v => typeOfVar v env
+  | .ite x₁ x₂ x₃ => do
+    let (ty₁, c₁) ← typeOfPred x₁ itTy c env
+    let r₂ ← typeOfPred x₂ itTy (c ∪ c₁) env
+    let r₃ ← typeOfPred x₃ itTy c env
+    typeOfIf (ty₁, c₁) (.ok r₂) (.ok r₃)
+  | .and x₁ x₂ => do
+    let (ty₁, c₁) ← typeOfPred x₁ itTy c env
+    let r₂ ← typeOfPred x₂ itTy (c ∪ c₁) env
+    typeOfAnd (ty₁, c₁) (.ok r₂)
+  | .or x₁ x₂ => do
+    let (ty₁, c₁) ← typeOfPred x₁ itTy c env
+    let r₂ ← typeOfPred x₂ itTy c env
+    typeOfOr (ty₁, c₁) (.ok r₂)
+  | .unaryApp op₁ x₁ => do
+    let (ty₁, _) ← typeOfPred x₁ itTy c env
+    typeOfUnaryApp op₁ ty₁
+  | .binaryApp op₂ x₁ x₂ => do
+    let (ty₁, _) ← typeOfPred x₁ itTy c env
+    let (ty₂, _) ← typeOfPred x₂ itTy c env
+    typeOfBinaryApp op₂ ty₁ ty₂ x₁.toExpr x₂.toExpr c env
+  | .hasAttr x₁ a => do
+    let (ty₁, _) ← typeOfPred x₁ itTy c env
+    typeOfHasAttr ty₁ x₁.toExpr a c env
+  | .extHasAttr x₁ a as => do
+    let (ty₁, _) ← typeOfPred x₁ itTy c env
+    let (bty, c') ← typeOfExtHasAttr ty₁ x₁.toExpr (a :: as) c env
+    ok (TypedExpr.extHasAttr ty₁ a as (.bool bty)) c'
+  | .getAttr x₁ a => do
+    let (ty₁, _) ← typeOfPred x₁ itTy c env
+    typeOfGetAttr ty₁ x₁.toExpr a c env
+  | .record axs => do
+    let atys ← axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => (typeOfPred x₁ itTy c env).map (λ (ty, _) => (a₁, ty)))
+    ok (.record atys (.record (Map.make (atys.map (λ (a, ty) => (a, .required ty.typeOf))))))
+  | .call xfn xs => do
+    let tys ← xs.mapM₁ (λ ⟨x₁, _⟩ => justType (typeOfPred x₁ itTy c env))
+    typeOfCall xfn tys (xs.map₁ (λ ⟨x₁, _⟩ => x₁.toExpr))
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals (try omega)
+  all_goals (rename_i h; try (replace h := List.sizeOf_lt_of_mem h); omega)
+
+/--
+Type rule for `.all` (req 6.1-6.3, D-44). The receiver `tyr` must be a set
+`.set τ`; the predicate is typed with `it : τ` and must be boolean (a non-bool
+predicate is a type error at validation, matching Rust / D-16). The result is
+`.bool .anyBool`; capabilities learned inside the predicate are dropped, so the
+enclosing capabilities `c` pass through unchanged (D-39) — `it has a` cannot
+establish a capability about the outside world.
+-/
+public def typeOfAll (tyr : TypedExpr) (p : PredExpr) (c : Capabilities) (env : TypeEnv) : ResultType :=
+  match tyr.typeOf with
+  | .set τ => do
+    let (typ, _) ← typeOfPred p τ c env
+    match typ.typeOf with
+    | .bool _ => ok (TypedExpr.all tyr p (.bool .anyBool)) c
+    | _       => err (.unexpectedType typ.typeOf)
+  | ty => err (.unexpectedType ty)
+
 -- Note: if x types as .tt or .ff, it is okay to replace x with the literal
 -- expression true or false if x can never throw an extension error at runtime.
 -- This is true for the current version of Cedar.
@@ -423,9 +495,9 @@ public def typeOf (x : Expr) (c : Capabilities) (env : TypeEnv) : ResultType :=
   | .call xfn xs => do
     let tys ← xs.mapM₁ (λ ⟨x₁, _⟩ => justType (typeOf x₁ c env))
     typeOfCall xfn tys xs
-  -- Conservative reject: the sound `.all` type rule is deferred pending
-  -- decision D-11 (see .kiro/specs/anyall-set-operators/DECISIONS.md).
-  | .all _ _ => .error (.unexpectedType (.bool .anyBool))
+  | .all x₁ p => do
+    let (ty₁, _) ← typeOf x₁ c env
+    typeOfAll ty₁ p c env
 
 ---- Derivations -----
 

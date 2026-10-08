@@ -262,7 +262,7 @@ private theorem evaluate_extHasAttr_eq_of_loop_eq
   evaluate (.extHasAttr e a attrs) request entities =
     evaluate (.extHasAttr e a attrs) request entities' := by
   simp only [evaluate, ← hie]
-  rcases he with he | he | he | he <;> simp only [he, Except.bind_err]
+  rcases he with he | he | he | he | he <;> simp only [he, Except.bind_err]
   simpa only [Except.bind_ok, hasAttrs] using hloop he
 
 theorem level_based_slicing_is_sound_ext_has_attr

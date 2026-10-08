@@ -246,4 +246,43 @@ end
 
 public instance : DecidableEq Expr := decExpr
 
+/--
+Internal placeholder expression standing for the quantifier element keyword `it`
+(`PredExpr.item`) when a predicate is reconstructed as an `Expr` for typing. It is
+never evaluated: the evaluator binds the real element value through
+`evaluatePred`. Only its identity (as a capability key, and as a non-literal for
+equality typing) matters, so any fixed closed expression serves; `principal` is
+used because it is always well-typed in any request environment. This mirrors the
+Rust validator's reserved unknown `__cedar::anyall::it` (D-21/D-44).
+-/
+public def itExpr : Expr := .var .principal
+
+/--
+Reconstruct the `Expr` denoted by a predicate, substituting the element keyword
+`it` with `itExpr`. Used to type a predicate by reusing the ordinary expression
+typing machinery (D-44). The set-free, non-nested shape of `PredExpr` (no `set`,
+no `all`) is preserved — the result never contains `Expr.set` or `Expr.all`.
+-/
+public def PredExpr.toExpr : PredExpr → Expr
+  | .item               => itExpr
+  | .lit l              => .lit l
+  | .var v              => .var v
+  | .ite a b c          => .ite a.toExpr b.toExpr c.toExpr
+  | .and a b            => .and a.toExpr b.toExpr
+  | .or a b             => .or a.toExpr b.toExpr
+  | .unaryApp op a      => .unaryApp op a.toExpr
+  | .binaryApp op a b   => .binaryApp op a.toExpr b.toExpr
+  | .getAttr a attr     => .getAttr a.toExpr attr
+  | .hasAttr a attr     => .hasAttr a.toExpr attr
+  | .extHasAttr a attr attrs => .extHasAttr a.toExpr attr attrs
+  | .record axs         => .record $ axs.map₂ (λ ⟨(a, e), _⟩ => (a, e.toExpr))
+  | .call f xs          => .call f $ xs.map₁ (λ ⟨e, _⟩ => e.toExpr)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
 end Cedar.Spec

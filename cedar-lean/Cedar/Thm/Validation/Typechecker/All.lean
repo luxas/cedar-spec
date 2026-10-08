@@ -157,4 +157,71 @@ theorem hasAttrs_ne_qerr (v : Value) (a : Attr) (as0 : List Attr) (es : Entities
     split <;> try simp
     split <;> simp_all
 
+/-! ### Soundness of the `.all` type rule. -/
+
+/--
+Inversion of `typeOf (.all x₁ p)`: a successful type assignment means the
+receiver `x₁` typechecks to some `tyr` of set type `.set τ`, the predicate
+typechecks under `it : τ`, the result type is `.bool .anyBool`, and the output
+capabilities equal the input `c₁` (predicate capabilities are dropped, D-39).
+-/
+theorem type_of_all_inversion {x₁ : Expr} {p : PredExpr} {c₁ c₂ : Capabilities}
+    {env : TypeEnv} {ty : TypedExpr}
+    (h : typeOf (.all x₁ p) c₁ env = .ok (ty, c₂)) :
+    c₂ = c₁ ∧ ty.typeOf = .bool .anyBool ∧
+    ∃ tyr cr τ, typeOf x₁ c₁ env = .ok (tyr, cr) ∧ tyr.typeOf = .set τ ∧
+      ty = .all tyr p (.bool .anyBool) := by
+  simp only [typeOf] at h
+  cases hr : typeOf x₁ c₁ env <;> rw [hr] at h <;>
+    simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+  rename_i tyr
+  simp only [typeOfAll] at h
+  split at h <;> rename_i hset
+  · cases hpred : typeOfPred p _ c₁ env <;> rw [hpred] at h <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
+    split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+    rcases h with ⟨h₁, h₂⟩
+    subst h₁; subst h₂
+    refine ⟨rfl, by simp only [TypedExpr.typeOf], tyr.fst, tyr.snd, _, ?_, hset, rfl⟩
+    simpa using hr
+  · simp only [err, reduceCtorEq] at h
+
+/--
+**Soundness of `.all`** (`type_of_<op>_is_sound` shape). A well-typed `.all`
+evaluates to a boolean of type `.bool .anyBool` or to an allowed error (including
+`quantifierError`), and its output capabilities (`= c₁`) satisfy the guarded
+invariant. The quantifier result is sound regardless of the predicate's typing,
+because `evalAll` always yields `ok (bool _)` or `quantifierError`
+(`evalAll_bool_or_qerr`); the receiver's set type is inverted by
+`instance_of_set_type_is_set`.
+-/
+theorem type_of_all_is_sound {x₁ : Expr} {p : PredExpr} {c₁ c₂ : Capabilities}
+    {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
+    (h₁ : CapabilitiesInvariant c₁ request entities)
+    (h₂ : InstanceOfWellFormedEnvironment request entities env)
+    (h₃ : typeOf (.all x₁ p) c₁ env = .ok (ty, c₂))
+    (ih₁ : TypeOfIsSound x₁) :
+    GuardedCapabilitiesInvariant (.all x₁ p) c₂ request entities ∧
+    ∃ v, EvaluatesTo (.all x₁ p) request entities v ∧ InstanceOfType env v ty.typeOf := by
+  have ⟨hc, hty, tyr, cr, τ, hrecv, hrecvty, _⟩ := type_of_all_inversion h₃
+  subst hc
+  rw [hty]
+  refine ⟨fun _ => h₁, ?_⟩
+  have ⟨_, vr, hev, hvty⟩ := ih₁ h₁ h₂ hrecv
+  rw [hrecvty] at hvty
+  simp only [EvaluatesTo] at hev
+  simp only [EvaluatesTo, evaluate]
+  rcases hev with hev | hev | hev | hev | hev
+  · exact ⟨_, Or.inl (by simp [hev, Result.as]), bool_is_instance_of_anyBool true⟩
+  · exact ⟨_, Or.inr (Or.inl (by simp [hev, Result.as])), bool_is_instance_of_anyBool true⟩
+  · exact ⟨_, Or.inr (Or.inr (Or.inl (by simp [hev, Result.as]))), bool_is_instance_of_anyBool true⟩
+  · exact ⟨_, Or.inr (Or.inr (Or.inr (Or.inl (by simp [hev, Result.as])))), bool_is_instance_of_anyBool true⟩
+  · have ⟨s, hs, _⟩ := instance_of_set_type_is_set hvty
+    subst hs
+    rcases evalAll_bool_or_qerr s (fun v => evaluatePred p v request entities) with ⟨b, hb⟩ | hq
+    · refine ⟨_, Or.inr (Or.inr (Or.inr (Or.inr ?_))), bool_is_instance_of_anyBool b⟩
+      simp only [hev, Result.as, Coe.coe, Value.asSet, Except.bind_ok, hb]
+    · refine ⟨_, Or.inr (Or.inr (Or.inr (Or.inl ?_))), bool_is_instance_of_anyBool true⟩
+      simp only [hev, Result.as, Coe.coe, Value.asSet, Except.bind_ok, hq]
+
 end Cedar.Thm

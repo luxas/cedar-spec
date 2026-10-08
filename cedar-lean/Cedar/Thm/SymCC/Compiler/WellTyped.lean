@@ -1965,22 +1965,45 @@ theorem compile_well_typed_call
 Compiling a well-typed expression should produce a term of the corresponding `TermType`,
 assuming that the expression is well-formed in the symbolic environment.
 -/
+private theorem noQuantifier_set' {ls : List TypedExpr} {ty : CedarType} {x : TypedExpr}
+    (h : (TypedExpr.set ls ty).NoQuantifier = true) (hx : x ∈ ls) : x.NoQuantifier = true := by
+  simp only [TypedExpr.NoQuantifier, List.all_eq_true] at h
+  have := h ⟨x, by simpa using hx⟩ (by simp)
+  simpa using this
+
+private theorem noQuantifier_call' {xfn : ExtFun} {args : List TypedExpr} {ty : CedarType} {x : TypedExpr}
+    (h : (TypedExpr.call xfn args ty).NoQuantifier = true) (hx : x ∈ args) : x.NoQuantifier = true := by
+  simp only [TypedExpr.NoQuantifier, List.all_eq_true] at h
+  have := h ⟨x, by simpa using hx⟩ (by simp)
+  simpa using this
+
+private theorem noQuantifier_record' {m : List (Attr × TypedExpr)} {ty : CedarType} {a : Attr} {x : TypedExpr}
+    (h : (TypedExpr.record m ty).NoQuantifier = true) (hx : (a, x) ∈ m) : x.NoQuantifier = true := by
+  simp only [TypedExpr.NoQuantifier, List.all_attach₂_snd, List.all_eq_true] at h
+  have := h (a, x) hx
+  simpa using this
+
 theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : TypedExpr} :
   CompileWellTypedCondition tx Γ εnv →
+  tx.NoQuantifier →
   CompileWellTyped tx εnv
 := by
-  intros h
+  intros h hnq
   cases tx
   case lit => exact compile_well_typed_lit h
   case var => exact compile_well_typed_var h
   case ite =>
     have ⟨h1, h2, h3⟩ := h.eliminate_ite
+    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    obtain ⟨⟨hq1, hq2⟩, hq3⟩ := hnq
     apply compile_well_typed_ite
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     any_goals assumption
   case and =>
     have ⟨ha, hb⟩ := h.eliminate_or_and ?_
+    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    obtain ⟨hqa, hqb⟩ := hnq
     apply (compile_well_typed_or_and ?_ ?_).right
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
@@ -1988,6 +2011,8 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals simp
   case or =>
     have ⟨ha, hb⟩ := h.eliminate_or_and ?_
+    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    obtain ⟨hqa, hqb⟩ := hnq
     apply (compile_well_typed_or_and ?_ ?_).left
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
@@ -1995,33 +2020,39 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals simp
   case unaryApp =>
     have hcond := h.eliminate_unaryApp
+    simp only [TypedExpr.NoQuantifier] at hnq
     apply compile_well_typed_unaryApp
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case binaryApp =>
     have ⟨ha, hb⟩ := h.eliminate_binaryApp
+    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    obtain ⟨hqa, hqb⟩ := hnq
     apply compile_well_typed_binaryApp
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     any_goals assumption
   case getAttr =>
     have hcond := h.eliminate_getAttr
+    simp only [TypedExpr.NoQuantifier] at hnq
     apply compile_well_typed_getAttr
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case hasAttr =>
     have hcond := h.eliminate_hasAttr
+    simp only [TypedExpr.NoQuantifier] at hnq
     apply compile_well_typed_hasAttr
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case extHasAttr =>
     have hcond := h.eliminate_extHasAttr
+    simp only [TypedExpr.NoQuantifier] at hnq
     apply compile_well_typed_extHasAttr
     · apply CompileWellTyped.add_wf
-      · apply compile_well_typed_on_wf_expr hcond
+      · apply compile_well_typed_on_wf_expr hcond hnq
       · exact hcond
     · exact h
   case set =>
@@ -2029,7 +2060,7 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     apply compile_well_typed_set
     · intros x hx
       apply CompileWellTyped.add_wf
-      apply compile_well_typed_on_wf_expr (hcond x hx)
+      apply compile_well_typed_on_wf_expr (hcond x hx) (noQuantifier_set' hnq hx)
       apply hcond
       assumption
     assumption
@@ -2038,7 +2069,7 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     apply compile_well_typed_record
     · intros a x hx
       apply CompileWellTyped.add_wf
-      apply compile_well_typed_on_wf_expr (hcond a x hx)
+      apply compile_well_typed_on_wf_expr (hcond a x hx) (noQuantifier_record' hnq hx)
       apply hcond
       assumption
     assumption
@@ -2047,10 +2078,13 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     apply compile_well_typed_call
     · intros x hx
       apply CompileWellTyped.add_wf
-      apply compile_well_typed_on_wf_expr (hcond x hx)
+      apply compile_well_typed_on_wf_expr (hcond x hx) (noQuantifier_call' hnq hx)
       apply hcond
       assumption
     assumption
+  case all =>
+    -- SymCC does not compile `.all` (Part B, D-33/D-34); excluded by `NoQuantifier`.
+    simp [TypedExpr.NoQuantifier] at hnq
   decreasing_by
     repeat case _ =>
       simp [*]; omega

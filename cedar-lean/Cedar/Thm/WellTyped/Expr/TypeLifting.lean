@@ -71,6 +71,9 @@ theorem type_lifting_preserves_expr (x : TypedExpr) :
     simp only [List.map₁_eq_map, List.map_map, Expr.call.injEq, List.map_inj_left,
       Function.comp_apply, true_and]
     exact λ x _ => type_lifting_preserves_expr x
+  case all a p _ =>
+    simp only [Expr.all.injEq, and_true]
+    exact type_lifting_preserves_expr a
   termination_by x
   decreasing_by
     all_goals (simp_wf ; try omega)

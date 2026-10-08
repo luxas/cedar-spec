@@ -103,12 +103,12 @@ theorem type_of_ite_is_sound {x₁ x₂ x₃ : Expr} {c₁ c₂ : Capabilities} 
     have ⟨h₈, ht, hty, hc⟩ := h₇
     cases b₁
     case false =>
-      rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+      rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
       simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool, GuardedCapabilitiesInvariant] <;>
       try exact type_of_is_inhabited h₂.wf_env h₃
       specialize ih₃ h₁ h₂ ht
       have ⟨ih₃₁, v₃, ih₃₂, ih₃₃⟩ := ih₃
-      rcases ih₃₂ with ih₃₂ | ih₃₂ | ih₃₂ | ih₃₂ <;> simp [ih₃₂] <;>
+      rcases ih₃₂ with ih₃₂ | ih₃₂ | ih₃₂ | ih₃₂ | ih₃₂ <;> simp [ih₃₂] <;>
       try exact type_of_is_inhabited h₂.wf_env h₃
       apply And.intro
       case left =>
@@ -120,7 +120,7 @@ theorem type_of_ite_is_sound {x₁ x₂ x₃ : Expr} {c₁ c₂ : Capabilities} 
         apply instance_of_lub hty
         simp [ih₃₃]
     case true =>
-      rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+      rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
       simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool, GuardedCapabilitiesInvariant] <;>
       try exact type_of_is_inhabited h₂.wf_env h₃
       simp [GuardedCapabilitiesInvariant, ih₁₂] at ih₁₁
@@ -136,13 +136,13 @@ theorem type_of_ite_is_sound {x₁ x₂ x₃ : Expr} {c₁ c₂ : Capabilities} 
         apply Or.inl
         exact capability_union_invariant ih₁₁ ih₂₁
       case right =>
-        rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;> simp [ih₂₂] <;>
+        rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;> simp [ih₂₂] <;>
         try exact type_of_is_inhabited h₂.wf_env h₃
         apply instance_of_lub hty
         simp [ih₂₃]
   case tt =>
     replace ⟨h₇, ht, hc⟩ := h₇
-    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
     simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool, GuardedCapabilitiesInvariant] <;>
     try exact type_of_is_inhabited h₂.wf_env h₃
     have hb₁ := instance_of_tt_is_true ih₁₃
@@ -151,7 +151,7 @@ theorem type_of_ite_is_sound {x₁ x₂ x₃ : Expr} {c₁ c₂ : Capabilities} 
     have h₆ := capability_union_invariant h₁ ih₁₁
     specialize ih₂ h₆ h₂ h₇
     have ⟨ih₂₁, v₂, ih₂₂, ih₂₃⟩ := ih₂
-    rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;> simp [ih₂₂] <;>
+    rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;> simp [ih₂₂] <;>
     try exact type_of_is_inhabited h₂.wf_env h₃
     subst hc
     simp [ht, ih₂₃]
@@ -160,7 +160,7 @@ theorem type_of_ite_is_sound {x₁ x₂ x₃ : Expr} {c₁ c₂ : Capabilities} 
     exact capability_union_invariant ih₁₁ ih₂₁
   case ff =>
     replace ⟨h₇, ht, hc⟩ := h₇
-    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
     simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool, GuardedCapabilitiesInvariant] <;>
     try exact type_of_is_inhabited h₂.wf_env h₃
     have hb₁ := instance_of_ff_is_false ih₁₃

@@ -1114,6 +1114,40 @@ theorem env_valid_uid_implies_sym_env_valid_uid
   · contradiction
 
 /--
+A well-typed quantifier predicate (`PredExpr.WellTyped`) has only valid entity
+references in the symbolic environment built from `Γ` — the bridge needed to
+carry `ValidRefs` through an `.all` node (whose `toExpr` embeds the raw
+predicate).
+-/
+theorem predExpr_wellTyped_validRefs {Γ : TypeEnv} {p : Cedar.Spec.PredExpr}
+    (hwf : Γ.WellFormed) (hwt : PredExpr.WellTyped Γ p) :
+    p.ValidRefs ((SymEnv.ofEnv Γ).entities.isValidEntityUID ·) := by
+  induction hwt with
+  | item => exact .item_valid
+  | lit_entity h₁ =>
+    exact .lit_valid (by
+      simp only [Prim.ValidRef]
+      exact entity_uid_wf_implies_sym_entities_is_valid_entity_uid hwf h₁)
+  | lit_other h₁ =>
+    rename_i p
+    cases p
+    case bool b => exact .lit_valid (by simp [Prim.ValidRef])
+    case int i => exact .lit_valid (by simp [Prim.ValidRef])
+    case string s => exact .lit_valid (by simp [Prim.ValidRef])
+    case entityUID uid => exact absurd rfl (h₁ uid)
+  | var => exact .var_valid
+  | ite _ _ _ ih₁ ih₂ ih₃ => exact .ite_valid ih₁ ih₂ ih₃
+  | and _ _ ih₁ ih₂ => exact .and_valid ih₁ ih₂
+  | or _ _ ih₁ ih₂ => exact .or_valid ih₁ ih₂
+  | unaryApp _ ih₁ => exact .unaryApp_valid ih₁
+  | binaryApp _ _ ih₁ ih₂ => exact .binaryApp_valid ih₁ ih₂
+  | hasAttr _ ih₁ => exact .hasAttr_valid ih₁
+  | extHasAttr _ ih₁ => exact .extHasAttr_valid ih₁
+  | getAttr _ ih₁ => exact .getAttr_valid ih₁
+  | record _ ih => exact .record_valid (fun ax hmem => ih ax hmem)
+  | call _ ih => exact .call_valid (fun x hmem => ih x hmem)
+
+/--
 Given a well-formed environment and a well-typed expression in that environment,
 we show that the expression satisfies `ValidRefs`
 -/
@@ -1182,6 +1216,11 @@ theorem ofEnv_entities_valid_refs_for_wt_expr
     simp only [←hattr']
     have := hrec attr'.fst attr'.snd hmem_attr'
     exact ofEnv_entities_valid_refs_for_wt_expr hwf this
+  | all h₁ _ h₃ =>
+    simp only [TypedExpr.toExpr]
+    exact Expr.ValidRefs.all_valid
+      (ofEnv_entities_valid_refs_for_wt_expr hwf h₁)
+      (predExpr_wellTyped_validRefs hwf h₃)
 termination_by sizeOf tx
 decreasing_by
   any_goals
@@ -1312,6 +1351,10 @@ theorem ValidRefs_invariant_under_liftBoolTypes
     simp only [←hattr'_tx]
     have := h attr' tx.liftBoolTypes.toExpr attr' tx hmem_attr'_tx rfl rfl
     exact ValidRefs_invariant_under_liftBoolTypes this
+  | all tx₁ p ty =>
+    simp only [TypedExpr.toExpr, TypedExpr.liftBoolTypes] at hrefs ⊢
+    cases hrefs with | all_valid h₁ h₂ =>
+    exact Expr.ValidRefs.all_valid (ValidRefs_invariant_under_liftBoolTypes h₁) h₂
 termination_by sizeOf tx
 decreasing_by
   any_goals

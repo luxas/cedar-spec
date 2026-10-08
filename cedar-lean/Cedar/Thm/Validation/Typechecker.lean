@@ -106,7 +106,9 @@ theorem type_of_is_sound {e : Expr} {c₁ c₂ : Capabilities} {env : TypeEnv} {
       intro xᵢ _
       exact @type_of_is_sound xᵢ
     exact type_of_call_is_sound h₁ h₂ h₃ ih
-  | .all _ _ => simp [typeOf] at h₃
+  | .all x₁ p =>
+    have ih₁ := @type_of_is_sound x₁
+    exact type_of_all_is_sound h₁ h₂ h₃ ih₁
 termination_by sizeOf e
 
 /-- The type checker, if succeeds, should produce a typed expression that
@@ -462,7 +464,23 @@ theorem type_of_preserves_evaluation_results {e : Expr} {c₁ c₂ : Capabilitie
     simp [List.mapM₁_eq_mapM fun x => justType (typeOf x c₁ env), List.mapM_ok_iff_forall₂] at h₃₁
     have h₄ := type_of_ok_list h₃₁ (λ x₁ h => hᵢ x₁ h h₁)
     exact type_of_preserves_evaluation_results_call h₃₂ (List.forall₂_implies_mapM_eq _ _ h₄)
-  case _ =>
-    simp [typeOf] at h₃
+  case _ hᵢ =>
+    rename_i xcap xrecv p
+    simp only [typeOf] at h₃
+    generalize hr : typeOf xrecv xcap env = res₁ at h₃
+    cases res₁ with
+    | error => simp only [hr, Except.bind_err, reduceCtorEq] at h₃
+    | ok tyr =>
+      simp only [hr, Except.bind_ok] at h₃
+      simp only [typeOfAll] at h₃
+      split at h₃ <;> rename_i hset
+      · cases hpred : typeOfPred p _ xcap env <;> rw [hpred] at h₃ <;>
+          simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h₃
+        split at h₃ <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h₃
+        rcases h₃ with ⟨h₃, _⟩
+        subst h₃
+        specialize hᵢ h₁ hr
+        simp only [TypedExpr.toExpr, evaluate, hᵢ]
+      · simp only [err, reduceCtorEq] at h₃
 
 end Cedar.Thm

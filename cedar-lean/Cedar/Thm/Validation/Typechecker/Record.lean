@@ -260,7 +260,7 @@ theorem type_of_record_is_sound_err {axs : List (Attr × Expr)} {c₁ : Capabili
   (h₂ : InstanceOfWellFormedEnvironment request entities env)
   (h₃ : List.Forall₂ (AttrExprHasAttrType c₁ env) axs rtx)
   (h₄ : (axs.mapM fun x => bindAttr x.fst (evaluate x.snd request entities)) = Except.error err) :
-  err = Error.entityDoesNotExist ∨ err = Error.extensionError ∨ err = Error.arithBoundsError
+  err = Error.entityDoesNotExist ∨ err = Error.extensionError ∨ err = Error.arithBoundsError ∨ err = Error.quantifierError
 := by
   cases axs
   case nil =>

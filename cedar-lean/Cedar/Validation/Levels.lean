@@ -194,6 +194,14 @@ public def TypedExpr.checkLevel (tx : TypedExpr) (env : TypeEnv) (n : Nat) : Boo
   | .record axs _ =>
     axs.attach₂.all λ e =>
       e.val.snd.checkLevel env n
+  | .all _ _ _ =>
+    -- Part A (sound-conservative, D-46): level validation rejects `.all`. The
+    -- predicate can dereference `it` (an entity element), so a slicing-sound
+    -- level rule must charge those dereferences (D-23); that per-predicate level
+    -- descent is deferred. Rejecting is sound — it never deems an unsound policy
+    -- level-valid — and keeps `level_based_slicing_is_sound` honest. The main
+    -- `type_of_is_sound` rule for `.all` is unaffected and fully implemented.
+    false
 
  end
 

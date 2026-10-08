@@ -376,3 +376,6 @@ theorem partial_eval_preserves_typeof :
     exact partial_eval_preserves_typeof_set
   | record ls ty =>
     exact partial_eval_preserves_typeof_record
+  | all e p ty =>
+    intro _ preq pes
+    simp only [TPE.evaluate, Residual.typeOf]

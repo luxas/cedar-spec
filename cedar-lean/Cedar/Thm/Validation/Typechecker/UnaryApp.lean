@@ -92,8 +92,8 @@ theorem type_of_not_is_sound {x₁ : Expr} {c₁ c₂ : Capabilities} {env : Typ
   rw [hl₄] at h₇
   simp [EvaluatesTo] at h₆
   simp [EvaluatesTo, evaluate]
-  rcases h₆ with h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
-  case inr.inr.inr =>
+  rcases h₆ with h₆ | h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
+  case inr.inr.inr.inr =>
     cases bty
     case anyBool =>
       have ⟨b, h₈⟩ := instance_of_anyBool_is_bool h₇
@@ -147,19 +147,17 @@ theorem type_of_neg_is_sound {x₁ : Expr} {c₁ c₂ : Capabilities} {env : Typ
   have ⟨_, v₁, h₆, h₇⟩ := ih h₁ h₂ h₄ -- IH
   simp [EvaluatesTo] at h₆
   simp [EvaluatesTo, evaluate]
-  rcases h₆ with h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
-  case inr.inr.inr =>
+  rcases h₆ with h₆ | h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
+  case inr.inr.inr.inr =>
     rw [hl₄] at h₇
     have ⟨i, h₈⟩ := instance_of_int_is_int h₇
     subst h₈
-    simp [apply₁, intOrErr]
+    simp only [apply₁, intOrErr]
     cases i.neg?
     case none =>
-      simp only [or_false, or_true, true_and, reduceCtorEq]
-      exact type_is_inhabited_int
+      exact ⟨Value.prim (Prim.int default), by simp, InstanceOfType.instance_of_int⟩
     case some i' =>
-      simp only [Except.ok.injEq, false_or, exists_eq_left', reduceCtorEq]
-      exact InstanceOfType.instance_of_int
+      refine ⟨Value.prim (Prim.int i'), by simp, InstanceOfType.instance_of_int⟩
   all_goals {
     exact type_is_inhabited_int
   }
@@ -196,8 +194,8 @@ theorem type_of_isEmpty_is_sound {x₁ : Expr} {c₁ c₂ : Capabilities} {env :
   split_type_of h₄ ; rename_i h₄ hl₄ hr₄
   have ⟨_, v₁, h₆, h₇⟩ := ih h₁ h₂ h₄
   simp [EvaluatesTo, evaluate] at *
-  rcases h₆ with h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
-  case inr.inr.inr =>
+  rcases h₆ with h₆ | h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
+  case inr.inr.inr.inr =>
     rw [hl₄] at h₇
     have ⟨s, h₈, _⟩ := instance_of_set_type_is_set h₇
     subst h₈
@@ -239,8 +237,8 @@ theorem type_of_like_is_sound {x₁ : Expr} {p : Pattern} {c₁ c₂ : Capabilit
   have ⟨_, v₁, h₆, h₇⟩ := ih h₁ h₂ h₄ -- IH
   simp [EvaluatesTo] at h₆
   simp [EvaluatesTo, evaluate]
-  rcases h₆ with h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
-  case inr.inr.inr =>
+  rcases h₆ with h₆ | h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
+  case inr.inr.inr.inr =>
     rw [hl₄] at h₇
     have ⟨s, h₈⟩ := instance_of_string_is_string h₇
     subst h₈
@@ -288,8 +286,8 @@ theorem type_of_is_is_sound {x₁ : Expr} {ety : EntityType} {c₁ c₂ : Capabi
   have ⟨_, v₁, h₆, h₇⟩ := ih h₁ h₂ h₄ -- IH
   simp [EvaluatesTo] at h₆
   simp [EvaluatesTo, evaluate]
-  rcases h₆ with h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
-  case inr.inr.inr =>
+  rcases h₆ with h₆ | h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
+  case inr.inr.inr.inr =>
     rw [hl₄] at h₇
     have ⟨uid, h₈, h₉⟩ := instance_of_entity_type_is_entity h₇
     simp [apply₁, h₉, h₈]

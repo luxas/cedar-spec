@@ -47,6 +47,7 @@ using the lemma `wellTypedPolicy_preserves_StronglyWellFormedForPolicy`.
 theorem verifyNeverErrors_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicy p Γ = .ok p' →
+  PolicyNoQ p' Γ →
   ∃ asserts,
     verifyNeverErrors p' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -55,9 +56,9 @@ theorem verifyNeverErrors_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
         env.StronglyWellFormedForPolicy p' →
         (evaluate p.toExpr env.request env.entities).isOk)
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_εnv := ofEnv_swf_for_policy hwf hwt
-  have ⟨asserts, hok⟩ := verifyNeverErrors_is_ok hwf hwt
+  have ⟨asserts, hok⟩ := verifyNeverErrors_is_ok hwf hwt hnq
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_env
@@ -70,6 +71,7 @@ theorem verifyNeverErrors_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
 theorem verifyNeverErrors_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicy p Γ = .ok p' →
+  PolicyNoQ p' Γ →
   ∃ asserts,
     verifyNeverErrors p' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -78,9 +80,9 @@ theorem verifyNeverErrors_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
         env.StronglyWellFormedForPolicy p' ∧
         ¬ (evaluate p.toExpr env.request env.entities).isOk)
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_εnv := ofEnv_swf_for_policy hwf hwt
-  have ⟨asserts, hok⟩ := verifyNeverErrors_is_ok hwf hwt
+  have ⟨asserts, hok⟩ := verifyNeverErrors_is_ok hwf hwt hnq
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -94,6 +96,7 @@ theorem verifyNeverErrors_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
 theorem verifyAlwaysMatches_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicy p Γ = .ok p' →
+  PolicyNoQ p' Γ →
   ∃ asserts,
     verifyAlwaysMatches p' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -102,9 +105,9 @@ theorem verifyAlwaysMatches_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
         env.StronglyWellFormedForPolicy p' →
         evaluate p.toExpr env.request env.entities = .ok (.prim (.bool true)))
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_εnv := ofEnv_swf_for_policy hwf hwt
-  have ⟨asserts, hok⟩ := verifyAlwaysMatches_is_ok hwf hwt
+  have ⟨asserts, hok⟩ := verifyAlwaysMatches_is_ok hwf hwt hnq
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_env
@@ -118,6 +121,7 @@ theorem verifyAlwaysMatches_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
 theorem verifyAlwaysMatches_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicy p Γ = .ok p' →
+  PolicyNoQ p' Γ →
   ∃ asserts,
     verifyAlwaysMatches p' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -126,9 +130,9 @@ theorem verifyAlwaysMatches_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
         env.StronglyWellFormedForPolicy p' ∧
         evaluate p.toExpr env.request env.entities ≠ .ok (.prim (.bool true)))
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_εnv := ofEnv_swf_for_policy hwf hwt
-  have ⟨asserts, hok⟩ := verifyAlwaysMatches_is_ok hwf hwt
+  have ⟨asserts, hok⟩ := verifyAlwaysMatches_is_ok hwf hwt hnq
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -144,6 +148,7 @@ theorem verifyAlwaysMatches_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
 theorem verifyNeverMatches_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicy p Γ = .ok p' →
+  PolicyNoQ p' Γ →
   ∃ asserts,
     verifyNeverMatches p' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -152,9 +157,9 @@ theorem verifyNeverMatches_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
         env.StronglyWellFormedForPolicy p' →
         evaluate p.toExpr env.request env.entities ≠ .ok (.prim (.bool true)))
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_εnv := ofEnv_swf_for_policy hwf hwt
-  have ⟨asserts, hok⟩ := verifyNeverMatches_is_ok hwf hwt
+  have ⟨asserts, hok⟩ := verifyNeverMatches_is_ok hwf hwt hnq
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_env
@@ -168,6 +173,7 @@ theorem verifyNeverMatches_is_ok_and_sound {p p' : Policy} {Γ : TypeEnv} :
 theorem verifyNeverMatches_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicy p Γ = .ok p' →
+  PolicyNoQ p' Γ →
   ∃ asserts,
     verifyNeverMatches p' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -176,9 +182,9 @@ theorem verifyNeverMatches_is_ok_and_complete {p p' : Policy} {Γ : TypeEnv} :
         env.StronglyWellFormedForPolicy p' ∧
         evaluate p.toExpr env.request env.entities = .ok (.prim (.bool true)))
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_εnv := ofEnv_swf_for_policy hwf hwt
-  have ⟨asserts, hok⟩ := verifyNeverMatches_is_ok hwf hwt
+  have ⟨asserts, hok⟩ := verifyNeverMatches_is_ok hwf hwt hnq
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -195,6 +201,8 @@ theorem verifyMatchesEquivalent_is_ok_and_sound {p₁ p₁' p₂ p₂' : Policy}
   Γ.WellFormed →
   wellTypedPolicy p₁ Γ = .ok p₁' →
   wellTypedPolicy p₂ Γ = .ok p₂' →
+  PolicyNoQ p₁' Γ →
+  PolicyNoQ p₂' Γ →
   ∃ asserts,
     verifyMatchesEquivalent p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -205,10 +213,10 @@ theorem verifyMatchesEquivalent_is_ok_and_sound {p₁ p₁' p₂ p₂' : Policy}
         (evaluate p₁.toExpr env.request env.entities = .ok (.prim (.bool true))) =
         (evaluate p₂.toExpr env.request env.entities = .ok (.prim (.bool true))))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policy hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policy hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyMatchesEquivalent_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyMatchesEquivalent_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_env₁ hwf_env₂
@@ -224,6 +232,8 @@ theorem verifyMatchesEquivalent_is_ok_and_complete {p₁ p₁' p₂ p₂' : Poli
   Γ.WellFormed →
   wellTypedPolicy p₁ Γ = .ok p₁' →
   wellTypedPolicy p₂ Γ = .ok p₂' →
+  PolicyNoQ p₁' Γ →
+  PolicyNoQ p₂' Γ →
   ∃ asserts,
     verifyMatchesEquivalent p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -234,10 +244,10 @@ theorem verifyMatchesEquivalent_is_ok_and_complete {p₁ p₁' p₂ p₂' : Poli
         (evaluate p₁.toExpr env.request env.entities = .ok (.prim (.bool true))) ≠
         (evaluate p₂.toExpr env.request env.entities = .ok (.prim (.bool true))))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policy hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policy hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyMatchesEquivalent_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyMatchesEquivalent_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -254,6 +264,8 @@ theorem verifyMatchesImplies_is_ok_and_sound {p₁ p₁' p₂ p₂' : Policy} {�
   Γ.WellFormed →
   wellTypedPolicy p₁ Γ = .ok p₁' →
   wellTypedPolicy p₂ Γ = .ok p₂' →
+  PolicyNoQ p₁' Γ →
+  PolicyNoQ p₂' Γ →
   ∃ asserts,
     verifyMatchesImplies p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -264,10 +276,10 @@ theorem verifyMatchesImplies_is_ok_and_sound {p₁ p₁' p₂ p₂' : Policy} {�
         evaluate p₁.toExpr env.request env.entities = .ok (.prim (.bool true)) →
         evaluate p₂.toExpr env.request env.entities = .ok (.prim (.bool true)))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policy hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policy hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyMatchesImplies_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyMatchesImplies_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_env₁ hwf_env₂ h₁
@@ -283,6 +295,8 @@ theorem verifyMatchesImplies_is_ok_and_complete {p₁ p₁' p₂ p₂' : Policy}
   Γ.WellFormed →
   wellTypedPolicy p₁ Γ = .ok p₁' →
   wellTypedPolicy p₂ Γ = .ok p₂' →
+  PolicyNoQ p₁' Γ →
+  PolicyNoQ p₂' Γ →
   ∃ asserts,
     verifyMatchesImplies p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -293,10 +307,10 @@ theorem verifyMatchesImplies_is_ok_and_complete {p₁ p₁' p₂ p₂' : Policy}
         evaluate p₁.toExpr env.request env.entities = .ok (.prim (.bool true)) ∧
         evaluate p₂.toExpr env.request env.entities ≠ .ok (.prim (.bool true)))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policy hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policy hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyMatchesImplies_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyMatchesImplies_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -313,6 +327,8 @@ theorem verifyMatchesDisjoint_is_ok_and_sound {p₁ p₁' p₂ p₂' : Policy} {
   Γ.WellFormed →
   wellTypedPolicy p₁ Γ = .ok p₁' →
   wellTypedPolicy p₂ Γ = .ok p₂' →
+  PolicyNoQ p₁' Γ →
+  PolicyNoQ p₂' Γ →
   ∃ asserts,
     verifyMatchesDisjoint p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -323,10 +339,10 @@ theorem verifyMatchesDisjoint_is_ok_and_sound {p₁ p₁' p₂ p₂' : Policy} {
         ¬ (evaluate p₁.toExpr env.request env.entities = .ok (.prim (.bool true)) ∧
            evaluate p₂.toExpr env.request env.entities = .ok (.prim (.bool true))))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policy hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policy hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyMatchesDisjoint_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyMatchesDisjoint_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_env₁ hwf_env₂
@@ -342,6 +358,8 @@ theorem verifyMatchesDisjoint_is_ok_and_complete {p₁ p₁' p₂ p₂' : Policy
   Γ.WellFormed →
   wellTypedPolicy p₁ Γ = .ok p₁' →
   wellTypedPolicy p₂ Γ = .ok p₂' →
+  PolicyNoQ p₁' Γ →
+  PolicyNoQ p₂' Γ →
   ∃ asserts,
     verifyMatchesDisjoint p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -352,10 +370,10 @@ theorem verifyMatchesDisjoint_is_ok_and_complete {p₁ p₁' p₂ p₂' : Policy
         evaluate p₁.toExpr env.request env.entities = .ok (.prim (.bool true)) ∧
         evaluate p₂.toExpr env.request env.entities = .ok (.prim (.bool true)))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policy hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policy hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyMatchesDisjoint_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyMatchesDisjoint_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -372,6 +390,8 @@ theorem verifyEquivalent_is_ok_and_sound {ps₁ ps₁' ps₂ ps₂' : Policies} 
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
   wellTypedPolicies ps₂ Γ = .ok ps₂' →
+  PoliciesNoQ ps₁' Γ →
+  PoliciesNoQ ps₂' Γ →
   ∃ asserts,
     verifyEquivalent ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -383,10 +403,10 @@ theorem verifyEquivalent_is_ok_and_sound {ps₁ ps₁' ps₂ ps₂' : Policies} 
           (Spec.isAuthorized env.request env.entities ps₁)
           (Spec.isAuthorized env.request env.entities ps₂))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policies hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyEquivalent_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyEquivalent_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_ps₁ hwf_ps₂
@@ -402,6 +422,8 @@ theorem verifyEquivalent_is_ok_and_complete {ps₁ ps₁' ps₂ ps₂' : Policie
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
   wellTypedPolicies ps₂ Γ = .ok ps₂' →
+  PoliciesNoQ ps₁' Γ →
+  PoliciesNoQ ps₂' Γ →
   ∃ asserts,
     verifyEquivalent ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -413,10 +435,10 @@ theorem verifyEquivalent_is_ok_and_complete {ps₁ ps₁' ps₂ ps₂' : Policie
           (Spec.isAuthorized env.request env.entities ps₁)
           (Spec.isAuthorized env.request env.entities ps₂))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policies hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyEquivalent_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyEquivalent_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -433,6 +455,8 @@ theorem verifyDisjoint_is_ok_and_sound {ps₁ ps₁' ps₂ ps₂' : Policies} {�
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
   wellTypedPolicies ps₂ Γ = .ok ps₂' →
+  PoliciesNoQ ps₁' Γ →
+  PoliciesNoQ ps₂' Γ →
   ∃ asserts,
     verifyDisjoint ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -444,10 +468,10 @@ theorem verifyDisjoint_is_ok_and_sound {ps₁ ps₁' ps₂ ps₂' : Policies} {�
           (Spec.isAuthorized env.request env.entities ps₁)
           (Spec.isAuthorized env.request env.entities ps₂))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policies hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyDisjoint_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyDisjoint_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_ps₁ hwf_ps₂
@@ -463,6 +487,8 @@ theorem verifyDisjoint_is_ok_and_complete {ps₁ ps₁' ps₂ ps₂' : Policies}
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
   wellTypedPolicies ps₂ Γ = .ok ps₂' →
+  PoliciesNoQ ps₁' Γ →
+  PoliciesNoQ ps₂' Γ →
   ∃ asserts,
     verifyDisjoint ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -474,10 +500,10 @@ theorem verifyDisjoint_is_ok_and_complete {ps₁ ps₁' ps₂ ps₂' : Policies}
           (Spec.isAuthorized env.request env.entities ps₁)
           (Spec.isAuthorized env.request env.entities ps₂))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policies hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyDisjoint_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyDisjoint_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -494,6 +520,8 @@ theorem verifyImplies_is_ok_and_sound {ps₁ ps₁' ps₂ ps₂' : Policies} {Γ
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
   wellTypedPolicies ps₂ Γ = .ok ps₂' →
+  PoliciesNoQ ps₁' Γ →
+  PoliciesNoQ ps₂' Γ →
   ∃ asserts,
     verifyImplies ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -505,10 +533,10 @@ theorem verifyImplies_is_ok_and_sound {ps₁ ps₁' ps₂ ps₂' : Policies} {Γ
           (Spec.isAuthorized env.request env.entities ps₁)
           (Spec.isAuthorized env.request env.entities ps₂))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policies hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyImplies_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyImplies_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_ps₁ hwf_ps₂
@@ -524,6 +552,8 @@ theorem verifyImplies_is_ok_and_complete {ps₁ ps₁' ps₂ ps₂' : Policies} 
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
   wellTypedPolicies ps₂ Γ = .ok ps₂' →
+  PoliciesNoQ ps₁' Γ →
+  PoliciesNoQ ps₂' Γ →
   ∃ asserts,
     verifyImplies ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -535,10 +565,10 @@ theorem verifyImplies_is_ok_and_complete {ps₁ ps₁' ps₂ ps₂' : Policies} 
           (Spec.isAuthorized env.request env.entities ps₁)
           (Spec.isAuthorized env.request env.entities ps₂))
 := by
-  intros hwf hwt₁ hwt₂
+  intros hwf hwt₁ hwt₂ hnq₁ hnq₂
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
   have hwf_εnv₂ := ofEnv_swf_for_policies hwf hwt₂
-  have ⟨asserts, hok⟩ := verifyImplies_is_ok hwf hwt₁ hwt₂
+  have ⟨asserts, hok⟩ := verifyImplies_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -554,6 +584,7 @@ theorem verifyImplies_is_ok_and_complete {ps₁ ps₁' ps₂ ps₂' : Policies} 
 theorem verifyAlwaysDenies_is_ok_and_sound {ps₁ ps₁' : Policies} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
+  PoliciesNoQ ps₁' Γ →
   ∃ asserts,
     verifyAlwaysDenies ps₁' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -562,9 +593,9 @@ theorem verifyAlwaysDenies_is_ok_and_sound {ps₁ ps₁' : Policies} {Γ : TypeE
         env.StronglyWellFormedForPolicies ps₁' →
         denies (Spec.isAuthorized env.request env.entities ps₁))
 := by
-  intros hwf hwt₁
+  intros hwf hwt₁ hnq₁
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
-  have ⟨asserts, hok⟩ := verifyAlwaysDenies_is_ok hwf hwt₁
+  have ⟨asserts, hok⟩ := verifyAlwaysDenies_is_ok hwf hwt₁ hnq₁
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_ps₁
@@ -578,6 +609,7 @@ theorem verifyAlwaysDenies_is_ok_and_sound {ps₁ ps₁' : Policies} {Γ : TypeE
 theorem verifyAlwaysDenies_is_ok_and_complete {ps₁ ps₁' : Policies} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
+  PoliciesNoQ ps₁' Γ →
   ∃ asserts,
     verifyAlwaysDenies ps₁' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -586,9 +618,9 @@ theorem verifyAlwaysDenies_is_ok_and_complete {ps₁ ps₁' : Policies} {Γ : Ty
         env.StronglyWellFormedForPolicies ps₁' ∧
         ¬ denies (Spec.isAuthorized env.request env.entities ps₁))
 := by
-  intros hwf hwt₁
+  intros hwf hwt₁ hnq₁
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
-  have ⟨asserts, hok⟩ := verifyAlwaysDenies_is_ok hwf hwt₁
+  have ⟨asserts, hok⟩ := verifyAlwaysDenies_is_ok hwf hwt₁ hnq₁
   exists asserts
   simp only [hok, true_and]
   intros hsat
@@ -603,6 +635,7 @@ theorem verifyAlwaysDenies_is_ok_and_complete {ps₁ ps₁' : Policies} {Γ : Ty
 theorem verifyAlwaysAllows_is_ok_and_sound {ps₁ ps₁' : Policies} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
+  PoliciesNoQ ps₁' Γ →
   ∃ asserts,
     verifyAlwaysAllows ps₁' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊭ asserts →
@@ -611,9 +644,9 @@ theorem verifyAlwaysAllows_is_ok_and_sound {ps₁ ps₁' : Policies} {Γ : TypeE
         env.StronglyWellFormedForPolicies ps₁' →
         allows (Spec.isAuthorized env.request env.entities ps₁))
 := by
-  intros hwf hwt₁
+  intros hwf hwt₁ hnq₁
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
-  have ⟨asserts, hok⟩ := verifyAlwaysAllows_is_ok hwf hwt₁
+  have ⟨asserts, hok⟩ := verifyAlwaysAllows_is_ok hwf hwt₁ hnq₁
   exists asserts
   simp only [hok, true_and]
   intros hunsat env hinst hwf_ps₁
@@ -627,6 +660,7 @@ theorem verifyAlwaysAllows_is_ok_and_sound {ps₁ ps₁' : Policies} {Γ : TypeE
 theorem verifyAlwaysAllows_is_ok_and_complete {ps₁ ps₁' : Policies} {Γ : TypeEnv} :
   Γ.WellFormed →
   wellTypedPolicies ps₁ Γ = .ok ps₁' →
+  PoliciesNoQ ps₁' Γ →
   ∃ asserts,
     verifyAlwaysAllows ps₁' (SymEnv.ofEnv Γ) = .ok asserts ∧
     (SymEnv.ofEnv Γ ⊧ asserts →
@@ -635,9 +669,9 @@ theorem verifyAlwaysAllows_is_ok_and_complete {ps₁ ps₁' : Policies} {Γ : Ty
         env.StronglyWellFormedForPolicies ps₁' ∧
         ¬ allows (Spec.isAuthorized env.request env.entities ps₁))
 := by
-  intros hwf hwt₁
+  intros hwf hwt₁ hnq₁
   have hwf_εnv₁ := ofEnv_swf_for_policies hwf hwt₁
-  have ⟨asserts, hok⟩ := verifyAlwaysAllows_is_ok hwf hwt₁
+  have ⟨asserts, hok⟩ := verifyAlwaysAllows_is_ok hwf hwt₁ hnq₁
   exists asserts
   simp only [hok, true_and]
   intros hsat

@@ -182,6 +182,14 @@ theorem partial_eval_preserves_well_typed
       specialize h₁ r h_mem
       exact partial_eval_preserves_well_typed h_wf h_ref h₁
     exact partial_eval_well_typed_call ih_args h_wf h_ref h_wt
+  case all e p ty =>
+    cases h_wt with
+    | all h_e h_ty h_pred =>
+      simp only [TPE.evaluate]
+      have ih_e : Residual.WellTyped env (TPE.evaluate env e preq pes) :=
+        partial_eval_preserves_well_typed h_wf h_ref h_e
+      have h_ty' := partial_eval_preserves_typeof e h_e preq pes
+      exact Residual.WellTyped.all ih_e (by rw [h_ty']; exact h_ty) h_pred
 termination_by (sizeOf res)
 
 

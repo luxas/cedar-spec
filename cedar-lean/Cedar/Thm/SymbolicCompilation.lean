@@ -208,14 +208,15 @@ the type `TermType.ofType tx.typeOf`.
 theorem compile_well_typed {tx : TypedExpr} {Γ : TypeEnv} :
   Γ.WellFormed →
   TypedExpr.WellTyped Γ tx →
+  tx.NoQuantifier →
   ∃ t : Term,
     compile tx.toExpr (SymEnv.ofEnv Γ) = .ok t ∧
     t.WellFormed (SymEnv.ofEnv Γ).entities ∧
     t.typeOf = .option (TermType.ofType tx.typeOf)
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_tx := ofEnv_wf_for_expr hwf hwt
-  have ⟨t, hok, hty⟩ := compile_well_typed_on_wf_expr (And.intro rfl (And.intro hwt hwf_tx))
+  have ⟨t, hok, hty⟩ := compile_well_typed_on_wf_expr (And.intro rfl (And.intro hwt hwf_tx)) hnq
   have hwf_t := compile_wf hwf_tx hok
   exists t
   simp [hok, hwf_t, hty]
