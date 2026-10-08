@@ -24,6 +24,7 @@ import Cedar.Thm.SymCC.Data
 import all Cedar.Thm.SymCC.Term.Interpret.Basic -- proving things about the internals of `Interpretation` functions and we need access to not only internal functions in `SymCC/Interpretation.lean`, but also lemmas about them in `Thm/SymCC/Term/Interpret/Basic.lean`
 public import Cedar.Thm.SymCC.Term.WF
 import all Cedar.Thm.SymCC.Term.WF -- proving things about the internals of `Interpretation` functions and we need access to not only internal functions in `SymCC/Interpretation.lean`, but also lemmas about them in `Thm/SymCC/Term/WF.lean`
+import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 import all Cedar.Thm.SymCC.Interpretation -- proving things about the internals of `Interpretation` functions and we need access to not only internal functions in `SymCC/Interpretation.lean`, but also lemmas about them in `Thm/SymCC/Interpretation.lean`
 
 /-!
@@ -477,28 +478,170 @@ private theorem interpret_term_app_wf_record_get {εs : SymEntities} {I : Interp
   exact wf_record_get ih.left ih.right h₁
 
 private theorem interpret_term_app_wf_set_all {εs : SymEntities} {I : Interpretation} {ts : List Term} {ty : TermType}
+  (h₀ : I.WellFormed εs)
   (h₁ : Term.WellFormed εs (Term.app Op.set.all ts ty))
   (ih : ∀ (t : Term), t ∈ ts → InterpretTermWF εs I t) :
   InterpretTermWF εs I (Term.app Op.set.all ts ty)
 := by
-  -- Invert the input well-formedness to the three arguments + the set.all typing rule.
   cases h₁ with
   | app_wf hargs hwt =>
     cases hwt with
     | set.all_wt hset hpred herr hpn hen hpty hety =>
       next setT predT errT elemTy =>
+      have hpredWF := hargs predT (by simp)
+      have herrWF := hargs errT (by simp)
+      -- interpreted receiver: WF + typeOf `.set elemTy`.
       have ihset := ih setT (by simp)
-      simp only [InterpretTermWF, Term.interpret, Term.typeOf]
-      refine ⟨?_, ?_⟩
-      · apply Term.WellFormed.app_wf
-        · intro t ht
-          simp only [List.mem_cons, List.mem_singleton, List.not_mem_nil, or_false] at ht
-          rcases ht with h | h | h <;> subst h
-          · exact ihset.left
-          · exact hargs _ (by simp)
-          · exact hargs _ (by simp)
-        · exact Op.WellTyped.set.all_wt (by rw [ihset.right]; exact hset) hpred herr
-      · trivial
+      simp only [InterpretTermWF] at ihset
+      have hsetty : (Term.interpret I setT).typeOf = .set elemTy := by rw [ihset.right]; exact hset
+      -- interpreted (bound-var-free) bodies: WF + `.bool`.
+      have hp'wf : InterpretTermWF εs I predT := ih predT (by simp)
+      have he'wf : InterpretTermWF εs I errT := ih errT (by simp)
+      simp only [InterpretTermWF] at hp'wf he'wf
+      have hp'bool : (Term.interpret I predT).typeOf = .bool := hp'wf.right.trans hpred
+      have he'bool : (Term.interpret I errT).typeOf = .bool := he'wf.right.trans herr
+      simp only [InterpretTermWF, Term.typeOf]
+      -- Unfold `interpret` of the `set.all` node to the guarded fold.
+      show (Term.interpretWith Option.none I (Term.app Op.set.all [setT, predT, errT] (.option .bool))).WellFormed εs ∧
+           (Term.interpretWith Option.none I (Term.app Op.set.all [setT, predT, errT] (.option .bool))).typeOf = .option .bool
+      unfold Term.interpretWith
+      -- `interpretWith none setT = interpret I setT`.
+      have hII : Term.interpretWith Option.none I setT = Term.interpret I setT := rfl
+      rw [hII]
+      match hM : Term.interpret I setT with
+      | .set (Set.mk vs) sty =>
+        -- literal-set receiver.
+        have hsetwf := ihset.left
+        rw [hM] at hsetwf hsetty
+        have hstyeq : sty = elemTy := by
+          simp only [Term.typeOf, TermType.set.injEq] at hsetty; exact hsetty
+        subst hstyeq
+        by_cases hg : vs.all (·.isLiteral) = true
+        · simp only [hg, if_true]
+          have hguard := hg
+          rw [List.all_eq_true] at hguard
+          have helem : ∀ vi ∈ vs, vi.WellFormed εs ∧ vi.typeOf = sty ∧ vi.isLiteral := by
+            intro vi hvi
+            have hmem : vi ∈ (Set.mk vs : Set Term) := (Set.mem_set_iff_mem_mk vi vs).mpr hvi
+            cases hsetwf with
+            | set_wf hw hty _ _ =>
+              exact ⟨hw vi hmem, hty vi hmem, by have := hguard vi (by simpa using hvi); simpa using this⟩
+          have hP : ∀ vi ∈ vs, (Term.interpretWith (some vi) I predT).WellFormed εs ∧
+              (Term.interpretWith (some vi) I predT).typeOf = .bool := by
+            intro vi hvi
+            have ⟨hviwf, hvity, _⟩ := helem vi hvi
+            have hw := interpretWith_wf h₀ hviwf predT hpredWF hpn (by rw [hvity]; exact hpty)
+            exact ⟨hw.left, hw.right.trans hpred⟩
+          have hE : ∀ vi ∈ vs, (Term.interpretWith (some vi) I errT).WellFormed εs ∧
+              (Term.interpretWith (some vi) I errT).typeOf = .bool := by
+            intro vi hvi
+            have ⟨hviwf, hvity, _⟩ := helem vi hvi
+            have hw := interpretWith_wf h₀ hviwf errT herrWF hen (by rw [hvity]; exact hety)
+            exact ⟨hw.left, hw.right.trans herr⟩
+          have hconj := foldr_and_wf (g := fun vi => Term.interpretWith (some vi) I predT) vs hP
+          have hanyErr := foldr_or_wf (g := fun vi => Term.interpretWith (some vi) I errT) vs hE
+          have hite := wf_ite hanyErr.left (Term.WellFormed.none_wf TermType.WellFormed.bool_wf)
+            (Term.WellFormed.some_wf hconj.left) hanyErr.right
+            (by simp only [Term.typeOf]; rw [hconj.right])
+          refine ⟨?_, ?_⟩
+          · simp only [Factory.noneOf, Factory.someOf]; exact hite.left
+          · have := hite.right; simp only [Factory.noneOf, Factory.someOf]
+            rw [this]; simp only [Term.typeOf]
+        · simp only [Bool.not_eq_true] at hg
+          simp only [hg, if_false]
+          by_cases hev : ((Term.interpretWith none I predT).NoSetAll && (Term.interpretWith none I errT).NoSetAll &&
+              Term.anyAllItTyped sty (Term.interpretWith none I predT) && Term.anyAllItTyped sty (Term.interpretWith none I errT)) = true
+          · simp only [hev, if_true]
+            simp only [Bool.and_eq_true, decide_eq_true_eq] at hev
+            exact mkApp_set_all_wf hsetwf hsetty hp'wf.left hp'bool he'wf.left he'bool
+              hev.left.left.left hev.left.left.right hev.left.right hev.right
+          · simp only [Bool.not_eq_true] at hev
+            simp only [hev, if_false]
+            exact mkApp_set_all_wf hsetwf hsetty hpredWF hpred herrWF herr hpn hen hpty hety
+      | .prim p =>
+        have hsetwf := ihset.left
+        rw [hM] at hsetwf hsetty
+        dsimp only
+        rw [hsetty]
+        by_cases hev : ((Term.interpretWith none I predT).NoSetAll && (Term.interpretWith none I errT).NoSetAll &&
+            Term.anyAllItTyped elemTy (Term.interpretWith none I predT) && Term.anyAllItTyped elemTy (Term.interpretWith none I errT)) = true
+        · simp only [hev, if_true]
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at hev
+          exact mkApp_set_all_wf hsetwf hsetty hp'wf.left hp'bool he'wf.left he'bool
+            hev.left.left.left hev.left.left.right hev.left.right hev.right
+        · simp only [Bool.not_eq_true] at hev
+          simp only [hev, if_false]
+          exact mkApp_set_all_wf hsetwf hsetty hpredWF hpred herrWF herr hpn hen hpty hety
+      | .var w =>
+        have hsetwf := ihset.left
+        rw [hM] at hsetwf hsetty
+        dsimp only
+        rw [hsetty]
+        by_cases hev : ((Term.interpretWith none I predT).NoSetAll && (Term.interpretWith none I errT).NoSetAll &&
+            Term.anyAllItTyped elemTy (Term.interpretWith none I predT) && Term.anyAllItTyped elemTy (Term.interpretWith none I errT)) = true
+        · simp only [hev, if_true]
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at hev
+          exact mkApp_set_all_wf hsetwf hsetty hp'wf.left hp'bool he'wf.left he'bool
+            hev.left.left.left hev.left.left.right hev.left.right hev.right
+        · simp only [Bool.not_eq_true] at hev
+          simp only [hev, if_false]
+          exact mkApp_set_all_wf hsetwf hsetty hpredWF hpred herrWF herr hpn hen hpty hety
+      | .none ty' =>
+        have hsetwf := ihset.left
+        rw [hM] at hsetwf hsetty
+        dsimp only
+        rw [hsetty]
+        by_cases hev : ((Term.interpretWith none I predT).NoSetAll && (Term.interpretWith none I errT).NoSetAll &&
+            Term.anyAllItTyped elemTy (Term.interpretWith none I predT) && Term.anyAllItTyped elemTy (Term.interpretWith none I errT)) = true
+        · simp only [hev, if_true]
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at hev
+          exact mkApp_set_all_wf hsetwf hsetty hp'wf.left hp'bool he'wf.left he'bool
+            hev.left.left.left hev.left.left.right hev.left.right hev.right
+        · simp only [Bool.not_eq_true] at hev
+          simp only [hev, if_false]
+          exact mkApp_set_all_wf hsetwf hsetty hpredWF hpred herrWF herr hpn hen hpty hety
+      | .some t' =>
+        have hsetwf := ihset.left
+        rw [hM] at hsetwf hsetty
+        dsimp only
+        rw [hsetty]
+        by_cases hev : ((Term.interpretWith none I predT).NoSetAll && (Term.interpretWith none I errT).NoSetAll &&
+            Term.anyAllItTyped elemTy (Term.interpretWith none I predT) && Term.anyAllItTyped elemTy (Term.interpretWith none I errT)) = true
+        · simp only [hev, if_true]
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at hev
+          exact mkApp_set_all_wf hsetwf hsetty hp'wf.left hp'bool he'wf.left he'bool
+            hev.left.left.left hev.left.left.right hev.left.right hev.right
+        · simp only [Bool.not_eq_true] at hev
+          simp only [hev, if_false]
+          exact mkApp_set_all_wf hsetwf hsetty hpredWF hpred herrWF herr hpn hen hpty hety
+      | .app o a t' =>
+        have hsetwf := ihset.left
+        rw [hM] at hsetwf hsetty
+        dsimp only
+        rw [hsetty]
+        by_cases hev : ((Term.interpretWith none I predT).NoSetAll && (Term.interpretWith none I errT).NoSetAll &&
+            Term.anyAllItTyped elemTy (Term.interpretWith none I predT) && Term.anyAllItTyped elemTy (Term.interpretWith none I errT)) = true
+        · simp only [hev, if_true]
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at hev
+          exact mkApp_set_all_wf hsetwf hsetty hp'wf.left hp'bool he'wf.left he'bool
+            hev.left.left.left hev.left.left.right hev.left.right hev.right
+        · simp only [Bool.not_eq_true] at hev
+          simp only [hev, if_false]
+          exact mkApp_set_all_wf hsetwf hsetty hpredWF hpred herrWF herr hpn hen hpty hety
+      | .record r =>
+        have hsetwf := ihset.left
+        rw [hM] at hsetwf hsetty
+        dsimp only
+        rw [hsetty]
+        by_cases hev : ((Term.interpretWith none I predT).NoSetAll && (Term.interpretWith none I errT).NoSetAll &&
+            Term.anyAllItTyped elemTy (Term.interpretWith none I predT) && Term.anyAllItTyped elemTy (Term.interpretWith none I errT)) = true
+        · simp only [hev, if_true]
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at hev
+          exact mkApp_set_all_wf hsetwf hsetty hp'wf.left hp'bool he'wf.left he'bool
+            hev.left.left.left hev.left.left.right hev.left.right hev.right
+        · simp only [Bool.not_eq_true] at hev
+          simp only [hev, if_false]
+          exact mkApp_set_all_wf hsetwf hsetty hpredWF hpred herrWF herr hpn hen hpty hety
 
 public theorem interpret_term_app_wf {εs : SymEntities} {I : Interpretation} {op : Op} {ts : List Term} {ty : TermType}
   (h₀ : I.WellFormed εs)
@@ -535,7 +678,7 @@ public theorem interpret_term_app_wf {εs : SymEntities} {I : Interpretation} {o
   | Op.set.member        => exact interpret_term_app_wf_set_member h₁ ih
   | Op.set.subset        => exact interpret_term_app_wf_set_subset h₁ ih
   | Op.set.inter         => exact interpret_term_app_wf_set_inter h₁ ih
-  | Op.set.all           => exact interpret_term_app_wf_set_all h₁ ih
+  | Op.set.all           => exact interpret_term_app_wf_set_all h₀ h₁ ih
   | .zero_extend _     => exact interpret_term_app_wf_zero_extend h₁ ih
   | Op.option.get        => exact interpret_term_app_wf_option_get h₀ h₁ ih
   | Op.record.get _      => exact interpret_term_app_wf_record_get h₁ ih
