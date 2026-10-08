@@ -529,7 +529,7 @@ private theorem ofEnv_request_completeness
     exact sym_entities_is_valid_entity_uid_implies_entity_uid_wf hwf_Γ hwf_I_princ
   -- Well-formed symbolic action => well-formed concrete action
   · simp only [
-      Term.interpret,
+      Term.interpret, Term.interpretWith,
       SymEnv.ofEnv,
       SymRequest.ofRequestType,
     ] at hsame_I_act
