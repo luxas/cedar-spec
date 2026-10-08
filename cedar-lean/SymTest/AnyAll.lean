@@ -61,4 +61,19 @@ private def I0 : Interpretation :=
 -- an element errors (7) ⇒ `none` (quantifierError).
 #guard (allErr [1, 7]).interpret I0 == Term.none (.bool)
 
+-- A predicate mentioning a FREE variable `n` is interpreted under the model: the
+-- fold interprets the free var before comparing, so the result depends on `I n`.
+private def nvar : Term := .var { id := "n", ty := ety }
+private def ptN : Term := Factory.someOf (Factory.bvslt nvar it)  -- it > n
+private def predN : Term := Factory.option.get ptN
+private def errN : Term := Factory.not (Factory.isSome ptN)
+private def allN : Term := .app Op.set.all [mkset [1, 2], predN, errN] (.option .bool)
+private def In (nval : BitVec 64) : Interpretation :=
+  { vars := fun v => if v.id = "n" then (lit nval) else .var v,
+    funs := fun _ => { arg := .bool, out := .bool, table := Map.mk [], default := Term.prim (.bool false) },
+    partials := fun t => t }
+-- `[1,2].all(it > n)` with n = 0 ⇒ `some true`; with n = 1 ⇒ `some false` (1 is not > 1).
+#guard allN.interpret (In 0) == Term.some (Term.prim (.bool true))
+#guard allN.interpret (In 1) == Term.some (Term.prim (.bool false))
+
 end SymTest.AnyAll
