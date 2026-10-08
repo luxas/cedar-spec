@@ -164,10 +164,23 @@ public def Term.interpretWith (σ : Option Term) (I : Interpretation) : Term →
     -- interpreted) to a literal, matching `evalAll`. Otherwise keep the symbolic
     -- node, interpreting free vars in the bodies but leaving the bound var.
     match Term.interpretWith σ I setT with
-    | .set (Set.mk vs) _ =>
-      let conj   := vs.foldr (fun vi acc => Factory.and (Term.interpretWith (some vi) I predT) acc) (true : Term)
-      let anyErr := vs.foldr (fun vi acc => Factory.or  (Term.interpretWith (some vi) I errT)  acc) (false : Term)
-      Factory.ite anyErr (Factory.noneOf .bool) (Factory.someOf conj)
+    | .set (Set.mk vs) sty =>
+      -- D-60: fold only when every element is a literal (always true under a
+      -- well-formed interpretation — the receiver interprets to a literal set).
+      -- The guard makes each `vi` a known literal, which is what the fold-WF /
+      -- fold-literal proofs need (via `interpret_lit_id` + `substAnyAllIt_wf`);
+      -- the `else` is a dead proof-convenience fallback carrying its own typing
+      -- evidence, exactly like the non-literal-receiver branch below.
+      if vs.all (·.isLiteral) then
+        let conj   := vs.foldr (fun vi acc => Factory.and (Term.interpretWith (some vi) I predT) acc) (true : Term)
+        let anyErr := vs.foldr (fun vi acc => Factory.or  (Term.interpretWith (some vi) I errT)  acc) (false : Term)
+        Factory.ite anyErr (Factory.noneOf .bool) (Factory.someOf conj)
+      else
+        let p' := Term.interpretWith Option.none I predT
+        let e' := Term.interpretWith Option.none I errT
+        if p'.NoSetAll && e'.NoSetAll && p'.anyAllItTyped sty && e'.anyAllItTyped sty
+        then .app Op.set.all [.set (Set.mk vs) sty, p', e'] ty
+        else .app Op.set.all [.set (Set.mk vs) sty, predT, errT] ty
     | setT' =>
       -- D-59: the receiver did not interpret to a literal set. This branch is
       -- unreachable under a well-formed interpretation (an interpretation makes
