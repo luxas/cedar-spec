@@ -21,6 +21,13 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-11 | 2 | **Lean typechecker keeps rejecting `.all` (no Lean type rule / soundness proof yet).** See details: needs your call. | **OPEN — needs decision** |
 | D-12 | 2 | `Validator.mapOnVars` (action substitution for typing precision) does not descend into the predicate. Only precision is affected. | SETTLED |
 | D-13 | 2 | Building the `CedarUnitTests` exe needs `LIBRARY_PATH=<lean toolchain>/lib:<lean toolchain>/lib/lean` on this host (static libc++/gmp/uv). Host quirk, not a code change. | SETTLED |
+| D-14 | 3 | Rust evaluates a predicate by instantiating `PredExpr → Expr` (element via `From<Value> for Expr`) and reusing the evaluator; Lean threads `it` instead. Same semantics. | SETTLED |
+| D-15 | 3 | Rust `QuantifierError` is payload-free, like Lean (D-10). | SETTLED |
+| D-16 | 3 | A non-bool predicate result is a `QuantifierError`, not a `TypeError` (matches Lean). Watch in the Phase 6 differential. | SETTLED |
+| D-17 | 3 | Partial evaluation residualizes the whole `All` node if the receiver or any element predicate is residual. Refined per-element TPE is Phase 6.5. | SETTLED |
+| D-18 | 3 | `subexpressions()`/`slots()`/visitors stay receiver-only (`PredExpr` has no `Slot`/`Unknown`); `level_validate` descends into the predicate. | SETTLED |
+| D-19 | 3 | Validator types predicates with a parallel `typecheck_pred(it_ty)`, which also enforces req 1.5 (no set-typed subterm). | SETTLED |
+| D-20 | 3 | Req 1.4 (no nesting) and 1.6 (`it` outside a predicate) are unrepresentable in the Rust AST; they are enforced by the Phase 4 parser / EST→AST conversion, not by `try_validate`. | SETTLED |
 
 ## Details
 
