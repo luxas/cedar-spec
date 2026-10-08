@@ -968,6 +968,142 @@ public theorem compileRecord_wf {εs : SymEntities} {ats : List (Attr × Term)}
   have hwa := wf_ifAllSome hwg hwo hty
   simp only [someOf, hwa, TermType.option.injEq, exists_eq', and_self]
 
+public theorem compilePred_wf {p : PredExpr} {it r : Term} {εnv : SymEnv} {elemTy : TermType}
+  (hwε : εnv.WellFormed) (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hok : compilePred p it εnv = Except.ok r) : r.WellFormed εnv.entities ∧ ∃ ty, r.typeOf = .option ty := by
+  match p with
+  | .item =>
+    simp only [compilePred, Except.ok.injEq] at hok; subst hok; exact ⟨hitw, elemTy, hitty⟩
+  | .lit l =>
+    simp only [compilePred, compilePrim] at hok
+    cases l <;> simp only [Except.ok.injEq, someOf] at * <;> first | subst hok | skip
+    · exact ⟨Term.WellFormed.some_wf wf_bool, typeOf_term_some_is_option⟩
+    · exact ⟨Term.WellFormed.some_wf wf_bv, typeOf_term_some_is_option⟩
+    · exact ⟨Term.WellFormed.some_wf (Term.WellFormed.prim_wf TermPrim.WellFormed.string_wf), typeOf_term_some_is_option⟩
+    · split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+      rename_i h; subst hok
+      exact ⟨Term.WellFormed.some_wf (Term.WellFormed.prim_wf (TermPrim.WellFormed.entity_wf h)), typeOf_term_some_is_option⟩
+  | .var v =>
+    simp only [compilePred, compileVar] at hok
+    have hwf := hwε.left
+    simp only [SymRequest.WellFormed] at hwf
+    split at hok <;> split at hok <;> simp only [Except.ok.injEq, someOf, reduceCtorEq] at hok <;> subst hok <;>
+      refine ⟨Term.WellFormed.some_wf ?_, typeOf_term_some_is_option⟩
+    · exact hwf.left
+    · exact hwf.right.right.right.right.left
+    · exact hwf.right.right.right.right.right.right.right.right.left
+    · exact hwf.right.right.right.right.right.right.right.right.right.right.right.right.left
+  | .ite x₁ x₂ x₃ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact compileIf_wf (compilePred_wf hwε hitw hitty h1).left
+      (fun t₂ he => compilePred_wf hwε hitw hitty he) (fun t₃ he => compilePred_wf hwε hitw hitty he) hok
+  | .and x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact compileAnd_wf (compilePred_wf hwε hitw hitty h1).left
+      (fun t₂ he => compilePred_wf hwε hitw hitty he) hok
+  | .or x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact compileOr_wf (compilePred_wf hwε hitw hitty h1).left
+      (fun t₂ he => compilePred_wf hwε hitw hitty he) hok
+  | .unaryApp op₁ x₁ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hA : compileApp₁ op₁ (option.get t₁) <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have hget := wf_option_get ih1w hty1
+    have ⟨haw, tya, hat⟩ := compileApp₁_wf hget.left hA
+    have h := wf_ifSome_option ih1w haw hat
+    exact ⟨h.left, tya, h.right⟩
+  | .binaryApp op₂ x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    cases h2 : compilePred x₂ it εnv <;> simp only [h2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁ t₂
+    cases hA : compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have ⟨ih2w, ty2, hty2⟩ := compilePred_wf hwε hitw hitty h2
+    have hget1 := wf_option_get ih1w hty1
+    have hget2 := wf_option_get ih2w hty2
+    have ⟨haw, tya, hat⟩ := compileApp₂_wf hwε.right hget1.left hget2.left hA
+    have hinner := wf_ifSome_option ih2w haw hat
+    have h := wf_ifSome_option ih1w hinner.left hinner.right
+    exact ⟨h.left, _, h.right⟩
+  | .hasAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hH : compileHasAttr (option.get t₁) a εnv.entities <;> simp only [hH, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have hget := wf_option_get ih1w hty1
+    have ⟨haw, hat⟩ := compileHasAttr_wf hwε.right hget.left hH
+    have h := wf_ifSome_option ih1w haw hat
+    exact ⟨h.left, _, h.right⟩
+  | .getAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hG : compileGetAttr (option.get t₁) a εnv.entities <;> simp only [hG, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have hget := wf_option_get ih1w hty1
+    have ⟨haw, tya, hat⟩ := compileGetAttr_wf hwε.right hget.left hG
+    have h := wf_ifSome_option ih1w haw hat
+    exact ⟨h.left, tya, h.right⟩
+  | .extHasAttr x a ats =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
+    have ⟨haw, hat⟩ := compileExtHasAttrRec_wf hwε.right ih1w ⟨ty1, hty1⟩ hok
+    exact ⟨haw, _, hat⟩
+  | .record axs =>
+    simp only [compilePred] at hok
+    simp_do_let (axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do Except.ok (a₁, ← compilePred x₁ it εnv))) at hok
+    rename_i ats hts
+    simp only [List.mapM₂_eq_mapM λ (q : Attr × PredExpr) => do
+        Except.ok (q.fst, ← compilePred q.snd it εnv),
+      List.mapM_ok_iff_forall₂] at hts
+    simp only [Except.ok.injEq] at hok; subst hok
+    apply compileRecord_wf
+    intro a t hmem
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts (a, t) hmem
+    cases hxv : compilePred px.snd it εnv <;>
+      simp only [hxv, Except.bind_err, Except.bind_ok, reduceCtorEq, Except.ok.injEq] at hp
+    rename_i tv
+    have hwv := compilePred_wf (p := px.snd) hwε hitw hitty hxv
+    simp only [Prod.mk.injEq] at hp
+    obtain ⟨_, rfl⟩ := hp
+    exact hwv
+  | .call xfn xs =>
+    simp only [compilePred] at hok
+    simp_do_let (xs.mapM₁ (λ ⟨x₁, _⟩ => compilePred x₁ it εnv)) at hok
+    rename_i ts hts
+    simp only [List.mapM₁_eq_mapM λ (q : PredExpr) => compilePred q it εnv,
+      List.mapM_ok_iff_forall₂] at hts
+    apply compileCall_wf _ hok
+    intro t ht
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts t ht
+    exact (compilePred_wf (p := px) hwε hitw hitty hp).left
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
+      | (have := List.sizeOf_lt_of_mem hpx; omega)
+
 public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
   εnv.WellFormedFor x →
   compile x εnv = .ok t →
