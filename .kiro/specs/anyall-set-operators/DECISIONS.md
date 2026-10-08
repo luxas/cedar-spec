@@ -45,6 +45,12 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-35 | 5 | The SymCC `.all` term encodes three outcomes (true / false / quantifierError), matching `evalAll`. | PROPOSED |
 | D-36 | 5 | The DRT symcc differential compares Rust and Lean SMT-LIB byte for byte, so the Rust `cedar-policy-symcc` must mirror the chosen encoding (Phase 6). | PROPOSED |
 | D-37 | 5 | The Lean type rule for `.all` (originally T2.3) lands at the start of branch `phase5-anyall-symcc` as "part A", before the SymCC work ("part B"), instead of reopening the Phase 2 branch. The branch number still matches the phase that needs it. | SETTLED |
+| D-38 | 5A | Type the predicate by reusing `typeOf` on the predicate's expression with `it` as a typed placeholder (as the Rust validator does, D-21), so the existing `type_of_is_sound` covers the predicate body. Fallback: a typed predicate mirror. | SETTLED |
+| D-39 | 5A | `.all` returns the enclosing capabilities; capabilities learned inside the predicate (e.g. `it has a`) are dropped at the quantifier boundary. | SETTLED |
+| D-40 | 5A | One helper lemma (a `quantifierError` result implies the expression is an `.all`) discharges the new `EvaluatesTo` case in every non-`.all` proof. Later-phase stubs are explicit, never `sorry` or a silent wildcard. | SETTLED |
+| D-41 | 5A | Req 1.5 differs in mechanism: Lean excludes set terms structurally (`PredExpr` has none), Rust checks at type-check time (D-19). Verdicts agree; the Phase 6 differential compares accept/reject, not error codes. | SETTLED |
+| D-42 | 5A | `.all` soundness assumes the receiver set is well-formed, which holds for every evaluator-produced set; a proof hypothesis, not a runtime assumption. | SETTLED |
+| D-43 | 5A | Part A adds only the minimal TPE exhaustiveness arm (whole-node residual, as D-17); per-element TPE stays in Phase 6.5. | SETTLED |
 
 ## Details
 
