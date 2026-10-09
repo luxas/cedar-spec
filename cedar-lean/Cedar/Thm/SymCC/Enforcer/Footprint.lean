@@ -270,6 +270,47 @@ decreasing_by
       | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
 
 /--
+`toExpr` preserves entity-reference validity: a predicate whose refs are all valid
+maps to an expression whose refs are all valid (`.item ↦ .var .principal` is
+`var_valid`). Needed so the D-70 option-A `.all` footprint witnesses `q.toExpr`
+(of `it`-free quantifier subterms) are well-formed.
+-/
+theorem PredExpr.toExpr_validRefs {validRef : EntityUID → Prop} {q : PredExpr} :
+  q.ValidRefs validRef → q.toExpr.ValidRefs validRef
+:= by
+  intro h
+  induction h with
+  | item_valid => simp only [PredExpr.toExpr, itExpr]; exact Expr.ValidRefs.var_valid
+  | lit_valid h₁ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.lit_valid h₁
+  | var_valid => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.var_valid
+  | ite_valid _ _ _ ih₁ ih₂ ih₃ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.ite_valid ih₁ ih₂ ih₃
+  | and_valid _ _ ih₁ ih₂ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.and_valid ih₁ ih₂
+  | or_valid _ _ ih₁ ih₂ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.or_valid ih₁ ih₂
+  | binaryApp_valid _ _ ih₁ ih₂ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.binaryApp_valid ih₁ ih₂
+  | unaryApp_valid _ ih₁ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.unaryApp_valid ih₁
+  | hasAttr_valid _ ih₁ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.hasAttr_valid ih₁
+  | extHasAttr_valid _ ih₁ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.extHasAttr_valid ih₁
+  | getAttr_valid _ ih₁ => simp only [PredExpr.toExpr]; exact Expr.ValidRefs.getAttr_valid ih₁
+  | @record_valid axs h₁ ih =>
+    simp only [PredExpr.toExpr]
+    rw [List.map₂_eq_map (λ p : Attr × PredExpr => (p.fst, p.snd.toExpr))]
+    apply Expr.ValidRefs.record_valid
+    intro ax hax
+    simp only [List.mem_map] at hax
+    replace ⟨⟨a, e⟩, hin, heq⟩ := hax
+    subst heq
+    exact ih (a, e) hin
+  | @call_valid f xs h₁ ih =>
+    simp only [PredExpr.toExpr]
+    rw [List.map₁_eq_map (λ e : PredExpr => e.toExpr)]
+    apply Expr.ValidRefs.call_valid
+    intro x hx
+    simp only [List.mem_map] at hx
+    replace ⟨e, hin, heq⟩ := hx
+    subst heq
+    exact ih e hin
+
+/--
 Leaf of the `.all` predicate-branch witness: a term in `footprintPred.ofEntity`
 of an `it`-free quantifier subterm `q` is exactly `compile q.toExpr εnv`, so
 `q.toExpr` is the witnessing expression.
