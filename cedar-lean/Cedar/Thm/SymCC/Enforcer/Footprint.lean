@@ -46,6 +46,39 @@ theorem footprint_ofBranch_wf :
   simp [footprint.ofBranch]
   split <;> simp [h₂, h₃, Set.empty_wf, Set.union_wf]
 
+theorem footprintPred_ofEntity_wf {q : PredExpr} {it : Term} {εnv : SymEnv} :
+  (footprintPred.ofEntity it εnv q).WellFormed := by
+  simp only [footprintPred.ofEntity]
+  split
+  · exact Set.empty_wf
+  · split
+    · split <;> simp [Set.singleton_wf, Set.empty_wf]
+    · exact Set.empty_wf
+
+theorem footprintPred_ofBranch_wf {q : PredExpr} {it : Term} {εnv : SymEnv} {ft₁ ft₂ ft₃ : Set Term} :
+  ft₂.WellFormed → ft₃.WellFormed → (footprintPred.ofBranch it εnv q ft₁ ft₂ ft₃).WellFormed := by
+  intro h₂ h₃
+  simp only [footprintPred.ofBranch]
+  split <;> simp [h₂, h₃, Set.empty_wf, Set.union_wf]
+
+theorem footprintPred_wf (p : PredExpr) (it : Term) (εnv : SymEnv) :
+  (footprintPred p it εnv).WellFormed := by
+  induction p using footprintPred.induct <;>
+    simp only [footprintPred] <;>
+    simp [footprintPred_ofEntity_wf, footprintPred_ofBranch_wf,
+      List.mapUnion₁_eq_mapUnion (footprintPred · it εnv),
+      List.mapUnion₂_eq_mapUnion (λ x => footprintPred x.snd it εnv),
+      Set.empty_wf, List.mapUnion_wf, Set.union_wf, *]
+
+theorem footprintAllPred_wf (p : PredExpr) (x₁ : Expr) (εnv : SymEnv) :
+  (footprintAllPred p x₁ εnv).WellFormed := by
+  simp only [footprintAllPred]
+  split
+  · split
+    · exact footprintPred_wf _ _ _
+    · exact Set.empty_wf
+  · exact Set.empty_wf
+
 theorem footprint_wf (x : Expr) (εnv : SymEnv) :
   (footprint x εnv).WellFormed
 := by
@@ -130,6 +163,89 @@ private theorem mem_footprint_ofEntity_option_entity {x : Expr} {tₑ : Term} {�
   subst hin
   exact isOptionEntityType_implies_option_entity_type hty
 
+private theorem mem_footprintPred_ofBranch_mem {q : PredExpr} {it t : Term} {εnv : SymEnv} {ft₁ ft₂ ft₃ : Set Term}
+  (hin : t ∈ footprintPred.ofBranch it εnv q ft₁ ft₂ ft₃) :
+  t ∈ ft₁ ∨ t ∈ ft₂ ∨ t ∈ ft₃
+:= by
+  simp only [footprintPred.ofBranch] at hin
+  split at hin
+  case h_1 | h_2 => simp only [hin, true_or, or_true]
+  case h_3 => simp only [Set.mem_union] at hin; rw [or_assoc] at hin; exact hin
+  case h_4 => simp only [Set.not_mem_empty] at hin
+
+private theorem mem_footprintPred_ofEntity_option_entity {q : PredExpr} {it tₑ : Term} {εnv : SymEnv}
+  (hin : tₑ ∈ footprintPred.ofEntity it εnv q) :
+  ∃ ety, tₑ.typeOf = .option (.entity ety)
+:= by
+  simp only [footprintPred.ofEntity] at hin
+  split at hin
+  · simp only [Set.not_mem_empty] at hin
+  · split at hin
+    split at hin
+    any_goals simp only [Set.not_mem_empty] at hin
+    rename_i hty
+    rw [Set.mem_singleton] at hin
+    subst hin
+    exact isOptionEntityType_implies_option_entity_type hty
+
+theorem mem_footprintPred_option_entity {p : PredExpr} {it : Term} {εnv : SymEnv} {t : Term} :
+  t ∈ footprintPred p it εnv → ∃ ety, t.typeOf = .option (.entity ety)
+:= by
+  intro hin
+  induction p using footprintPred.induct <;> simp only [footprintPred] at hin
+  case case1 => simp only [Set.not_mem_empty] at hin
+  case case2 | case3 =>
+    exact mem_footprintPred_ofEntity_option_entity hin
+  case case4 ih₁ ih₂ ih₃ =>
+    rcases mem_footprintPred_ofBranch_mem hin with hin | hin | hin
+    · exact ih₁ hin
+    · exact ih₂ hin
+    · exact ih₃ hin
+  case case5 ih₁ ih₂ =>
+    rcases mem_footprintPred_ofBranch_mem hin with hin | hin | hin
+    · exact ih₁ hin
+    · exact ih₂ hin
+    · simp only [Set.not_mem_empty] at hin
+  case case6 ih₁ ih₂ =>
+    rcases mem_footprintPred_ofBranch_mem hin with hin | hin | hin
+    · exact ih₁ hin
+    · simp only [Set.not_mem_empty] at hin
+    · exact ih₂ hin
+  case case7 ih₁ ih₂ =>
+    simp only [Set.mem_union] at hin
+    rcases hin with (hin | hin) | hin
+    · exact mem_footprintPred_ofEntity_option_entity hin
+    · exact ih₁ hin
+    · exact ih₂ hin
+  case case8 ih =>
+    simp only [Set.mem_union] at hin
+    rcases hin with hin | hin
+    · exact mem_footprintPred_ofEntity_option_entity hin
+    · exact ih hin
+  case case9 ih | case10 ih | case11 ih =>
+    exact ih hin
+  case case12 ih =>
+    simp only [List.mapUnion₁_eq_mapUnion (footprintPred · it εnv), List.mem_mapUnion_iff_mem_exists] at hin
+    replace ⟨xᵢ, hinᵢ, hin⟩ := hin
+    exact ih xᵢ hinᵢ hin
+  case case13 ih =>
+    simp only [List.mapUnion₂_eq_mapUnion λ y : Attr × PredExpr => footprintPred y.snd it εnv,
+      List.mem_mapUnion_iff_mem_exists] at hin
+    replace ⟨(aᵢ, xᵢ), hinᵢ, hin⟩ := hin
+    simp only at hin ih
+    exact ih aᵢ xᵢ (List.sizeOf_attach₂ hinᵢ) hin
+
+theorem mem_footprintAllPred_option_entity {p : PredExpr} {x₁ : Expr} {εnv : SymEnv} {t : Term} :
+  t ∈ footprintAllPred p x₁ εnv → ∃ ety, t.typeOf = .option (.entity ety)
+:= by
+  intro hin
+  simp only [footprintAllPred] at hin
+  split at hin
+  · split at hin
+    · exact mem_footprintPred_option_entity hin
+    · simp only [Set.not_mem_empty] at hin
+  · simp only [Set.not_mem_empty] at hin
+
 theorem mem_footprint_option_entity {x : Expr} {εnv : SymEnv} {t : Term} :
   t ∈ footprint x εnv → ∃ ety, t.typeOf = .option (.entity ety)
 := by
@@ -172,9 +288,11 @@ theorem mem_footprint_option_entity {x : Expr} {εnv : SymEnv} {t : Term} :
     replace ⟨(aᵢ, xᵢ), hinᵢ, hin⟩ := hin
     simp only at hin ih
     exact ih aᵢ xᵢ (List.sizeOf_attach₂ hinᵢ) hin
-  case case14 =>
-    have _ := Set.not_mem_empty t
-    contradiction
+  case case14 ih =>
+    simp only [Set.mem_union] at hin
+    rcases hin with hin | hin
+    · exact ih hin
+    · exact mem_footprintAllPred_option_entity hin
 
 private theorem mem_footprint_exists_wf_prop {p : Expr → Prop} {x : Expr} {tₑ : Term} {εnv : SymEnv}
   (hwε : εnv.WellFormedFor x)

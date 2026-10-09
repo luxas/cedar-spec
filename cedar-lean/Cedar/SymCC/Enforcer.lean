@@ -80,6 +80,21 @@ where
     | .error _                  => Set.empty
 
 /--
+The `it`-free entity subterms of a quantifier predicate `p` whose receiver is
+`x₁`: compile the receiver, and if it is a set term, collect `footprintPred` of
+`p` against the reserved element variable; otherwise empty (D-70, option A).
+Kept separate from `footprint` so the receiver `compile`/`typeOf` match does not
+multiply `footprint.induct`'s `.all` case.
+-/
+def footprintAllPred (p : PredExpr) (x₁ : Expr) (εnv : SymEnv) : Set Term :=
+  match compile x₁ εnv with
+  | .ok t =>
+    match (Factory.option.get t).typeOf with
+    | .set elemTy => footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
+    | _           => Set.empty
+  | .error _ => Set.empty
+
+/--
 Returns the terms corresponding to subexpressions of `x` of the following form:
 
   * A variable term with an entity type
@@ -110,14 +125,9 @@ def footprint (x : Expr) (εnv : SymEnv) : Set Term :=
   | .record axs        => axs.mapUnion₂ (λ ⟨(_, xᵢ), _⟩ => footprint xᵢ εnv)
   -- The receiver's own footprint, plus the `it`-free entity subterms of the
   -- predicate compiled against the reserved element variable (D-70, option A).
-  | .all x₁ p          =>
-    match compile x₁ εnv with
-    | .ok t =>
-      match (Factory.option.get t).typeOf with
-      | .set elemTy =>
-        footprint x₁ εnv ∪ footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
-      | _ => footprint x₁ εnv
-    | .error _ => Set.empty
+  -- `footprintAllPred` keeps the receiver `compile`/`typeOf` match OUT of this
+  -- `match x`, so `footprint.induct` yields a single clean `.all` case.
+  | .all x₁ p          => footprint x₁ εnv ∪ footprintAllPred p x₁ εnv
 where
   ofEntity : Set Term :=
     match compile x εnv with
