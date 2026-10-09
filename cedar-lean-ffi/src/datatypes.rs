@@ -357,6 +357,9 @@ pub enum Op {
     SetSubset,
     #[serde(rename = "set.inter")]
     SetInter,
+    #[cfg(feature = "anyall")]
+    #[serde(rename = "set.all")]
+    SetAll,
     #[serde(rename = "option.get")]
     OptionGet,
     #[serde(rename = "record.get")]
@@ -795,6 +798,8 @@ impl TryFrom<Op> for cedar_policy_symcc::op::Op {
             Op::SetMember => Self::SetMember,
             Op::SetSubset => Self::SetSubset,
             Op::SetInter => Self::SetInter,
+            #[cfg(feature = "anyall")]
+            Op::SetAll => Self::SetAll,
             Op::OptionGet => Self::OptionGet,
             Op::RecordGet(a) => Self::RecordGet(a),
             Op::StringLike(pats) => Self::StringLike(
@@ -1122,18 +1127,10 @@ impl From<cedar_policy_symcc::op::Op> for Op {
                 Self::StringLike(pat.get_elems().iter().map(|p| (*p).into()).collect())
             }
             cedar_policy_symcc::op::Op::Ext(op) => Self::Ext(op.into()),
-            // `set.all` (feature `anyall`): the FFI bridge for the SymCC
-            // quantifier op is part of Phase 6 W8 (the SymCC differential),
-            // which is deferred until Phase 5B re-lands and D-74 resolves. The
-            // W6/W7 eval/validation differentials do not translate SymCC Terms
-            // (they send the AST), so this arm is unreachable on those paths;
-            // the SymCC encoder also refuses a `set.all` term earlier
-            // (`EncodeError::SetAllNotEncoded`). Reaching here means a SymCC
-            // target was run under `anyall` before W8 wired this bridge.
+            // `set.all` (feature `anyall`): the SymCC quantifier op. Serialized
+            // to Lean as `set.all` (serde rename), matching `Op.set.all`.
             #[cfg(feature = "anyall")]
-            cedar_policy_symcc::op::Op::SetAll => {
-                unimplemented!("FFI bridge for SymCC `set.all` is Phase 6 W8 (deferred)")
-            }
+            cedar_policy_symcc::op::Op::SetAll => Self::SetAll,
         }
     }
 }

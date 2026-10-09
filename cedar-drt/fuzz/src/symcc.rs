@@ -170,6 +170,13 @@ const fn settings(max_request_envs: MaxRequestEnvs) -> ABACSettings {
         max_width: 3,
         total_action_request_env_limit: max_request_envs,
         max_actions: max_request_envs,
+        // Generate `.all`/`.any` only when built with `anyall` (req 3.3), so the
+        // SymCC differential compares the Rust and Lean `compile` outputs on
+        // quantifier policies. A `.all` whose predicate has an `it`-dependent
+        // left operand of `in` is rejected with `unsupportedError` on BOTH
+        // engines (D-70 A / D-72); the targets treat matched rejections as
+        // agreement, not a mismatch.
+        enable_anyall: cfg!(feature = "anyall"),
         ..ABACSettings::type_directed()
     }
 }
