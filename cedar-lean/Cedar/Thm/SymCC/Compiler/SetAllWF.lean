@@ -526,35 +526,9 @@ theorem wf_set_all {εs : SymEntities} {S P E : Term} {ety : TermType}
     (hPn : P.NoSetAll = true) (hEn : E.NoSetAll = true)
     (hPa : P.anyAllItTyped ety = true) (hEa : E.anyAllItTyped ety = true) :
     (Factory.set.all S P E).WellFormed εs ∧ (Factory.set.all S P E).typeOf = .option .bool := by
+  -- D-68: `Factory.set.all` now always builds the symbolic `.app Op.set.all` node,
+  -- so WF reduces directly to `mkApp_set_all_wf`.
   unfold Factory.set.all
-  split
-  · rename_i vs ety'
-    split
-    · rename_i hlit
-      cases hSwf with | set_wf h₁ h₂ h₃ h₄ =>
-      simp only [Term.typeOf, TermType.set.injEq] at hSty
-      simp only [List.all_eq_true] at hlit
-      have hvi : ∀ vi ∈ (Set.mk vs).elts, vi.NoSetAll = true ∧ vi.anyAllItTyped ety = true ∧ vi.WellFormed εs ∧ vi.typeOf = ety := by
-        intro vi hmem
-        have hil : vi.isLiteral = true := hlit vi (by simpa [Set.elts] using hmem)
-        refine ⟨isLiteral_noSetAll _ hil, isLiteral_anyAllItTyped _ hil, h₁ vi hmem, ?_⟩
-        rw [h₂ vi hmem, hSty]
-      have hconj := foldr_and_wf (g := fun vi => Term.substAnyAllIt vi P) vs (by
-        intro vi hmem
-        have ⟨hn, ha, hw, ht⟩ := hvi vi (by simpa [Set.elts] using hmem)
-        have hava : ∀ e, vi.anyAllItTyped e = true := fun e => isLiteral_anyAllItTyped _ (hlit vi (by simpa [Set.elts] using hmem))
-        refine ⟨substAnyAllIt_wf hw hn hava P hPwf (ht ▸ hPa), ?_⟩
-        rw [substAnyAllIt_typeOf P (ht ▸ hPa), hPty])
-      have hanyErr := foldr_or_wf (g := fun vi => Term.substAnyAllIt vi E) vs (by
-        intro vi hmem
-        have ⟨hn, ha, hw, ht⟩ := hvi vi (by simpa [Set.elts] using hmem)
-        have hava : ∀ e, vi.anyAllItTyped e = true := fun e => isLiteral_anyAllItTyped _ (hlit vi (by simpa [Set.elts] using hmem))
-        refine ⟨substAnyAllIt_wf hw hn hava E hEwf (ht ▸ hEa), ?_⟩
-        rw [substAnyAllIt_typeOf E (ht ▸ hEa), hEty])
-      have hwi := wf_ite hanyErr.left (Term.WellFormed.none_wf (ty := .bool) TermType.WellFormed.bool_wf) (Term.WellFormed.some_wf hconj.left) hanyErr.right (by simp only [Term.typeOf, hconj.right])
-      simp only []
-      exact ⟨hwi.left, hwi.right.trans (by simp only [Factory.noneOf, Term.typeOf])⟩
-    · exact mkApp_set_all_wf hSwf hSty hPwf hPty hEwf hEty hPn hEn hPa hEa
-  · exact mkApp_set_all_wf hSwf hSty hPwf hPty hEwf hEty hPn hEn hPa hEa
+  exact mkApp_set_all_wf hSwf hSty hPwf hPty hEwf hEty hPn hEn hPa hEa
 
 end Cedar.Thm

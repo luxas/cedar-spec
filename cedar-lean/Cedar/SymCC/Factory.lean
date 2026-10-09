@@ -377,24 +377,19 @@ public def anyAllItVar (elemTy : TermType) : TermVar :=
 Smart constructor for the `.all` set-quantifier term (D-34/D-51). `set` is the
 compiled receiver (type `.set elemTy`), `pred`/`err` are boolean Terms over
 `anyAllItVar elemTy` (the per-element predicate value and error). The result is `.option .bool` (tri-valued, D-35); it encodes via two
-`set.filter` comprehensions under `HO_ALL` (D-52). Always builds the symbolic
-`.app` form; literal-set constant folding is an optimizer concern. -/
+`set.filter` comprehensions under `HO_ALL` (D-52).
+
+D-68: ALWAYS build the symbolic `.app Op.set.all` node. The literal-receiver
+constant fold used to live here (D-55/D-64), but `Term.substAnyAllIt` is
+*syntactic* and never re-reduces, which makes `compile_interpret .all` FALSE:
+recompiling under a literal interpretation would fold with the unreduced
+substitution (`app bvslt [bv 0, bv 5]`) while interpreting the node reduces to
+`some true`. The fold therefore moves into the compiler's `.all` arm (which can
+compile the predicate per element and so produce *reduced* bodies), and the only
+reducing fold that remains is the one in `Term.interpret`/`interpretWith`
+(`Interpretation.lean`), which IS semantics-preserving. -/
 public def set.all (set pred err : Term) : Term :=
-  match set with
-  | .set (Set.mk vs) _ =>
-    -- D-55 concrete fold over a literal receiver, matching `evalAll`:
-    -- empty ⇒ some true; any element errors ⇒ none (quantifierError);
-    -- otherwise some (conjunction of the per-element predicate), no short-circuit.
-    -- D-64: fold ONLY when every element is a literal (mirrors the D-60 interpret
-    -- guard); otherwise build the symbolic `.app set.all` node (same semantics —
-    -- it encodes to `set.filter` over the literal set). This keeps the fold's
-    -- element terms literal, so WF/soundness reduce to the literal case.
-    if vs.all (·.isLiteral) then
-      let conj   := vs.foldr (fun vi acc => and (Term.substAnyAllIt vi pred) acc) (true : Term)
-      let anyErr := vs.foldr (fun vi acc => or (Term.substAnyAllIt vi err) acc) (false : Term)
-      ite anyErr (noneOf .bool) (someOf conj)
-    else .app Op.set.all [set, pred, err] (.option .bool)
-  | _ => .app Op.set.all [set, pred, err] (.option .bool)
+  .app Op.set.all [set, pred, err] (.option .bool)
 
 ---------- Core ADT operators with a trusted mapping to SMT ----------
 

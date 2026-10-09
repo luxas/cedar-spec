@@ -1104,6 +1104,47 @@ decreasing_by
       | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
       | (have := List.sizeOf_lt_of_mem hpx; omega)
 
+/-- D-68: WF of the literal-fold result produced by the compiler's `.all` arm.
+Each `pti ∈ pts` is a compiled per-element predicate whose `option.get` is
+Bool-typed (the D-65 guard in the `mapM`); the fold builds a conjunction and an
+error-disjunction, wrapped by `ite`/`ifSome`. -/
+private theorem compile_all_fold_result_wf {εs : SymEntities} {t : Term} {ety : TermType} {pts : List Term}
+  (htw : t.WellFormed εs) (htty : t.typeOf = .option (.set ety))
+  (hpts : ∀ pti ∈ pts, pti.WellFormed εs ∧ pti.typeOf = .option .bool) :
+  (Factory.ifSome t
+      (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).WellFormed εs ∧
+  (Factory.ifSome t
+      (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).typeOf = .option .bool := by
+  -- conjunction (fold of `option.get pti`) is WF + bool
+  have hconj := foldr_and_wf (εs := εs) (g := fun pti => option.get pti) pts (by
+    intro pti hmem
+    have ⟨hw, hty⟩ := hpts pti hmem
+    exact wf_option_get hw hty)
+  -- error disjunction (fold of `not (isSome pti)`) is WF + bool
+  have hanyErr := foldr_or_wf (εs := εs) (g := fun pti => Factory.not (Factory.isSome pti)) pts (by
+    intro pti hmem
+    have hns := wf_isSome (hpts pti hmem).left
+    exact wf_not hns.left hns.right)
+  -- someOf conj
+  have hsomew : (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))).WellFormed εs :=
+    Term.WellFormed.some_wf hconj.left
+  have hsomety : (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))).typeOf = .option .bool := by
+    simp only [Factory.someOf, typeOf_term_some, hconj.right]
+  -- noneOf .bool
+  have hnonew : (Factory.noneOf .bool).WellFormed εs := Term.WellFormed.none_wf TermType.WellFormed.bool_wf
+  have hnonety : (Factory.noneOf .bool).typeOf = .option .bool := by simp only [Factory.noneOf, typeOf_term_none]
+  -- the inner ite
+  have hite := wf_ite hanyErr.left hnonew hsomew hanyErr.right (by rw [hnonety, hsomety])
+  rw [hnonety] at hite
+  -- wrap with ifSome
+  exact wf_ifSome_option htw hite.left hite.right
+
 private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
   (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
   (hok : compile (Expr.all x₁ p) εnv = Except.ok t)
@@ -1120,12 +1161,7 @@ private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t :
   have ⟨ih1w, ty1, hty1⟩ := ih₁ hwφ₁ hr₁
   split at hok
   · rename_i elemTy helemq
-    simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
-    rename_i pt hpt
-    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
-    rename_i hpbool
-    subst hok
-    -- itVar facts
+    -- shared receiver facts (independent of the fold / symbolic split)
     have hgt := wf_option_get ih1w hty1
     have htys : ty1 = .set elemTy := by rw [← hgt.right]; exact helemq
     rw [htys] at hgt
@@ -1133,33 +1169,100 @@ private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t :
       have hw := typeOf_wf_term_is_wf hgt.left
       rw [hgt.right] at hw
       cases hw with | set_wf h => exact h
-    have hvarw : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).WellFormed εnv.entities :=
-      Term.WellFormed.some_wf (Term.WellFormed.var_wf hel)
-    have hvarty : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).typeOf = .option elemTy := by
-      simp only [Factory.someOf, typeOf_term_some, typeOf_term_var, Factory.anyAllItVar]
-    have hvarn : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).NoSetAll = true := by
-      simp only [Factory.someOf, Term.NoSetAll]
-    have hvara : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).anyAllItTyped elemTy = true := by
-      simp [Factory.someOf, Term.anyAllItTyped, Factory.anyAllItVar]
-    -- pt facts
-    have ⟨hptw, pty, hptty⟩ := compilePred_wf hwf.left hvarw hvarty hpt
-    have hptn := compilePred_noSetAll hwf.left hvarn hpt
-    have hpta := compilePred_anyAllItTyped (elemTy := elemTy) hwf.left hvara hpt
-    -- option.get pt facts (bool by the guard)
-    have hgp := wf_option_get hptw hptty
-    rw [hpbool] at hgp
-    have hgpn : (option.get pt).NoSetAll = true := noSetAll_option_get hptn
-    have hgpa : (option.get pt).anyAllItTyped elemTy = true := anyAllItTyped_option_get hpta
-    -- not (isSome pt) facts
-    have hns := wf_isSome hptw
-    have hnotw := wf_not hns.left hns.right
-    have hnotn : (Factory.not (isSome pt)).NoSetAll = true := noSetAll_not (noSetAll_isSome hptn)
-    have hnota : (Factory.not (isSome pt)).anyAllItTyped elemTy = true := anyAllItTyped_not (anyAllItTyped_isSome hpta)
-    -- set.all WF
-    have hsa := wf_set_all hgt.left hgt.right hgp.left hpbool hnotw.left hnotw.right hgpn hnotn hgpa hnota
-    -- ifSome wrap
-    have h := wf_ifSome_option ih1w hsa.left hsa.right
-    exact ⟨h.left, _, h.right⟩
+    -- symbolic path proof, reused by both symbolic sub-cases
+    have symbolic :
+      ∀ {pt : Term},
+        compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv = Except.ok pt →
+        (option.get pt).typeOf = .bool →
+        (Factory.ifSome t₁ (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt)))).WellFormed εnv.entities ∧
+        (Factory.ifSome t₁ (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt)))).typeOf = .option .bool := by
+      intro pt hpt hpbool
+      have hvarw : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).WellFormed εnv.entities :=
+        Term.WellFormed.some_wf (Term.WellFormed.var_wf hel)
+      have hvarty : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).typeOf = .option elemTy := by
+        simp only [Factory.someOf, typeOf_term_some, typeOf_term_var, Factory.anyAllItVar]
+      have hvarn : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).NoSetAll = true := by
+        simp only [Factory.someOf, Term.NoSetAll]
+      have hvara : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).anyAllItTyped elemTy = true := by
+        simp [Factory.someOf, Term.anyAllItTyped, Factory.anyAllItVar]
+      have ⟨hptw, pty, hptty⟩ := compilePred_wf hwf.left hvarw hvarty hpt
+      have hptn := compilePred_noSetAll hwf.left hvarn hpt
+      have hpta := compilePred_anyAllItTyped (elemTy := elemTy) hwf.left hvara hpt
+      have hgp := wf_option_get hptw hptty
+      rw [hpbool] at hgp
+      have hgpn : (option.get pt).NoSetAll = true := noSetAll_option_get hptn
+      have hgpa : (option.get pt).anyAllItTyped elemTy = true := anyAllItTyped_option_get hpta
+      have hns := wf_isSome hptw
+      have hnotw := wf_not hns.left hns.right
+      have hnotn : (Factory.not (isSome pt)).NoSetAll = true := noSetAll_not (noSetAll_isSome hptn)
+      have hnota : (Factory.not (isSome pt)).anyAllItTyped elemTy = true := anyAllItTyped_not (anyAllItTyped_isSome hpta)
+      have hsa := wf_set_all hgt.left hgt.right hgp.left hpbool hnotw.left hnotw.right hgpn hnotn hgpa hnota
+      exact wf_ifSome_option ih1w hsa.left hsa.right
+    -- now split on the inner `match option.get t₁`
+    split at hok
+    · rename_i vs ety' hvseq
+      -- `option.get t₁ = .set (Set.mk vs) ety'`; so ety' = elemTy and the set is WF
+      have htyeq : ety' = elemTy := by
+        have := hgt.right
+        rw [hvseq] at this
+        simp only [Term.typeOf, TermType.set.injEq] at this
+        exact this
+      subst htyeq
+      split at hok
+      · -- literal fold path
+        rename_i hlit
+        simp only [List.all_eq_true] at hlit
+        -- element facts from set-WF of (option.get t₁)
+        have hsetw := hgt.left
+        rw [hvseq] at hsetw
+        have helts : ∀ vi ∈ vs, vi.WellFormed εnv.entities ∧ vi.typeOf = ety' := by
+          cases hsetw with | set_wf h₁ h₂ _ _ =>
+          intro vi hmem
+          exact ⟨h₁ vi hmem, by rw [h₂ vi hmem]⟩
+        -- extract pts from the mapM
+        simp_do_let (vs.mapM (fun vi => do
+          let pti ← compilePred p (Factory.someOf vi) εnv
+          if (option.get pti).typeOf = TermType.bool then Except.ok pti else Except.error SymCC.Error.typeError)) at hok
+        rename_i pts hpts
+        simp only [Except.ok.injEq] at hok; subst hok
+        rw [List.mapM_ok_iff_forall₂] at hpts
+        -- per-element WF of pts entries
+        have hptsfacts : ∀ pti ∈ pts, pti.WellFormed εnv.entities ∧ pti.typeOf = .option .bool := by
+          intro pti hmem
+          have ⟨vi, hvimem, hvi⟩ := List.forall₂_implies_all_right hpts pti hmem
+          -- hvi : (do let p ← compilePred ...; if ... then .ok p else .error) = .ok pti
+          cases hcp : compilePred p (Factory.someOf vi) εnv <;>
+            simp only [hcp, Except.bind_err, Except.bind_ok, reduceCtorEq] at hvi
+          rename_i cpt
+          split at hvi <;> simp only [Except.ok.injEq, reduceCtorEq] at hvi
+          rename_i hbool; subst hvi
+          have ⟨hvw, hvty⟩ := helts vi hvimem
+          have hviw : (Factory.someOf vi).WellFormed εnv.entities := Term.WellFormed.some_wf hvw
+          have hvity : (Factory.someOf vi).typeOf = .option ety' := by
+            simp only [Factory.someOf, typeOf_term_some, hvty]
+          have ⟨hcpw, cty, hcpty⟩ := compilePred_wf hwf.left hviw hvity hcp
+          -- (option.get cpt).typeOf = .bool and cpt.typeOf = .option cty ⇒ cty = .bool
+          have hgcp := wf_option_get hcpw hcpty
+          rw [hbool] at hgcp
+          refine ⟨hcpw, ?_⟩
+          rw [hcpty, hgcp.right]
+        have hres := compile_all_fold_result_wf (ety := ety') ih1w (by rw [hty1, htys]) hptsfacts
+        exact ⟨hres.left, _, hres.right⟩
+      · -- inner symbolic path (else of the literal guard)
+        rename_i hlit
+        simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar ety'))) εnv) at hok
+        rename_i pt hpt
+        split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+        rename_i hpbool; subst hok
+        have h := symbolic hpt hpbool
+        exact ⟨h.left, _, h.right⟩
+    · -- typeOf-symbolic path (option.get t₁ not a literal set)
+      simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
+      rename_i pt hpt
+      split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+      rename_i hpbool; subst hok
+      have h := symbolic hpt hpbool
+      exact ⟨h.left, _, h.right⟩
   · simp only [reduceCtorEq] at hok
 
 public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :

@@ -374,16 +374,39 @@ def compile (x : Expr) (εnv : SymEnv) : Result Term := do
     let t ← compile x₁ εnv
     match (option.get t).typeOf with
     | .set elemTy =>
-      let itVar : Term := Factory.someOf (.var (Factory.anyAllItVar elemTy))
-      let pt ← compilePred p itVar εnv
-      -- D-65: guard that the per-element predicate is Bool-typed, mirroring the
-      -- `.option .bool` guards in `compileIf`/`compileAnd`/`compileOr`. SymCC compiles
-      -- only typechecked input and the Part A type rule types `.all` predicates as Bool,
-      -- so this guard always holds on well-typed input; it lets `set.all` (which requires
-      -- a Bool predicate, D-55a) be built well-formed.
-      if (option.get pt).typeOf = .bool
-      then ifSome t (Factory.set.all (option.get t) (option.get pt) (not (isSome pt)))
-      else .error .typeError
+      -- D-68: fold concretely when the receiver is a *literal* set of *literal*
+      -- elements, by compiling the predicate PER ELEMENT (`it := someOf vi`).
+      -- This produces reduced per-element bodies, which (unlike the old syntactic
+      -- `Factory.set.all` fold) survives recompilation under an interpretation and
+      -- so keeps `compile_interpret .all` true. Otherwise take the symbolic path:
+      -- bind the reserved element variable and build the `.app set.all` node.
+      match option.get t with
+      | .set (Set.mk vs) _ =>
+        if vs.all (·.isLiteral) then do
+          -- D-65 per element: each per-element predicate must be Bool-typed.
+          let pts ← vs.mapM (fun vi => do
+            let pti ← compilePred p (Factory.someOf vi) εnv
+            if (option.get pti).typeOf = .bool then .ok pti else .error .typeError)
+          let conj   := pts.foldr (fun pti acc => and (option.get pti) acc) (true : Term)
+          let anyErr := pts.foldr (fun pti acc => or (not (isSome pti)) acc) (false : Term)
+          .ok (ifSome t (ite anyErr (noneOf .bool) (someOf conj)))
+        else
+          let itVar : Term := Factory.someOf (.var (Factory.anyAllItVar elemTy))
+          let pt ← compilePred p itVar εnv
+          if (option.get pt).typeOf = .bool
+          then .ok (ifSome t (Factory.set.all (option.get t) (option.get pt) (not (isSome pt))))
+          else .error .typeError
+      | _ =>
+        let itVar : Term := Factory.someOf (.var (Factory.anyAllItVar elemTy))
+        let pt ← compilePred p itVar εnv
+        -- D-65: guard that the per-element predicate is Bool-typed, mirroring the
+        -- `.option .bool` guards in `compileIf`/`compileAnd`/`compileOr`. SymCC compiles
+        -- only typechecked input and the Part A type rule types `.all` predicates as Bool,
+        -- so this guard always holds on well-typed input; it lets `set.all` (which requires
+        -- a Bool predicate, D-55a) be built well-formed.
+        if (option.get pt).typeOf = .bool
+        then .ok (ifSome t (Factory.set.all (option.get t) (option.get pt) (not (isSome pt))))
+        else .error .typeError
     | _ => .error .typeError
 
 namespace Cedar.SymCC
