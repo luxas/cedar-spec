@@ -372,6 +372,17 @@ def compile (x : Expr) (εnv : SymEnv) : Result Term := do
   -- predicate value / error feed the tri-valued `set.all`.
   | .all x₁ p =>
     let t ← compile x₁ εnv
+    match t with
+    | .none ty =>
+      -- D-69: short-circuit a `.none` (erroring) receiver without compiling the
+      -- predicate, mirroring the laziness of `compileIf`/`compileAnd` (dead branches
+      -- are not type-checked in SymCC). `ifSome (.none _) g = noneOf .bool` for the
+      -- `.option .bool`-typed quantifier value `g`, so return that directly. The
+      -- receiver type check is preserved: a non-set `.none` is still a type error.
+      match ty with
+      | .set _ => .ok (noneOf .bool)
+      | _      => .error .typeError
+    | _ =>
     match (option.get t).typeOf with
     | .set elemTy =>
       -- D-68: fold concretely when the receiver is a *literal* set of *literal*
