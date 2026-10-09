@@ -116,6 +116,8 @@ private def pRecK : PredExpr := .binaryApp .less (.lit (.int 0)) (.getAttr .item
 private def pHasK : PredExpr := .hasAttr .item "k"
 -- predicate `principal in it`  (entity, it on the RIGHT — the sound/footprint-free side)
 private def pPrinIn : PredExpr := .binaryApp .mem (.var .principal) .item
+-- predicate `it in principal`  (entity, it on the LEFT — it-dependent `in`, D-70 guard REJECTS)
+private def pItIn : PredExpr := .binaryApp .mem .item (.var .principal)
 -- predicate `it > n`  (free context variable n)
 private def pGtN : PredExpr := .binaryApp .less (.getAttr (.var .context) "n") .item
 -- erroring predicate `it.k > 0` (getAttr on an entity may error if `k` absent) and its guarded form
@@ -146,6 +148,9 @@ def tests : List (TestSuite SolverM) :=
         -- erroring vs guarded predicate: distinguishes the encoder's quantifierError filter.
         -- With the filter, `all(it.k>0)` errors when some element lacks `k` while the guarded
         -- form short-circuits ⇒ NOT equivalent (sat). Dropping the filter collapses them (would flip to unsat).
-        mkEquiv "all(it.k>0) ≡ all(it has k && it.k>0) [entity attrs total]" (.all es pRecKErr) (.all es pRecKGuard) .unsat ] } ]
+        mkEquiv "all(it.k>0) ≡ all(it has k && it.k>0) [entity attrs total]" (.all es pRecKErr) (.all es pRecKGuard) .unsat,
+        -- D-70 guard: an `it`-dependent LEFT operand of `in` is rejected (unsupportedError);
+        -- the it-free-left form (`principal in it`, pPrinIn above) is accepted and verified sat.
+        testFailsCompilePolicy "all(it in principal) rejected (D-70 guard)" (.all es pItIn) Γ ] } ]
 
 end SymTest.AnyAll.E2E
