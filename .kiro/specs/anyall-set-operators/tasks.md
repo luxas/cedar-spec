@@ -27,7 +27,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 2 | `phase2-anyall-lean-spec` | DONE — review converged (2 rounds); T2.3 type rule deferred (D-11) |
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
-| 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
+| 5 | `phase5-anyall-symcc` | DONE — review-clean (round 2: NO ACTIONABLE FINDINGS); full type rule + SymCC `set.filter` encoding (D-33/D-52), soundness proven; D-74 OPEN behind interim `SymCCSupported(.all)=false` (completeness lane); see `branches/phase5-anyall-symcc/OUTCOMES.md` |
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
 | 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
 | 7 | `phase7-anyall-docs` | not started |
