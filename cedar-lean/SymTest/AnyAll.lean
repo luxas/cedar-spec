@@ -124,6 +124,18 @@ private def pGtN : PredExpr := .binaryApp .less (.getAttr (.var .context) "n") .
 private def pRecKErr : PredExpr := .binaryApp .less (.lit (.int 0)) (.getAttr .item "k")
 private def pRecKGuard : PredExpr := .and (.hasAttr .item "k") (.binaryApp .less (.lit (.int 0)) (.getAttr .item "k"))
 
+-- F4(i): a predicate that is mathematically always true but ERRORS by integer overflow on the
+-- max element: `it < it + 1`. SymCC compiles `.add` to `ifFalse (bvsaddo ..) (bvadd ..)` (overflow
+-- ⇒ `none`), so `all(it < it + 1)` is quantifierError (none) exactly when some element is INT64_MAX,
+-- hence NOT equivalent to the constant `true` (sat). The witness pivots on the encoder's error
+-- (set.filter) comprehension being non-empty — a genuine per-element error through cvc5 (req 2.5).
+private def pLtSucc : PredExpr :=
+  .binaryApp .less .item (.binaryApp .add .item (.lit (.int 1)))
+-- F4(ii): `.any` has no AST node; it lowers to `!s.all(!p)` (req 2.3). Negated predicate `!(it>0)`.
+private def pNotGt0 : PredExpr := .unaryApp .not pGt0
+-- `s.any(it>0)` as the lowered shape `!s.all(!(it>0))`.
+private def anyXsGt0 : Expr := .unaryApp .not (.all xs pNotGt0)
+
 private def permit (x : Expr) : Policy :=
   { id := "policy", effect := .permit, principalScope := .principalScope .any,
     actionScope := .actionScope .any, resourceScope := .resourceScope .any, condition := [⟨.when, x⟩] }
@@ -134,8 +146,11 @@ private def mkEquiv (desc : String) (x₁ x₂ : Expr) (o : Outcome) : TestCase 
 private def mkImplies (desc : String) (x₁ x₂ : Expr) (o : Outcome) : TestCase SolverM :=
   test desc ⟨λ _ => o.check (verifyImplies [permit x₁] [permit x₂]) (SymEnv.ofTypeEnv Γ)⟩
 
--- NOTE: unoptimized SymCC path only; the optimized SymCCOpt compiler still rejects `.all`
--- (`Cedar/SymCCOpt/Compiler.lean:412`), which is M4 scope (blocked on the D-70 footprint decision).
+-- NOTE: these run the UNOPTIMIZED SymCC verifier path. The optimized SymCCOpt compiler
+-- ALSO supports `.all` now (`Cedar/SymCCOpt/Compiler.lean` delegates `.all` to `SymCC.compile`
+-- + `footprint`; `Opt.compile.correctness` / `Opt.compile_footprint_wf` carry real `.all`
+-- arms). The only `unsupportedError` left in SymCCOpt is the pre-existing empty-set-literal
+-- reject, unrelated to `.all`.
 def tests : List (TestSuite SolverM) :=
   [ { name := "AnyAll.e2e", tests :=
       [ mkEquiv "all(it>0) ≢ true" (.all xs pGt0) (.lit (.bool true)) .sat,
@@ -151,6 +166,17 @@ def tests : List (TestSuite SolverM) :=
         mkEquiv "all(it.k>0) ≡ all(it has k && it.k>0) [entity attrs total]" (.all es pRecKErr) (.all es pRecKGuard) .unsat,
         -- D-70 guard: an `it`-dependent LEFT operand of `in` is rejected (unsupportedError);
         -- the it-free-left form (`principal in it`, pPrinIn above) is accepted and verified sat.
-        testFailsCompilePolicy "all(it in principal) rejected (D-70 guard)" (.all es pItIn) Γ ] } ]
+        testFailsCompilePolicy "all(it in principal) rejected (D-70 guard)" (.all es pItIn) Γ,
+        -- F4(i): a genuine per-element error path through cvc5 (req 2.5). `all(it < it + 1)` is
+        -- mathematically always true but overflows (⇒ quantifierError / none) on the INT64_MAX
+        -- element, so it is NOT equivalent to the constant `true` (sat). The witness pivots on the
+        -- encoder's error (set.filter) comprehension being non-empty on a model; drop the filter and
+        -- it would collapse to `true` (flip to unsat).
+        mkEquiv "all(it < it+1) ≢ true [overflow error path]" (.all xs pLtSucc) (.lit (.bool true)) .sat,
+        -- F4(ii): `.any` lowering (req 2.3). `s.any(p)` = `!s.all(!p)`. The lowered shape equals
+        -- itself (unsat / equivalent), and differs from `all(it>0)` (sat / non-equivalent) — `any`
+        -- is existential, `all` universal.
+        mkEquiv "any(it>0) ≡ any(it>0) [lowered !all(!p)]" anyXsGt0 anyXsGt0 .unsat,
+        mkEquiv "any(it>0) ≢ all(it>0)" anyXsGt0 (.all xs pGt0) .sat ] } ]
 
 end SymTest.AnyAll.E2E
