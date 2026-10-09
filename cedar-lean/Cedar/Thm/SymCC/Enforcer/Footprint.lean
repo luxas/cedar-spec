@@ -85,6 +85,38 @@ theorem footprintAllPred_wf (p : PredExpr) (x₁ : Expr) (εnv : SymEnv) :
       · exact Set.empty_wf
   · exact Set.empty_wf
 
+/-- D-71 slot reductions: `footprintAllPred` collapses to the matching compile-path slot. -/
+theorem footprintAllPred_none_eq {p : PredExpr} {x₁ : Expr} {εnv : SymEnv} {ty : TermType}
+  (hr₁ : compile x₁ εnv = .ok (.none ty)) :
+  footprintAllPred p x₁ εnv = Set.empty := by
+  simp only [footprintAllPred, hr₁]
+
+theorem footprintAllPred_litfold_eq {p : PredExpr} {x₁ : Expr} {εnv : SymEnv} {t₁ : Term} {vs : List Term} {ety : TermType}
+  (hr₁ : compile x₁ εnv = .ok t₁) (hsome : ∃ u, t₁ = .some u)
+  (hget : Factory.option.get t₁ = .set (Data.Set.mk vs) ety)
+  (hlit : vs.all (·.isLiteral) = true) :
+  footprintAllPred p x₁ εnv = vs.mapUnion (fun vi => footprintPred p (Factory.someOf vi) εnv) := by
+  obtain ⟨u, hu⟩ := hsome; subst hu
+  simp only [footprintAllPred, hr₁]
+  simp only [Factory.option.get] at hget ⊢
+  rw [hget]
+  simp only [Term.typeOf, hlit, reduceIte]
+
+theorem footprintAllPred_symbolic_eq {p : PredExpr} {x₁ : Expr} {εnv : SymEnv} {t₁ : Term} {elemTy : TermType}
+  (hr₁ : compile x₁ εnv = .ok t₁) (hnotnone : ∀ ty, t₁ ≠ .none ty)
+  (hgetty : (Factory.option.get t₁).typeOf = .set elemTy)
+  (hnotlit : ∀ vs ety, Factory.option.get t₁ = .set (Data.Set.mk vs) ety → vs.all (·.isLiteral) = false) :
+  footprintAllPred p x₁ εnv = footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv := by
+  -- WIP (red, no placeholder): the .none/inner match reduction; see footprintAllPred_litfold_eq for the shape.
+  simp only [footprintAllPred, hr₁]
+
+
+
+
+
+
+
+
 theorem footprint_wf (x : Expr) (εnv : SymEnv) :
   (footprint x εnv).WellFormed
 := by
