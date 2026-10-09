@@ -1967,6 +1967,98 @@ private theorem compile_interpret_all_litfold_on_footprint
       rw [hsome, pe_option_get'_some]
   rw [hfoldk I₁ hI₁ (fun vi _ => rfl), hfoldk I₂ hI₂ (fun vi hmem => (hfvalI vi hmem).symm)]
 
+
+/-- Decomposition of a successful `compile (.all x₁ p)`: the guard passed
+(`NoItDependentIn p`), the receiver compiled (`compile x₁ εnv = .ok t₁`), and the
+compiled term is one of the three D-71 shapes. Mirrors `compile_all_wf`'s splits so
+the wrapper is a pure `rcases` + dispatch. -/
+private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
+  (hok : compile (.all x₁ p) εnv = .ok t) :
+  p.NoItDependentIn = true ∧ ∃ t₁, compile x₁ εnv = .ok t₁ ∧
+    ( (∃ ty, t₁ = .none ty ∧ t = Factory.noneOf .bool)
+    ∨ (∃ elemTy vs pts, (∀ ty, t₁ ≠ .none ty) ∧ (Factory.option.get t₁).typeOf = .set elemTy
+        ∧ Factory.option.get t₁ = .set (Data.Set.mk vs) elemTy ∧ vs.all (·.isLiteral) = true
+        ∧ List.Forall₂ (λ vi pti => (do let p' ← compilePred p (Factory.someOf vi) εnv; if (Factory.option.get p').typeOf = TermType.bool then Except.ok p' else Except.error SymCC.Error.typeError) = Except.ok pti) vs pts
+        ∧ t = Factory.ifSome t₁ (Factory.ite (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+            (Factory.noneOf .bool) (Factory.someOf (pts.foldr (fun pti acc => Factory.and (Factory.option.get pti) acc) (true : Term)))))
+    ∨ (∃ elemTy pt, (∀ ty, t₁ ≠ .none ty) ∧ (Factory.option.get t₁).typeOf = .set elemTy
+        ∧ (∀ vs ety, Factory.option.get t₁ = .set (Data.Set.mk vs) ety → vs.all (·.isLiteral) = false)
+        ∧ compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv = .ok pt
+        ∧ (Factory.option.get pt).typeOf = .bool
+        ∧ t = Factory.ifSome t₁ (Factory.set.all (Factory.option.get t₁) (Factory.option.get pt) (Factory.not (Factory.isSome pt)))) )
+:= by
+  have hnoit : p.NoItDependentIn = true := by
+    by_contra hc; rw [Bool.not_eq_true] at hc
+    rw [compile.eq_def] at hok; simp only [hc, Bool.not_false, reduceCtorEq, reduceIte] at hok
+  refine ⟨hnoit, ?_⟩
+  rw [compile.eq_def] at hok
+  simp only [hnoit, not_true, Bool.not_true, Bool.false_eq_true, not_false_eq_true, reduceIte] at hok
+  simp_do_let (compile x₁ εnv) at hok
+  rename_i t₁ hr₁
+  refine ⟨t₁, hr₁, ?_⟩
+  split at hok
+  · -- .none receiver
+    rename_i ty
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    exact Or.inl ⟨ty, rfl, rfl⟩
+  · rename_i hnotnone
+    have hnotnone' : ∀ ty, t₁ ≠ .none ty := by
+      intro ty hc; exact hnotnone (by rw [hc])
+    split at hok
+    · rename_i elemTy helemq
+      split at hok
+      · rename_i vs ety' hvseq
+        have htyeq : ety' = elemTy := by
+          rw [hvseq] at helemq; simp only [Term.typeOf, TermType.set.injEq] at helemq; exact helemq.symm
+        subst htyeq
+        split at hok
+        · -- literal fold
+          rename_i hlit
+          simp_do_let (vs.mapM (fun vi => do
+            let pti ← compilePred p (Factory.someOf vi) εnv
+            if (Factory.option.get pti).typeOf = TermType.bool then Except.ok pti else Except.error SymCC.Error.typeError)) at hok
+          rename_i pts hpts
+          simp only [Except.ok.injEq] at hok; subst hok
+          exact Or.inr (Or.inl ⟨elemTy, vs, pts, hnotnone', helemq, hvseq, hlit, (List.mapM_ok_iff_forall₂).mp hpts, rfl⟩)
+        · -- literal set, non-literal element ⇒ symbolic
+          rename_i hlit
+          simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
+          rename_i pt hpt
+          split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+          rename_i hpbool; subst hok
+          exact Or.inr (Or.inr ⟨elemTy, pt, hnotnone', helemq, (by
+            intro vs' ety' heq; rw [hvseq] at heq
+            simp only [Term.set.injEq, Data.Set.mk.injEq] at heq
+            obtain ⟨rfl, _⟩ := heq; exact hlit), hpt, hpbool, rfl⟩)
+      · -- non-literal-set receiver ⇒ symbolic
+        rename_i hnotset
+        simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
+        rename_i pt hpt
+        split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+        rename_i hpbool; subst hok
+        exact Or.inr (Or.inr ⟨elemTy, pt, hnotnone', helemq, (by
+          intro vs' ety' heq; exact absurd heq (hnotset vs' ety')), hpt, hpbool, rfl⟩)
+    · simp only [reduceCtorEq] at hok
+
+/-- SYMBOLIC leaf: the inner `set.all` interprets equally; wraps `_symbolic` + the
+receiver `.some`-witness lift (`interpret_option_get_eq`). -/
+private theorem compile_interpret_all_symbolic_leaf
+  {p : PredExpr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t₁ pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hsm : εnv.SameOn ft I₁ I₂) (hnoit : p.NoItDependentIn = true)
+  (hpvr : p.ValidRefs (εnv.entities.isValidEntityUID ·))
+  (hwt₁ : t₁.WellFormed εnv.entities) (hty₁ : t₁.typeOf = .option (.set elemTy))
+  (hpt : compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv = .ok pt)
+  (hpbool : (Factory.option.get pt).typeOf = .bool)
+  (hih₁ : t₁.interpret I₁ = t₁.interpret I₂)
+  (hpft : footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv ⊆ ft)
+  (w : Term) (hsome : t₁.interpret I₂ = .some w) :
+  (Factory.set.all (Factory.option.get t₁) (Factory.option.get pt) (Factory.not (Factory.isSome pt))).interpret I₁
+    = (Factory.set.all (Factory.option.get t₁) (Factory.option.get pt) (Factory.not (Factory.isSome pt))).interpret I₂
+:= compile_interpret_all_symbolic_on_footprint hI₁ hI₂ hwε hsm hnoit hpvr hwt₁ hty₁ hpt hpbool
+    (interpret_option_get_eq hwt₁ hty₁ hih₁ hsome) hpft
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
