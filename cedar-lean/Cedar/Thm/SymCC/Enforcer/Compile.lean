@@ -1249,6 +1249,36 @@ private theorem compilePred_interpret_hasAttr_on_footprint {x₁ : PredExpr} {a�
       interpret_ifSome hI₂ hwt₁ (Term.WellFormed.some_wf wf_bool),
       hih, interpret_term_some, interpret_term_prim]
 
+private theorem compilePred_interpret_getAttr_on_footprint {x₁ : PredExpr} {a₁ : Attr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.getAttr x₁ a₁) it εnv ⊆ ft)
+  (hok : compilePred (.getAttr x₁ a₁) it εnv = .ok pt)
+  (ih₁ : ∀ {t₁}, footprintPred x₁ it εnv ⊆ ft → compilePred x₁ it εnv = .ok t₁ → t₁.interpret I₁ = t₁.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  simp only [footprintPred, Set.union_subset] at hft
+  replace ⟨t₁, t₂, hok₁, hok, heq⟩ := compilePred_getAttr_ok_implies hok
+  subst heq
+  have hihsub := ih₁ hft.right hok₁
+  have ⟨hwt₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo₁ := wf_option_get hwt₁ hty₁
+  replace ⟨t₃, rty, hok, hr⟩ := compileGetAttr_ok_implies hok
+  replace ⟨hty₃, tyₐ, htyₐ, hr⟩ := hr
+  have hwt₃ := (compileAttrsOf_wf hwε.right hwo₁.left hok).left
+  have ⟨hwr, hwrty⟩ := wf_record_get hwt₃ hty₃ htyₐ
+  split at hr <;> subst hr
+  case' h_2 => replace ⟨hwr, hwrty⟩ := wf_term_some hwr hwrty
+  all_goals {
+    simp_ifSome_eq hI₁ hI₂ hwt₁ hty₁ hwr hwrty hihsub
+    rename_i ht₁ _
+    simp only [interpret_term_some,
+      compileAttrsOf_interpret_record_get_eq
+        hwε.right hI₁ hI₂ hsm.right hwo₁.left hok hwt₃ hty₃ htyₐ
+        (interpret_option_get_eq hwt₁ hty₁ hihsub ht₁)]
+  }
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
