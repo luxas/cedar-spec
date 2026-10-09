@@ -2562,7 +2562,63 @@ theorem compilePred_well_typed {p₀ : Cedar.Spec.PredExpr} {itTy : CedarType} {
     rw [hnorm_eq]
     exact compilePred_well_typed_record ih htyp
   | .call xfn xs =>
-    skip
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hm : xs.mapM₁ (fun x => justType (typeOfPred x.1 itTy c Γ))
+      <;> rw [hm] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i tys
+    -- Normalized arg list `xs.map₁ (λ ⟨x,_⟩ => normalize x …)` is just `xs.map (normalize · …)`.
+    have hnorm_eq :
+      (xs.map₁ (λ x : {x : Cedar.Spec.PredExpr // x ∈ xs} => PredExpr.normalize x.1 itTy c Γ))
+      = xs.map (λ x => PredExpr.normalize x itTy c Γ) :=
+      List.map₁_eq_map (λ x => PredExpr.normalize x itTy c Γ) xs
+    rw [hnorm_eq]
+    -- `htp : typeOfCall xfn tys (xs.map₁ (·.toExpr)) = .ok (typ, c')` (SOURCE args).
+    -- Decompose the `mapM₁` into a per-arg `Forall₂` over the SOURCE args.
+    rw [List.mapM₁_eq_mapM (fun x => justType (typeOfPred x itTy c Γ))] at hm
+    have hsrc := List.mapM_ok_iff_forall₂.mp hm
+    -- Build the call-arm IH over the NORMALIZED args `xs.map g`.
+    have ih :
+      List.Forall₂ (λ (x : Cedar.Spec.PredExpr) (ty : TypedExpr) =>
+        ∃ t, compilePred x it (SymEnv.ofEnv Γ) = .ok t ∧
+          t.typeOf = .option (TermType.ofType ty.typeOf) ∧
+          t.WellFormed (SymEnv.ofEnv Γ).entities)
+        (xs.map (λ x => PredExpr.normalize x itTy c Γ)) tys := by
+      apply List.forall₂_map_left_of_mem
+        (λ (x : Cedar.Spec.PredExpr) => PredExpr.normalize x itTy c Γ) ?_ hsrc
+      intro x hax ty hR
+      -- `hR : justType (typeOfPred x …) = .ok ty`, so `typeOfPred x … = .ok (ty, _)`.
+      cases hpf : typeOfPred x itTy c Γ <;> rw [hpf] at hR <;>
+        simp only [justType, Except.map, Except.ok.injEq, reduceCtorEq] at hR
+      rename_i rpf
+      obtain ⟨typf, cpf⟩ := rpf
+      subst hR
+      have ⟨t, hok, hty⟩ := compilePred_well_typed hwf hpf hitw hitty
+      have ⟨hwft, _, _⟩ := compilePred_wf hwε hitw hitty hok
+      exact ⟨t, hok, hty, hwft⟩
+    -- Convert the SOURCE `htp` to the NORMALIZED argument list (normalize = id on `.lit`,
+    -- which is all `typeOfCall` reads of the arg exprs).
+    have hagree :
+      List.Forall₂ (λ (e e' : Cedar.Spec.Expr) => ∀ p, e = .lit p → e' = .lit p)
+        (xs.map₁ (λ ⟨x₁, _⟩ => x₁.toExpr))
+        ((xs.map (λ x => PredExpr.normalize x itTy c Γ)).map₁ (λ ⟨x₁, _⟩ => x₁.toExpr)) := by
+      rw [List.map₁_eq_map (λ x : Cedar.Spec.PredExpr => x.toExpr),
+          List.map₁_eq_map (λ x : Cedar.Spec.PredExpr => x.toExpr), List.map_map]
+      clear ih hsrc hnorm_eq htp hm
+      induction xs with
+      | nil => simp only [List.map_nil, List.Forall₂.nil]
+      | cons hd tl ihtl =>
+        simp only [List.map_cons, Function.comp_apply]
+        refine List.Forall₂.cons ?_ ihtl
+        intro p h
+        -- `hd.toExpr = .lit p` ⇒ `hd = .lit p` ⇒ normalize id ⇒ `(normalize hd).toExpr = .lit p`.
+        have hhd : hd = .lit p := by
+          cases hd <;>
+            simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq, PredExpr.lit.injEq]
+        subst hhd; simp only [PredExpr.normalize, PredExpr.toExpr]
+    have htp' := typeOfCall_arg_lit_agree_ok hagree htp
+    exact compilePred_well_typed_call ih htp'
 termination_by sizeOf p₀
 decreasing_by
   all_goals simp_wf

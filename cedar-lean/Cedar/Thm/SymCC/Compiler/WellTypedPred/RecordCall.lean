@@ -209,7 +209,7 @@ the two lists are `L` (source) and `L'` (per-argument normalized), related eleme
 theorem typeOfCall_arg_lit_agree_ok
     {xfn : ExtFun} {tys : List TypedExpr} {L L' : List Cedar.Spec.Expr}
     {typ : TypedExpr} {c' : Capabilities}
-    (hagree : List.Forall₂ (λ e e' => ∀ p, e = .lit p ↔ e' = .lit p) L L')
+    (hagree : List.Forall₂ (λ e e' => ∀ p, e = .lit p → e' = .lit p) L L')
     (htp : typeOfCall xfn tys L = .ok (typ, c')) :
     typeOfCall xfn tys L' = .ok (typ, c') := by
   -- On the `.ok` side, `typeOfConstructor` reads the args only via `[.lit (.string s)]`,
@@ -233,7 +233,7 @@ theorem typeOfCall_arg_lit_agree_ok
       rename_i e' Ltl'
       cases htl with
       | nil =>
-        have he' : e' = .lit (.string s) := (h0 (.string s)).mp rfl
+        have he' : e' = .lit (.string s) := h0 (.string s) rfl
         subst he'
         exact hok
   unfold typeOfCall at htp ⊢
