@@ -41,6 +41,7 @@ def CompilePredEvaluate (p : PredExpr) : Prop :=
     ((Except.ok v : Spec.Result Value) ∼ it) →
     it.WellFormed εnv.entities →
     it.typeOf = .option elemTy →
+    PredExpr.ValidRefs (fun uid => env.entities.contains uid) p →
     compilePred p it εnv = .ok pt →
     evaluatePred p v env.request env.entities ∼ pt
 
@@ -100,14 +101,16 @@ theorem compilePred_evaluate_unaryApp {op₁ : UnaryOp} {x₁ : PredExpr} {env :
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
     (hok : compilePred (.unaryApp op₁ x₁) it εnv = .ok pt)
+    (hrefs : PredExpr.ValidRefs (fun uid => env.entities.contains uid) (.unaryApp op₁ x₁))
     (ih : CompilePredEvaluate x₁) :
     evaluatePred (.unaryApp op₁ x₁) v env.request env.entities ∼ pt := by
+  have hr₁ref : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hrefs; assumption
   replace ⟨t₁, t₂, hr, ha, ht⟩ := compilePred_unaryApp_ok_implies hok
   subst ht
   have ⟨hwφ₁, _, hty₁⟩ := compilePred_wf hwε hitw hitty hr
   have hwo := wf_option_get hwφ₁ hty₁
   have ⟨_, ty₂, hty₂⟩ := compileApp₁_wf hwo.left ha
-  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hr
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hr₁ref hr
   simp only [evaluatePred]
   simp_do_let (evaluatePred x₁ v env.request env.entities)
   case error e he =>
@@ -146,10 +149,12 @@ theorem compilePred_evaluate_binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr}
     (hvwf : v.WellFormed env.entities)
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
-    (hr₁refs : PredExpr.ValidRefs (λ uid => env.entities.contains uid) x₁)
+    (hr : PredExpr.ValidRefs (fun uid => env.entities.contains uid) (.binaryApp op₂ x₁ x₂))
     (hok : compilePred (.binaryApp op₂ x₁ x₂) it εnv = .ok pt)
     (ih₁ : CompilePredEvaluate x₁) (ih₂ : CompilePredEvaluate x₂) :
     evaluatePred (.binaryApp op₂ x₁ x₂) v env.request env.entities ∼ pt := by
+  have hr₁ref : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hr; assumption
+  have hr₂ref : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₂ := by cases hr; assumption
   replace ⟨t₁, t₂, t₃, hok₁, hok₂, hok, ht⟩ := compilePred_binaryApp_ok_implies hok
   subst ht
   have ⟨hwφ₁, _, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
@@ -158,8 +163,8 @@ theorem compilePred_evaluate_binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr}
   have hwo₂ := wf_option_get hwφ₂ hty₂
   have ⟨hwφ₃, ty₃, hty₃⟩ := compileApp₂_wf hwε.right hwo₁.left hwo₂.left hok
   have hty := (wf_ifSome_option hwφ₂ hwφ₃ hty₃).right
-  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty hok₁
-  replace ih₂ := ih₂ heq hwfenv hwε hvwf hitv hitw hitty hok₂
+  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty hr₁ref hok₁
+  replace ih₂ := ih₂ heq hwfenv hwε hvwf hitv hitw hitty hr₂ref hok₂
   simp only [evaluatePred]
   simp_do_let (evaluatePred x₁ v env.request env.entities)
   case error e he => rw [he] at ih₁; exact same_error_implies_ifSome_error ih₁ hty
@@ -176,7 +181,7 @@ theorem compilePred_evaluate_binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr}
       subst ht₂
       simp only [pe_ifSome_some hty₃]
       simp only [pe_option_get_some] at hok
-      have hwf₁ := evaluatePred_wf hwfenv hvwf hr₁refs hv₁
+      have hwf₁ := evaluatePred_wf hwfenv hvwf hr₁ref hv₁
       exact compileApp₂_implies_apply₂ heq.right hwf₁ (wf_term_some_implies hwφ₁) (wf_term_some_implies hwφ₂) ih₁' ih₂' hok
 
 /-- Extraction for the `.hasAttr` predicate arm (mirrors `compile_hasAttr_ok_implies`). -/
@@ -212,7 +217,7 @@ theorem compilePred_evaluate_hasAttr {x₁ : PredExpr} {a : Attr} {env : Env} {�
   have hwo := wf_option_get hwφ₁ hty₁
   have hwφ₂ := compileHasAttr_wf hwε.right hwo.left hr
   replace ⟨t₃, rty, hr, ha⟩ := compileHasAttr_ok_implies hr
-  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hok₁
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hr₁refs hok₁
   simp only [evaluatePred]
   simp_do_let (evaluatePred x₁ v env.request env.entities)
   case error e he => rw [he] at ih; exact same_error_implies_ifSome_error ih hwφ₂.right
@@ -259,7 +264,7 @@ theorem compilePred_evaluate_getAttr {x₁ : PredExpr} {a : Attr} {env : Env} {�
   have hwo := wf_option_get hwφ₁ hty₁
   have ⟨hwφ₂, tyₐ, htyₐ⟩ := compileGetAttr_wf hwε.right hwo.left hr
   replace ⟨t₃, rty, hr, ha⟩ := compileGetAttr_ok_implies hr
-  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hok₁
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hr₁refs hok₁
   simp only [evaluatePred]
   simp_do_let (evaluatePred x₁ v env.request env.entities)
   case error e he => rw [he] at ih; exact same_error_implies_ifSome_error ih htyₐ
@@ -291,7 +296,7 @@ theorem compilePred_evaluate_extHasAttr {x₁ : PredExpr} {a : Attr} {l : List A
   rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
   have ⟨hwt₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
   have hce := compileExtHasAttrRec_wf hwε.right hwt₁ ⟨ty₁, hty₁⟩ hok
-  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hok₁
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hr₁refs hok₁
   simp only [evaluatePred]
   simp_do_let (evaluatePred x₁ v env.request env.entities)
   case error e he =>
@@ -399,11 +404,14 @@ theorem compilePred_evaluate_and {x₁ x₂ : PredExpr} {env : Env} {εnv : SymE
     (hvwf : v.WellFormed env.entities)
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hrefs : PredExpr.ValidRefs (fun uid => env.entities.contains uid) (.and x₁ x₂))
     (hok : compilePred (.and x₁ x₂) it εnv = .ok pt)
     (ih₁ : CompilePredEvaluate x₁) (ih₂ : CompilePredEvaluate x₂) :
     evaluatePred (.and x₁ x₂) v env.request env.entities ∼ pt := by
+  have href₁ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hrefs; assumption
+  have href₂ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₂ := by cases hrefs; assumption
   replace ⟨_, hr₁, h₄⟩ := compilePred_and_ok_implies hok
-  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty hr₁
+  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty href₁ hr₁
   simp only [evaluatePred, Result.as, Coe.coe, Value.asBool]
   simp_do_let (evaluatePred x₁ v env.request env.entities) <;>
   rename_i h₅ <;>
@@ -424,7 +432,7 @@ theorem compilePred_evaluate_and {x₁ x₂ : PredExpr} {env : Env} {εnv : SymE
         replace ⟨t₂, h₄, hty, ht⟩ := h₄.right
         simp only [pe_option_get_some, pe_ite_true, pe_ifSome_some hty] at ht
         subst ht
-        replace ih₂ := ih₂ heq hwfenv hwε hvwf hitv hitw hitty h₄
+        replace ih₂ := ih₂ heq hwfenv hwε hvwf hitv hitw hitty href₂ h₄
         simp_do_let (evaluatePred x₂ v env.request env.entities)
         case error hx₂ => simp only [hx₂] at ih₂; exact ih₂
         case ok hx₂ =>
@@ -450,11 +458,14 @@ theorem compilePred_evaluate_or {x₁ x₂ : PredExpr} {env : Env} {εnv : SymEn
     (hvwf : v.WellFormed env.entities)
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hrefs : PredExpr.ValidRefs (fun uid => env.entities.contains uid) (.or x₁ x₂))
     (hok : compilePred (.or x₁ x₂) it εnv = .ok pt)
     (ih₁ : CompilePredEvaluate x₁) (ih₂ : CompilePredEvaluate x₂) :
     evaluatePred (.or x₁ x₂) v env.request env.entities ∼ pt := by
+  have href₁ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hrefs; assumption
+  have href₂ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₂ := by cases hrefs; assumption
   replace ⟨_, hr₁, h₄⟩ := compilePred_or_ok_implies hok
-  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty hr₁
+  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty href₁ hr₁
   simp only [evaluatePred, Result.as, Coe.coe, Value.asBool]
   simp_do_let (evaluatePred x₁ v env.request env.entities) <;>
   rename_i h₅ <;>
@@ -475,7 +486,7 @@ theorem compilePred_evaluate_or {x₁ x₂ : PredExpr} {env : Env} {εnv : SymEn
         replace ⟨t₂, h₄, hty, ht⟩ := h₄.right
         simp only [pe_option_get_some, pe_ite_false, pe_ifSome_some hty] at ht
         subst ht
-        replace ih₂ := ih₂ heq hwfenv hwε hvwf hitv hitw hitty h₄
+        replace ih₂ := ih₂ heq hwfenv hwε hvwf hitv hitw hitty href₂ h₄
         simp_do_let (evaluatePred x₂ v env.request env.entities)
         case error hx₂ => simp only [hx₂] at ih₂; exact ih₂
         case ok hx₂ =>
@@ -501,11 +512,15 @@ theorem compilePred_evaluate_ite {x₁ x₂ x₃ : PredExpr} {env : Env} {εnv :
     (hvwf : v.WellFormed env.entities)
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hrefs : PredExpr.ValidRefs (fun uid => env.entities.contains uid) (.ite x₁ x₂ x₃))
     (hok : compilePred (.ite x₁ x₂ x₃) it εnv = .ok pt)
     (ih₁ : CompilePredEvaluate x₁) (ih₂ : CompilePredEvaluate x₂) (ih₃ : CompilePredEvaluate x₃) :
     evaluatePred (.ite x₁ x₂ x₃) v env.request env.entities ∼ pt := by
+  have href₁ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hrefs; assumption
+  have href₂ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₂ := by cases hrefs; assumption
+  have href₃ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₃ := by cases hrefs; assumption
   replace ⟨t₁, hr₁, h₄⟩ := compilePred_ite_ok_implies hok
-  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty hr₁
+  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty href₁ hr₁
   simp only [evaluatePred, Result.as, Coe.coe, Value.asBool]
   simp_do_let (evaluatePred x₁ v env.request env.entities) <;>
   rename_i h₅ <;>
@@ -525,10 +540,10 @@ theorem compilePred_evaluate_ite {x₁ x₂ x₃ : PredExpr} {env : Env} {εnv :
       rw [eq_comm] at h₄
       case false =>
         simp only [ite_false, h₄, reduceCtorEq]
-        exact ih₃ heq hwfenv hwε hvwf hitv hitw hitty h₄
+        exact ih₃ heq hwfenv hwε hvwf hitv hitw hitty href₃ h₄
       case true =>
         simp only [ite_true, h₄]
-        exact ih₂ heq hwfenv hwε hvwf hitv hitw hitty h₄
+        exact ih₂ heq hwfenv hwε hvwf hitv hitw hitty href₂ h₄
     case h_2 v' hneq =>
       split at h₄
       case h_1 =>
@@ -587,6 +602,7 @@ theorem compilePred_evaluate_ihs {axs : List (Attr × PredExpr)} {ats : List (At
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
     (ih  : ∀ a x, (a, x) ∈ axs → CompilePredEvaluate x)
+    (hrefs : ∀ ax, ax ∈ axs → PredExpr.ValidRefs (fun uid => env.entities.contains uid) ax.snd)
     (hok : List.Forall₂ (fun px pt => px.fst = pt.fst ∧ compilePred px.snd it εnv = Except.ok pt.snd) axs ats) :
     List.Forall₂ (fun px pt => px.fst = pt.fst ∧ evaluatePred px.snd v env.request env.entities ∼ pt.snd) axs ats := by
   cases axs
@@ -599,9 +615,9 @@ theorem compilePred_evaluate_ihs {axs : List (Attr × PredExpr)} {ats : List (At
     subst hts
     exists thd
     simp only [hok.left,
-      ih xhd.fst xhd.snd (by simp only [true_or]) heq hwfenv hwε hvwf hitv hitw hitty hok.right, and_self,
+      ih xhd.fst xhd.snd (by simp only [true_or]) heq hwfenv hwε hvwf hitv hitw hitty hrefs.1 hok.right, and_self,
       List.cons.injEq, true_and, exists_eq_right']
-    apply compilePred_evaluate_ihs heq hwfenv hwε hvwf hitv hitw hitty _ htl
+    apply compilePred_evaluate_ihs heq hwfenv hwε hvwf hitv hitw hitty _ hrefs.2 htl
     intro a x h
     apply ih a x
     exact Or.inr h
@@ -643,12 +659,15 @@ theorem compilePred_evaluate_record {axs : List (Attr × PredExpr)} {env : Env} 
     (hvwf : v.WellFormed env.entities)
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hrefs : PredExpr.ValidRefs (fun uid => env.entities.contains uid) (.record axs))
     (hok : compilePred (.record axs) it εnv = .ok pt)
     (ih : ∀ a x, (a, x) ∈ axs → CompilePredEvaluate x) :
     evaluatePred (.record axs) v env.request env.entities ∼ pt := by
+  have hrs : ∀ ax, ax ∈ axs → PredExpr.ValidRefs (fun uid => env.entities.contains uid) ax.snd := by
+    cases hrefs; assumption
   replace ⟨ats, hok, ht⟩ := compilePred_record_ok_implies hok
   subst ht
-  replace ih := compilePred_evaluate_ihs heq hwfenv hwε hvwf hitv hitw hitty ih hok
+  replace ih := compilePred_evaluate_ihs heq hwfenv hwε hvwf hitv hitw hitty ih hrs hok
   simp only [compileRecord, someOf, evaluatePred,
       List.mapM₂_eq_mapM λ (p : Attr × PredExpr) => bindAttr p.fst (evaluatePred p.snd v env.request env.entities)]
   simp_do_let (axs.mapM λ p => bindAttr p.fst (evaluatePred p.snd v env.request env.entities))
@@ -1075,6 +1094,7 @@ theorem compilePred_evaluate_args_ihs {xs : List PredExpr} {env : Env} {εnv : S
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
     (ih  : ∀ (x : PredExpr), x ∈ xs → CompilePredEvaluate x)
+    (hrefs : ∀ x, x ∈ xs → PredExpr.ValidRefs (fun uid => env.entities.contains uid) x)
     (hok : List.Forall₂ (fun x t => compilePred x it εnv = Except.ok t) xs ts) :
     List.Forall₂ (fun x t => evaluatePred x v env.request env.entities ∼ t) xs ts := by
   cases xs
@@ -1086,10 +1106,10 @@ theorem compilePred_evaluate_args_ihs {xs : List PredExpr} {env : Env} {εnv : S
     replace ⟨thd, hok, ttl, htl, hts⟩ := hok
     subst hts
     exists thd
-    simp only [ih.left heq hwfenv hwε hvwf hitv hitw hitty hok, List.cons.injEq, true_and]
+    simp only [ih.left heq hwfenv hwε hvwf hitv hitw hitty hrefs.1 hok, List.cons.injEq, true_and]
     exists ttl
     simp only [and_true]
-    exact compilePred_evaluate_args_ihs heq hwfenv hwε hvwf hitv hitw hitty ih.right htl
+    exact compilePred_evaluate_args_ihs heq hwfenv hwε hvwf hitv hitw hitty ih.right hrefs.2 htl
 
 /-- `.call` arm (mirrors `compile_evaluate_call`). -/
 theorem compilePred_evaluate_call {f : ExtFun} {xs : List PredExpr} {env : Env} {εnv : SymEnv}
@@ -1098,12 +1118,15 @@ theorem compilePred_evaluate_call {f : ExtFun} {xs : List PredExpr} {env : Env} 
     (hvwf : v.WellFormed env.entities)
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hrefs : PredExpr.ValidRefs (fun uid => env.entities.contains uid) (.call f xs))
     (hok : compilePred (.call f xs) it εnv = .ok pt)
     (ih : ∀ x ∈ xs, CompilePredEvaluate x) :
     evaluatePred (.call f xs) v env.request env.entities ∼ pt := by
+  have hrs : ∀ x, x ∈ xs → PredExpr.ValidRefs (fun uid => env.entities.contains uid) x := by
+    cases hrefs; assumption
   replace ⟨ts, hok₂, hok⟩ := compilePred_call_ok_implies hok
   have hwφ := compilePred_wfs hwε hitw hitty hok₂
-  replace ih := compilePred_evaluate_args_ihs heq hwfenv hwε hvwf hitv hitw hitty ih hok₂
+  replace ih := compilePred_evaluate_args_ihs heq hwfenv hwε hvwf hitv hitw hitty ih hrs hok₂
   simp only [evaluatePred, List.mapM₁_eq_mapM (evaluatePred · v env.request env.entities)]
   cases f
   case decimal => exact compile_evaluate_call_decimal_pred ih hok
@@ -1128,5 +1151,54 @@ theorem compilePred_evaluate_call {f : ExtFun} {xs : List PredExpr} {env : Env} 
   case toMinutes => exact compile_evaluate_call_duration_toMinutes_pred hwφ ih hok
   case toHours => exact compile_evaluate_call_duration_toHours_pred hwφ ih hok
   case toDays => exact compile_evaluate_call_duration_toDays_pred hwφ ih hok
+
+/-- The dispatcher: every `PredExpr` satisfies `CompilePredEvaluate`. -/
+theorem compilePred_evaluate {p : PredExpr} : CompilePredEvaluate p := by
+  intro env εnv it pt v elemTy heq hwfenv hwε hvwf hitv hitw hitty hrefs hok
+  match p with
+  | .item => exact compilePred_evaluate_item hitv hok
+  | .lit l => exact compilePred_evaluate_lit hok
+  | .var vr => exact compilePred_evaluate_var heq hok
+  | .ite x₁ x₂ x₃ =>
+    exact compilePred_evaluate_ite heq hwfenv hwε hvwf hitv hitw hitty hrefs hok
+      compilePred_evaluate compilePred_evaluate compilePred_evaluate
+  | .and x₁ x₂ =>
+    exact compilePred_evaluate_and heq hwfenv hwε hvwf hitv hitw hitty hrefs hok
+      compilePred_evaluate compilePred_evaluate
+  | .or x₁ x₂ =>
+    exact compilePred_evaluate_or heq hwfenv hwε hvwf hitv hitw hitty hrefs hok
+      compilePred_evaluate compilePred_evaluate
+  | .unaryApp op₁ x₁ =>
+    exact compilePred_evaluate_unaryApp heq hwfenv hwε hvwf hitv hitw hitty hok hrefs
+      compilePred_evaluate
+  | .binaryApp op₂ x₁ x₂ =>
+    exact compilePred_evaluate_binaryApp heq hwfenv hwε hvwf hitv hitw hitty hrefs hok
+      compilePred_evaluate compilePred_evaluate
+  | .hasAttr x₁ a =>
+    have hr₁ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hrefs; assumption
+    exact compilePred_evaluate_hasAttr heq hwfenv hwε hvwf hitv hitw hitty hr₁ hok
+      compilePred_evaluate
+  | .extHasAttr x₁ a l =>
+    have hr₁ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hrefs; assumption
+    exact compilePred_evaluate_extHasAttr heq hwfenv hwε hvwf hitv hitw hitty hr₁ hok
+      compilePred_evaluate
+  | .getAttr x₁ a =>
+    have hr₁ : PredExpr.ValidRefs (fun uid => env.entities.contains uid) x₁ := by cases hrefs; assumption
+    exact compilePred_evaluate_getAttr heq hwfenv hwε hvwf hitv hitw hitty hr₁ hok
+      compilePred_evaluate
+  | .record axs =>
+    exact compilePred_evaluate_record heq hwfenv hwε hvwf hitv hitw hitty hrefs hok
+      (fun a x hpx => compilePred_evaluate)
+  | .call xfn xs =>
+    exact compilePred_evaluate_call heq hwfenv hwε hvwf hitv hitw hitty hrefs hok
+      (fun x hpx => compilePred_evaluate)
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
+      | (have := List.sizeOf_lt_of_mem hpx; omega)
 
 end Cedar.Thm
