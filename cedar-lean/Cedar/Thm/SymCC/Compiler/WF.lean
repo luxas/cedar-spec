@@ -1359,7 +1359,7 @@ private def EvaluateWF (x : Expr)  : Prop :=
     evaluate x env.request env.entities = .ok v →
     v.WellFormed env.entities
 
-private theorem value_bool_wf {b : Bool} {es : Entities} :
+public theorem value_bool_wf {b : Bool} {es : Entities} :
   Value.WellFormed es (Value.prim (.bool b))
 := by exact Value.WellFormed.prim_wf (by simp only [Prim.WellFormed])
 
@@ -1367,7 +1367,7 @@ private theorem value_int_wf {i : Int64} {es : Entities} :
   Value.WellFormed es (Value.prim (.int i))
 := by exact Value.WellFormed.prim_wf (by simp only [Prim.WellFormed])
 
-private theorem value_record_wf_implies_attr_value_wf {r : Map Attr Value} {a : Attr} {v : Value} {es : Entities} :
+public theorem value_record_wf_implies_attr_value_wf {r : Map Attr Value} {a : Attr} {v : Value} {es : Entities} :
   Value.WellFormed es (Value.record r) →
   Map.find? r a = some v →
   Value.WellFormed es v
@@ -1502,7 +1502,7 @@ private theorem evaluate_hasAttr_wf {x : Expr} {a : Attr} {env : Env} {v : Value
     subst hok
     exact value_bool_wf
 
-private theorem hasAttrs_loop_ok_is_bool {v : Value} {attrs : List Attr} {es : Entities} {r : Value} :
+public theorem hasAttrs_loop_ok_is_bool {v : Value} {attrs : List Attr} {es : Entities} {r : Value} :
   hasAttrs.loop v attrs es = .ok r →
   ∃ b, r = Value.prim (.bool b)
 := by
@@ -1520,7 +1520,7 @@ private theorem hasAttrs_loop_ok_is_bool {v : Value} {attrs : List Attr} {es : E
         exact ⟨false, hok.symm⟩
     · simp at hok
 
-private theorem hasAttrs_ok_is_bool {v : Value} {attr : Attr} {attrs : List Attr} {es : Entities} {r : Value} :
+public theorem hasAttrs_ok_is_bool {v : Value} {attr : Attr} {attrs : List Attr} {es : Entities} {r : Value} :
   hasAttrs v attr attrs es = .ok r →
   ∃ b, r = Value.prim (.bool b)
 := by
@@ -1571,7 +1571,7 @@ private theorem evaluate_getAttr_wf {x : Expr} {a : Attr} {env : Env} {v : Value
   case h_3 =>
     simp only [Except.bind_err, reduceCtorEq] at hok
 
-private theorem intOrErr_ok_wf {i : Option Int64} {v : Value} {es : Entities} :
+public theorem intOrErr_ok_wf {i : Option Int64} {v : Value} {es : Entities} :
   intOrErr i = Except.ok v → Value.WellFormed es v
 := by
   intro hok
@@ -1594,7 +1594,7 @@ private theorem evaluate_unaryApp_wf {op : UnaryOp} {x : Expr} {env : Env} {v : 
   case h_2 =>
     exact intOrErr_ok_wf hok
 
-private theorem inₛ_wf {uid : EntityUID} {vs : Set Value} {es : Entities} {v : Value} :
+public theorem inₛ_wf {uid : EntityUID} {vs : Set Value} {es : Entities} {v : Value} :
   inₛ uid vs es = Except.ok v → Value.WellFormed es v
 := by
   intro hok
