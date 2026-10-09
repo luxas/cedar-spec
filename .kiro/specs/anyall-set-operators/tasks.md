@@ -28,7 +28,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
 | 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
-| 6 | `phase6-anyall-drt-differential` | not started |
+| 6 | `phase6-anyall-drt-differential` | IN-PROGRESS — PLAN written (`branches/phase6-anyall-drt-differential/PLAN.md`); D-31 verified real (one-line `proto_gen.rs` fix) |
 | 6.5 | `phase6_5-anyall-tpe` | not started |
 | 7 | `phase7-anyall-docs` | not started |
 | 8 | `phase8-anyall-benchmarks` | not started |
@@ -204,6 +204,12 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
   _Satisfies:_ 5.1 (verified), design Surface 2/SymCC.
 
 ## Phase 6 — DRT generator + differential wiring (LAST)
+
+> **Status: IN-PROGRESS.** Plan: `branches/phase6-anyall-drt-differential/PLAN.md` (ordered
+> work items W1–W9, green checks, risks, open questions). D-31 verified real this session —
+> `cedar-drt/fuzz` fails to compile on default features (`proto_gen.rs:300` `BTreeMap` vs the
+> current proto's `HashMap`); one-line fix is Phase 6's first commit (W1). Branches cut in both
+> repos (cedar-spec off `phase5-anyall-symcc-wip-partA`, cedar off `phase5-anyall-symcc`).
 
 - **T6.1 Add the gated AST generator arm.**
   `cedar-policy-generators/src/expr.rs`: `#[cfg(feature = "anyall")]` arm generating
