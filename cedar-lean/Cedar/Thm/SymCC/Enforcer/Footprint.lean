@@ -334,26 +334,38 @@ theorem compilePred_toExpr_eq {q : PredExpr} {it : Term} {εnv : SymEnv}
   | .record axs, hfree =>
     simp only [compilePred, compile, PredExpr.toExpr]
     congr 1
-    rw [List.mapM₂_eq_mapM (λ y : Attr × PredExpr => do let l ← compilePred y.snd it εnv; Except.ok (y.fst, l)),
-        List.map₂_eq_map,
-        List.mapM₂_eq_mapM (λ y : Attr × Expr => do let l ← compile y.snd εnv; Except.ok (y.fst, l)),
-        List.mapM_map]
+    rw [List.map₂_eq_map (λ p : Attr × PredExpr => (p.fst, p.snd.toExpr))]
+    simp only [List.mapM₂_eq_mapM λ (p : Attr × PredExpr) => do .ok (p.fst, ← compilePred p.snd it εnv),
+      List.mapM₂_eq_mapM λ (p : Attr × Expr) => do .ok (p.fst, ← compile p.snd εnv),
+      List.mapM_map]
     apply List.mapM_congr
     intro x hx
     have hxfree : x.snd.mentionsIt = false := by
-      simp only [PredExpr.mentionsIt, List.any_eq_true, not_exists, Bool.not_eq_true] at hfree
-      exact hfree x (List.mem_attach₂ _ |>.mpr hx)
+      simp only [PredExpr.mentionsIt] at hfree
+      have hall : (axs.attach₂.all (fun y => !y.val.snd.mentionsIt)) = true := by
+        rw [← List.not_any_eq_all_not]; simp only [hfree, Bool.not_false]
+      rw [show (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) => !y.val.snd.mentionsIt)
+            = (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) =>
+                (fun (p : Attr × PredExpr) => !p.snd.mentionsIt) y.val) from rfl,
+          List.all_attach₂ (f := fun (p : Attr × PredExpr) => !p.snd.mentionsIt), List.all_eq_true] at hall
+      have := hall x hx
+      simp only [Bool.not_eq_true'] at this
+      exact this
     simp only [Function.comp, compilePred_toExpr_eq hxfree]
   | .call xfn xs, hfree =>
     simp only [compilePred, compile, PredExpr.toExpr]
     congr 1
-    rw [List.mapM₁_eq_mapM (λ y => compilePred y it εnv), List.map₁_eq_map,
-        List.mapM₁_eq_mapM (λ y => compile y εnv), List.mapM_map]
+    rw [List.map₁_eq_map (λ x : PredExpr => x.toExpr)]
+    simp only [List.mapM₁_eq_mapM (λ x => compilePred x it εnv),
+      List.mapM₁_eq_mapM (λ x => compile x εnv), List.mapM_map]
     apply List.mapM_congr
     intro x hx
     have hxfree : x.mentionsIt = false := by
-      simp only [PredExpr.mentionsIt, List.any_eq_true, not_exists, Bool.not_eq_true] at hfree
-      exact hfree x (List.mem_attach _ |>.mpr hx)
+      simp only [PredExpr.mentionsIt] at hfree
+      rw [List.any_eq_false] at hfree
+      have := hfree ⟨x, hx⟩ (List.mem_attach xs ⟨x, hx⟩)
+      simp only [Bool.not_eq_true] at this
+      exact this
     simp only [Function.comp, compilePred_toExpr_eq hxfree]
 termination_by sizeOf q
 decreasing_by
@@ -361,8 +373,8 @@ decreasing_by
   all_goals
     first
       | omega
-      | (rename_i h; have := List.sizeOf_snd_lt_sizeOf_list h; omega)
-      | (rename_i h; have := List.sizeOf_lt_of_mem h; omega)
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_snd_lt_sizeOf_list h; omega)
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
 
 private theorem mem_footprint_exists_wf_prop {p : Expr → Prop} {x : Expr} {tₑ : Term} {εnv : SymEnv}
   (hwε : εnv.WellFormedFor x)
