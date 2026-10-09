@@ -21,6 +21,7 @@ import Cedar.Thm.SymCC.Compiler.WF
 import Cedar.Thm.SymCC.Env.ofEnv
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Term.ofType
+import Cedar.Thm.WellTyped.Expr.TypeLifting
 
 /-!
 D-72 step (3), `.binaryApp` arm of `compilePred_well_typed`.
@@ -43,6 +44,81 @@ open Cedar.Thm
 open Cedar.Validation
 open SymCC
 
+/- Twins of the private `ofType`-vs-`liftBoolTypes` lemmas in
+   `Cedar/Thm/SymCC/Compiler/WellTyped.lean` (that file is currently unimportable — its
+   `compilePred_well_typed` dispatcher is red). Copied verbatim as `private` twins. -/
+mutual
+  private theorem ofQualifiedType_eq_ofQualifiedType_liftBool' {qty : QualifiedType} :
+      TermType.ofQualifiedType qty = TermType.ofQualifiedType qty.liftBoolTypes := by
+    cases qty
+    all_goals
+      simp only [TermType.ofQualifiedType, QualifiedType.liftBoolTypes, TermType.option.injEq]
+      apply ofType_eq_ofType_liftBool'
+  private theorem ofRecordType_eq_ofRecordType_liftBool' (recs : List (Attr × QualifiedType)) :
+      TermType.ofRecordType recs =
+      TermType.ofRecordType (recs.map (λ (k, v) => (k, QualifiedType.liftBoolTypes v))) := by
+    cases recs with
+    | nil => simp [TermType.ofRecordType]
+    | cons hd tail =>
+      simp only [List.map, TermType.ofRecordType, List.cons.injEq]
+      constructor
+      · simp only [Prod.mk.injEq, true_and]
+        apply ofQualifiedType_eq_ofQualifiedType_liftBool'
+      · apply ofRecordType_eq_ofRecordType_liftBool' tail
+  private theorem ofType_eq_ofType_liftBool' (ty : CedarType) :
+      TermType.ofType ty = TermType.ofType ty.liftBoolTypes := by
+    cases ty with
+    | bool _ => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | int => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | string => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | entity ety => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | ext xty => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | set ty =>
+      simp [TermType.ofType, CedarType.liftBoolTypes]
+      apply ofType_eq_ofType_liftBool' ty
+    | record rty =>
+      simp only [TermType.ofType, CedarType.liftBoolTypes, RecordType.liftBoolTypes,
+        Data.Map.mapOnValues₂_eq_mapOnValues, Data.Map.mapOnValues,
+        TermType.record.injEq, Data.Map.mk.injEq]
+      exact ofRecordType_eq_ofRecordType_liftBool' rty.toList
+end
+
+/--
+If two Cedar types have a LUB, their `TermType.ofType` images are equal. (`lubRecordType`
+requires identical keys + matching qualifiers, so the only lub-without-equality freedom is
+Bool annotations, which `ofType` collapses: `lifted_type_lub` + `ofType_eq_ofType_liftBool'`.)
+This is exactly the operand type-equality `compileApp₂`'s eq/contains guards require.
+-/
+private theorem lub_implies_ofType_eq {ty₁ ty₂ ty : CedarType}
+    (h : (ty₁ ⊔ ty₂) = .some ty) :
+    TermType.ofType ty₁ = TermType.ofType ty₂ := by
+  have hlift := lifted_type_lub h
+  rw [ofType_eq_ofType_liftBool' ty₁, ofType_eq_ofType_liftBool' ty₂, hlift]
+
+/--
+`compilePred` of a literal yields a primitive-typed `option` term, so `option.get` of it is
+primitive. Used to discharge `reducibleEq`'s "both primitive" case for `.eq` of two literals
+(where `typeOfEq` does not constrain the operand types but the operands are prims).
+-/
+private theorem compilePred_lit_option_get_isPrim {p : Prim} {it t : Term} {εnv : SymEnv}
+    (hok : compilePred (.lit p) it εnv = .ok t) :
+    (Factory.option.get t).typeOf.isPrimType = true := by
+  cases p with
+  | bool b =>
+    simp only [compilePred, compilePrim, Factory.someOf, Except.ok.injEq] at hok; subst hok
+    simp only [pe_option_get_some]; exact typeOf_term_prim_isPrimType _
+  | int i =>
+    simp only [compilePred, compilePrim, Factory.someOf, Except.ok.injEq] at hok; subst hok
+    simp only [pe_option_get_some]; exact typeOf_term_prim_isPrimType _
+  | string s =>
+    simp only [compilePred, compilePrim, Factory.someOf, Except.ok.injEq] at hok; subst hok
+    simp only [pe_option_get_some]; exact typeOf_term_prim_isPrimType _
+  | entityUID uid =>
+    simp only [compilePred, compilePrim] at hok
+    split at hok <;> simp only [Factory.someOf, Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    simp only [pe_option_get_some]; exact typeOf_term_prim_isPrimType _
+
 /--
 Peel `typeOfBinaryApp`'s op/type match. From a success
 `typeOfBinaryApp op₂ ty₁ ty₂ x₁ x₂ c Γ = .ok (typ, c')` it returns, per reachable
@@ -60,7 +136,10 @@ private theorem typeOfBinaryApp_ok_find
     {c c' : Capabilities} {Γ : TypeEnv}
     (htp : typeOfBinaryApp op₂ ty₁ ty₂ x₁ x₂ c Γ = .ok (typ, c')) :
     -- `eq`
-    (op₂ = .eq ∧ TermType.ofType typ.typeOf = .bool) ∨
+    (op₂ = .eq ∧
+      ((∃ p₁ p₂, x₁ = .lit p₁ ∧ x₂ = .lit p₂) ∨
+        (∃ b, reducibleEq (TermType.ofType ty₁.typeOf) (TermType.ofType ty₂.typeOf) = .ok b)) ∧
+      TermType.ofType typ.typeOf = .bool) ∨
     -- `mem` entity/entity, `mem` entity/set-entity
     (∃ ety₁ ety₂, op₂ = .mem ∧ ty₁.typeOf = .entity ety₁ ∧ ty₂.typeOf = .entity ety₂ ∧
       TermType.ofType typ.typeOf = .bool) ∨
@@ -85,32 +164,55 @@ private theorem typeOfBinaryApp_ok_find
     ((op₂ = .add ∨ op₂ = .sub ∨ op₂ = .mul) ∧ ty₁.typeOf = .int ∧ ty₂.typeOf = .int ∧
       TermType.ofType typ.typeOf = .bitvec 64) ∨
     -- `contains`
-    (∃ ty₃, op₂ = .contains ∧ ty₁.typeOf = .set ty₃ ∧ TermType.ofType typ.typeOf = .bool) ∨
+    (∃ ty₃, op₂ = .contains ∧ ty₁.typeOf = .set ty₃ ∧
+      TermType.ofType ty₂.typeOf = TermType.ofType ty₃ ∧ TermType.ofType typ.typeOf = .bool) ∨
     -- `containsAll`/`containsAny`
     (∃ ty₃ ty₄, (op₂ = .containsAll ∨ op₂ = .containsAny) ∧
-      ty₁.typeOf = .set ty₃ ∧ ty₂.typeOf = .set ty₄ ∧ TermType.ofType typ.typeOf = .bool) := by
+      ty₁.typeOf = .set ty₃ ∧ ty₂.typeOf = .set ty₄ ∧ TermType.ofType ty₃ = TermType.ofType ty₄ ∧
+      TermType.ofType typ.typeOf = .bool) := by
   simp only [typeOfBinaryApp] at htp
   split at htp
   -- `.eq`
   case _ =>
     left
-    refine ⟨rfl, ?_⟩
-    simp only [typeOfEq, Function.comp_apply, Validation.ok, Validation.err] at htp
-    split at htp
-    · -- lit/lit: `if p₁ == p₂ then ok .tt else ok .ff`
-      split at htp <;>
-        (simp only [Except.ok.injEq, Prod.mk.injEq] at htp
-         obtain ⟨rfl, _⟩ := htp
-         simp only [TypedExpr.typeOf, TermType.ofType])
-    · -- non-lit: match on lub
+    refine ⟨rfl, ?_, ?_⟩
+    · -- lit/lit discriminant (left) OR `reducibleEq`-ok (right).
+      simp only [typeOfEq, Function.comp_apply, Validation.ok, Validation.err] at htp
       split at htp
-      · simp only [Except.ok.injEq, Prod.mk.injEq] at htp
-        obtain ⟨rfl, _⟩ := htp
-        simp only [TypedExpr.typeOf, TermType.ofType]
+      · -- lit/lit
+        rename_i p₁ p₂
+        exact Or.inl ⟨p₁, p₂, rfl, rfl⟩
+      · -- non-lit: lub some ⇒ `ofType` equal ⇒ reducibleEq .ok true;
+        -- lub none ⇒ both entity ⇒ both prim ⇒ reducibleEq .ok false.
+        right
+        split at htp
+        · rename_i hlub
+          have heqty := lub_implies_ofType_eq hlub
+          exact ⟨true, by simp only [reducibleEq, heqty, if_true]⟩
+        · split at htp
+          · -- entity/entity: both `ofType` are prim ⇒ reducibleEq succeeds (.ok true/false).
+            rename_i hent₁ hent₂
+            simp only [reducibleEq, hent₁, hent₂, TermType.ofType, TermType.isPrimType,
+              Bool.and_self]
+            split
+            · exact ⟨true, rfl⟩
+            · exact ⟨false, rfl⟩
+          · simp only [Validation.err, reduceCtorEq] at htp
+    · -- result type is `.bool`
+      simp only [typeOfEq, Function.comp_apply, Validation.ok, Validation.err] at htp
+      split at htp
       · split at htp <;>
-          simp only [Except.ok.injEq, Prod.mk.injEq, Validation.err, reduceCtorEq] at htp
-        obtain ⟨rfl, _⟩ := htp
-        simp only [TypedExpr.typeOf, TermType.ofType]
+          (simp only [Except.ok.injEq, Prod.mk.injEq] at htp
+           obtain ⟨rfl, _⟩ := htp
+           simp only [TypedExpr.typeOf, TermType.ofType])
+      · split at htp
+        · simp only [Except.ok.injEq, Prod.mk.injEq] at htp
+          obtain ⟨rfl, _⟩ := htp
+          simp only [TypedExpr.typeOf, TermType.ofType]
+        · split at htp <;>
+            simp only [Except.ok.injEq, Prod.mk.injEq, Validation.err, reduceCtorEq] at htp
+          obtain ⟨rfl, _⟩ := htp
+          simp only [TypedExpr.typeOf, TermType.ofType]
   -- `.mem` entity/entity
   case _ ety₁ ety₂ h₁ h₂ =>
     right; left
@@ -201,30 +303,43 @@ private theorem typeOfBinaryApp_ok_find
   -- `.contains set _`
   case _ ty₃ h₁ =>
     right; right; right; right; right; right; right; right; right; left
-    refine ⟨ty₃, rfl, h₁, ?_⟩
-    simp only [ifLubThenBool, Validation.ok, Validation.err] at htp
-    split at htp <;>
-      simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq]
-    obtain ⟨rfl, _⟩ := htp
-    simp only [TypedExpr.typeOf, TermType.ofType]
+    refine ⟨ty₃, rfl, h₁, ?_, ?_⟩
+    · -- `ifLubThenBool ty₂.typeOf ty₃` succeeded ⇒ lub exists ⇒ `ofType` equal.
+      simp only [ifLubThenBool] at htp
+      split at htp
+      · rename_i hlub; exact lub_implies_ofType_eq hlub
+      · simp only [Validation.err, bind, Except.bind, reduceCtorEq] at htp
+    · simp only [ifLubThenBool, Validation.ok, Validation.err] at htp
+      split at htp <;>
+        simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq]
+      obtain ⟨rfl, _⟩ := htp
+      simp only [TypedExpr.typeOf, TermType.ofType]
   -- `.containsAll set set`
   case _ ty₃ ty₄ h₁ h₂ =>
     right; right; right; right; right; right; right; right; right; right
-    refine ⟨ty₃, ty₄, Or.inl rfl, h₁, h₂, ?_⟩
-    simp only [ifLubThenBool, Validation.ok, Validation.err] at htp
-    split at htp <;>
-      simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq]
-    obtain ⟨rfl, _⟩ := htp
-    simp only [TypedExpr.typeOf, TermType.ofType]
+    refine ⟨ty₃, ty₄, Or.inl rfl, h₁, h₂, ?_, ?_⟩
+    · simp only [ifLubThenBool] at htp
+      split at htp
+      · rename_i hlub; exact lub_implies_ofType_eq hlub
+      · simp only [Validation.err, bind, Except.bind, reduceCtorEq] at htp
+    · simp only [ifLubThenBool, Validation.ok, Validation.err] at htp
+      split at htp <;>
+        simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq]
+      obtain ⟨rfl, _⟩ := htp
+      simp only [TypedExpr.typeOf, TermType.ofType]
   -- `.containsAny set set`
   case _ ty₃ ty₄ h₁ h₂ =>
     right; right; right; right; right; right; right; right; right; right
-    refine ⟨ty₃, ty₄, Or.inr rfl, h₁, h₂, ?_⟩
-    simp only [ifLubThenBool, Validation.ok, Validation.err] at htp
-    split at htp <;>
-      simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq]
-    obtain ⟨rfl, _⟩ := htp
-    simp only [TypedExpr.typeOf, TermType.ofType]
+    refine ⟨ty₃, ty₄, Or.inr rfl, h₁, h₂, ?_, ?_⟩
+    · simp only [ifLubThenBool] at htp
+      split at htp
+      · rename_i hlub; exact lub_implies_ofType_eq hlub
+      · simp only [Validation.err, bind, Except.bind, reduceCtorEq] at htp
+    · simp only [ifLubThenBool, Validation.ok, Validation.err] at htp
+      split at htp <;>
+        simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq]
+      obtain ⟨rfl, _⟩ := htp
+      simp only [TypedExpr.typeOf, TermType.ofType]
   -- err arm
   case _ => simp only [Validation.err, reduceCtorEq] at htp
 
@@ -269,19 +384,41 @@ theorem compilePred_well_typed_binaryApp
   rcases typeOfBinaryApp_ok_find htp with
     heq | hmemₑ | hmemₛ | hhasTag | hgetTag | hless_int | hless_dt | hless_dur |
     harith | hcontains | hcontainsAll
-  -- `.eq`  — BLOCKED under this hypothesis (see note); left as an unproved (unsolved) goal, not an admit.
+  -- `.eq`
   case _ =>
-    obtain ⟨rfl, htyp⟩ := heq
-    -- `compileApp₂ .eq t₁' t₂' = if (← reducibleEq t₁'.typeOf t₂'.typeOf) then ⊙eq else ⊙false`,
-    -- and `reducibleEq a b` ERRORS unless `a = b` or both are primitive term types.
-    -- `typeOfEq`'s success only guarantees `ty₁.typeOf ⊔ ty₂.typeOf = some _` (a LUB exists);
-    -- for two DISTINCT record (or set-of-record) types the LUB exists WITHOUT
-    -- `ofType ty₁.typeOf = ofType ty₂.typeOf` and WITHOUT either being primitive, so
-    -- `compileApp₂ .eq` returns `.error .typeError` — the arm is FALSE for `.eq` on record/set
-    -- operands under the raw-`typeOfBinaryApp` hypothesis. Same gap as the D-73 `and/or/ite` fork;
-    -- the scalar `compile_well_typed_binaryApp` avoids it via `BinaryOp.WellTyped.eq`'s
-    -- `x₁.typeOf = x₂.typeOf`. Remaining goal: the full `∃ t, compilePred (.binaryApp .eq …) = .ok t ∧ …`.
-    skip
+    obtain ⟨rfl, hdisc, htyp⟩ := heq
+    -- `compileApp₂ .eq t₁' t₂' = if (← reducibleEq t₁'.typeOf t₂'.typeOf) then ⊙eq else ⊙false`.
+    -- `reducibleEq` succeeds here: either the operands' `ofType`s are equal/both-prim (non-lit
+    -- case, via the LUB), or both operands are literals (⇒ primitive compiled term types).
+    have hre : ∃ b, reducibleEq (Factory.option.get t₁).typeOf (Factory.option.get t₂).typeOf
+        = .ok b := by
+      rw [hty_get_1, hty_get_2]
+      rcases hdisc with ⟨p₁, p₂, hx₁, hx₂⟩ | hb
+      · -- both operands are literals: `compilePred (.lit _)` ⇒ primitive compiled type.
+        have hx₁' : x₁ = .lit p₁ := by
+          cases x₁ <;> simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq,
+            PredExpr.lit.injEq]
+        have hx₂' : x₂ = .lit p₂ := by
+          cases x₂ <;> simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq,
+            PredExpr.lit.injEq]
+        subst hx₁' hx₂'
+        have hp₁ := compilePred_lit_option_get_isPrim hok₁
+        have hp₂ := compilePred_lit_option_get_isPrim hok₂
+        rw [hty_get_1] at hp₁; rw [hty_get_2] at hp₂
+        simp only [reducibleEq, hp₁, hp₂, Bool.and_self]
+        split
+        · exact ⟨true, rfl⟩
+        · exact ⟨false, rfl⟩
+      · exact hb
+    obtain ⟨b, hre⟩ := hre
+    have ⟨t₃, hok₃⟩ : ∃ t₃, compileApp₂ .eq (Factory.option.get t₁) (Factory.option.get t₂)
+        (SymEnv.ofEnv Γ).entities = .ok t₃ := by
+      simp only [compileApp₂, hre, Except.bind_ok]
+      split <;> exact ⟨_, rfl⟩
+    refine assemble hok₃ ?_
+    have := (compileApp₂_wf_types hwε.right hwf_get_1 hwf_get_2 hok₃).right
+    simp only at this
+    rw [this, htyp]
   -- `.mem` entity/entity
   case _ =>
     obtain ⟨ety₁, ety₂, rfl, hce₁, hce₂, htyp⟩ := hmemₑ
@@ -437,20 +574,39 @@ theorem compilePred_well_typed_binaryApp
        have := (compileApp₂_wf_types hwε.right hwf_get_1 hwf_get_2 hok₃).right
        simp only at this
        rw [this, htyp])
-  -- `.contains`  — BLOCKED (see note); unsolved goal (not an admit).
+  -- `.contains`
   case _ =>
-    obtain ⟨ty₃, rfl, hce₁, htyp⟩ := hcontains
-    -- `compileApp₂ .contains, .set elemTT, otherTT = if elemTT = otherTT then ⊙set.member else .error`.
-    -- `typeOfBinaryApp .contains` only needs `ty₂.typeOf ⊔ ty₃ = some _` (a LUB), not
-    -- `ofType ty₃ = ofType ty₂.typeOf`; for distinct record element/operand types the LUB exists
-    -- yet the compiler's equality guard fails → `.error .typeError`. Blocked exactly as `.eq`.
-    skip
-  -- `.containsAll`/`.containsAny`  — BLOCKED (see note); unsolved goal (not an admit).
+    obtain ⟨ty₃, rfl, hce₁, hofeq, htyp⟩ := hcontains
+    -- `(option.get t₁).typeOf = .set (ofType ty₃)`, `(option.get t₂).typeOf = ofType ty₂.typeOf`,
+    -- and `ofType ty₂.typeOf = ofType ty₃` from the LUB, so the equality guard passes.
+    simp only [hce₁, TermType.ofType] at hty_get_1
+    have ⟨t₃, hok₃⟩ : ∃ t₃, compileApp₂ .contains (Factory.option.get t₁) (Factory.option.get t₂)
+        (SymEnv.ofEnv Γ).entities = .ok t₃ := by
+      simp only [compileApp₂, hty_get_1, hty_get_2, hofeq, if_true]
+      exact ⟨_, rfl⟩
+    refine assemble hok₃ ?_
+    have := (compileApp₂_wf_types hwε.right hwf_get_1 hwf_get_2 hok₃).right
+    simp only at this
+    rw [this, htyp]
+  -- `.containsAll`/`.containsAny`
   case _ =>
-    obtain ⟨ty₃, ty₄, hop, hce₁, hce₂, htyp⟩ := hcontainsAll
-    -- `compileApp₂ .containsAll/.containsAny, .set ett₁, .set ett₂ = if ett₁ = ett₂ then … else .error`.
-    -- `typeOfBinaryApp` only needs `ty₃ ⊔ ty₄ = some _`; for distinct record element types the LUB
-    -- exists without `ofType ty₃ = ofType ty₄`, so the compiler's guard fails. Blocked as `.eq`.
-    skip
+    obtain ⟨ty₃, ty₄, hop, hce₁, hce₂, hofeq, htyp⟩ := hcontainsAll
+    simp only [hce₁, TermType.ofType] at hty_get_1
+    simp only [hce₂, TermType.ofType] at hty_get_2
+    rcases hop with rfl | rfl
+    · have ⟨t₃, hok₃⟩ : ∃ t₃, compileApp₂ .containsAll (Factory.option.get t₁) (Factory.option.get t₂)
+          (SymEnv.ofEnv Γ).entities = .ok t₃ := by
+        simp only [compileApp₂, hty_get_1, hty_get_2, hofeq, if_true]; exact ⟨_, rfl⟩
+      refine assemble hok₃ ?_
+      have := (compileApp₂_wf_types hwε.right hwf_get_1 hwf_get_2 hok₃).right
+      simp only at this
+      rw [this, htyp]
+    · have ⟨t₃, hok₃⟩ : ∃ t₃, compileApp₂ .containsAny (Factory.option.get t₁) (Factory.option.get t₂)
+          (SymEnv.ofEnv Γ).entities = .ok t₃ := by
+        simp only [compileApp₂, hty_get_1, hty_get_2, hofeq, if_true]; exact ⟨_, rfl⟩
+      refine assemble hok₃ ?_
+      have := (compileApp₂_wf_types hwε.right hwf_get_1 hwf_get_2 hok₃).right
+      simp only at this
+      rw [this, htyp]
 
 end Cedar.Thm
