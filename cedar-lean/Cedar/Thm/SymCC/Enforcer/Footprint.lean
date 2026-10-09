@@ -386,11 +386,88 @@ theorem mem_footprintAllPred_option_entity {p : PredExpr} {x₁ : Expr} {εnv : 
 := by
   intro hin
   simp only [footprintAllPred] at hin
+
   split at hin
   · split at hin
     · exact mem_footprintPred_option_entity hin
     · simp only [Set.not_mem_empty] at hin
   · simp only [Set.not_mem_empty] at hin
+
+/--
+Witness for the `.all` predicate branch: every term in `footprintPred p it εnv`
+is the compiled `toExpr` of some `it`-free sub-predicate `q` of `p`, and when `p`
+has valid refs so does `q`. The witnessing expression `q.toExpr` is therefore a
+well-formed ordinary expression compiling to the term (D-70, option A).
+-/
+theorem mem_footprintPred_exists {vr : EntityUID → Prop} {p : PredExpr} {it tₑ : Term} {εnv : SymEnv}
+  (hin : tₑ ∈ footprintPred p it εnv) :
+  ∃ q : PredExpr, q.mentionsIt = false ∧ (p.ValidRefs vr → q.ValidRefs vr) ∧ compile q.toExpr εnv = .ok tₑ
+:= by
+  induction p using footprintPred.induct generalizing tₑ <;> simp only [footprintPred] at hin
+  case case1 => simp only [Set.not_mem_empty] at hin
+  case case2 | case3 =>
+    have ⟨hfree, hok⟩ := mem_footprintPred_ofEntity_exists hin
+    exact ⟨_, hfree, (fun h => h), hok⟩
+  case case4 ih₁ ih₂ ih₃ =>
+    rcases mem_footprintPred_ofBranch_mem hin with hin | hin | hin
+    · have ⟨q, hf, himp, hok⟩ := ih₁ hin
+      exact ⟨q, hf, (fun h => by cases h with | ite_valid hv₁ _ _ => exact himp hv₁), hok⟩
+    · have ⟨q, hf, himp, hok⟩ := ih₂ hin
+      exact ⟨q, hf, (fun h => by cases h with | ite_valid _ hv₂ _ => exact himp hv₂), hok⟩
+    · have ⟨q, hf, himp, hok⟩ := ih₃ hin
+      exact ⟨q, hf, (fun h => by cases h with | ite_valid _ _ hv₃ => exact himp hv₃), hok⟩
+  case case5 ih₁ ih₂ =>
+    rcases mem_footprintPred_ofBranch_mem hin with hin | hin | hin
+    · have ⟨q, hf, himp, hok⟩ := ih₁ hin
+      exact ⟨q, hf, (fun h => by cases h with | and_valid hv₁ _ => exact himp hv₁), hok⟩
+    · have ⟨q, hf, himp, hok⟩ := ih₂ hin
+      exact ⟨q, hf, (fun h => by cases h with | and_valid _ hv₂ => exact himp hv₂), hok⟩
+    · simp only [Set.not_mem_empty] at hin
+  case case6 ih₁ ih₂ =>
+    rcases mem_footprintPred_ofBranch_mem hin with hin | hin | hin
+    · have ⟨q, hf, himp, hok⟩ := ih₁ hin
+      exact ⟨q, hf, (fun h => by cases h with | or_valid hv₁ _ => exact himp hv₁), hok⟩
+    · simp only [Set.not_mem_empty] at hin
+    · have ⟨q, hf, himp, hok⟩ := ih₂ hin
+      exact ⟨q, hf, (fun h => by cases h with | or_valid _ hv₂ => exact himp hv₂), hok⟩
+  case case7 ih₁ ih₂ =>
+    simp only [Set.mem_union] at hin
+    rcases hin with (hin | hin) | hin
+    · have ⟨hfree, hok⟩ := mem_footprintPred_ofEntity_exists hin
+      exact ⟨_, hfree, (fun h => h), hok⟩
+    · have ⟨q, hf, himp, hok⟩ := ih₁ hin
+      exact ⟨q, hf, (fun h => by cases h with | binaryApp_valid hv₁ _ => exact himp hv₁), hok⟩
+    · have ⟨q, hf, himp, hok⟩ := ih₂ hin
+      exact ⟨q, hf, (fun h => by cases h with | binaryApp_valid _ hv₂ => exact himp hv₂), hok⟩
+  case case8 ih =>
+    simp only [Set.mem_union] at hin
+    rcases hin with hin | hin
+    · have ⟨hfree, hok⟩ := mem_footprintPred_ofEntity_exists hin
+      exact ⟨_, hfree, (fun h => h), hok⟩
+    · have ⟨q, hf, himp, hok⟩ := ih hin
+      exact ⟨q, hf, (fun h => by cases h with | getAttr_valid hv₁ => exact himp hv₁), hok⟩
+  case case9 ih =>
+    have ⟨q, hf, himp, hok⟩ := ih hin
+    exact ⟨q, hf, (fun h => by cases h with | hasAttr_valid hv₁ => exact himp hv₁), hok⟩
+  case case10 ih =>
+    have ⟨q, hf, himp, hok⟩ := ih hin
+    exact ⟨q, hf, (fun h => by cases h with | extHasAttr_valid hv₁ => exact himp hv₁), hok⟩
+  case case11 ih =>
+    have ⟨q, hf, himp, hok⟩ := ih hin
+    exact ⟨q, hf, (fun h => by cases h with | unaryApp_valid hv₁ => exact himp hv₁), hok⟩
+  case case12 ih =>
+    simp only [List.mapUnion₁_eq_mapUnion (footprintPred · it εnv), List.mem_mapUnion_iff_mem_exists] at hin
+    replace ⟨xᵢ, hinᵢ, hin⟩ := hin
+    have ⟨q, hf, himp, hok⟩ := ih xᵢ hinᵢ hin
+    exact ⟨q, hf, (fun h => by cases h with | call_valid hv => exact himp (hv xᵢ hinᵢ)), hok⟩
+  case case13 ih =>
+    simp only [List.mapUnion₂_eq_mapUnion λ y : Attr × PredExpr => footprintPred y.snd it εnv,
+      List.mem_mapUnion_iff_mem_exists] at hin
+    replace ⟨(aᵢ, xᵢ), hinᵢ, hin⟩ := hin
+    simp only at hin ih
+    have ⟨q, hf, himp, hok⟩ := ih aᵢ xᵢ (List.sizeOf_attach₂ hinᵢ) hin
+    exact ⟨q, hf, (fun h => by cases h with | record_valid hv => exact himp (hv (aᵢ, xᵢ) hinᵢ)), hok⟩
+
 
 theorem mem_footprint_option_entity {x : Expr} {εnv : SymEnv} {t : Term} :
   t ∈ footprint x εnv → ∃ ety, t.typeOf = .option (.entity ety)
