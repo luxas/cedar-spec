@@ -28,7 +28,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
 | 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
-| 6 | `phase6-anyall-drt-differential` | IN-PROGRESS — PLAN written (`branches/phase6-anyall-drt-differential/PLAN.md`); D-31 verified real (one-line `proto_gen.rs` fix) |
+| 6 | `phase6-anyall-drt-differential` | IMPLEMENTED, review round 2 pending — W1–W8 landed; review round 1 (F-1..F-5) fixed; see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
 | 6.5 | `phase6_5-anyall-tpe` | not started |
 | 7 | `phase7-anyall-docs` | not started |
 | 8 | `phase8-anyall-benchmarks` | not started |
@@ -205,11 +205,12 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
 
 ## Phase 6 — DRT generator + differential wiring (LAST)
 
-> **Status: IN-PROGRESS.** Plan: `branches/phase6-anyall-drt-differential/PLAN.md` (ordered
-> work items W1–W9, green checks, risks, open questions). D-31 verified real this session —
-> `cedar-drt/fuzz` fails to compile on default features (`proto_gen.rs:300` `BTreeMap` vs the
-> current proto's `HashMap`); one-line fix is Phase 6's first commit (W1). Branches cut in both
-> repos (cedar-spec off `phase5-anyall-symcc-wip-partA`, cedar off `phase5-anyall-symcc`).
+> **Status: IMPLEMENTED, review round 2 pending.** All W1–W8 landed; blind review round 1
+> (5 findings F-1..F-5) all fixed. See `branches/phase6-anyall-drt-differential/OUTCOMES.md` for
+> per-item commits (cedar-spec @ `fd093b3`, nested cedar @ `5aae930d`), ~6% non-vacuity, ~183k
+> fuzz executions (0 mismatch), the F-4 HO_ALL fix + cvc5 proof, and the Phase 9 carry
+> (D-70 option B, D-74 honest normalization, D-78 logic-narrowing, solved-symbolic-`set.all`
+> coverage metric). D-31 FIXED (W1). Branches cut from Phase 5B green @ `bf97fa2`.
 
 - **T6.1 Add the gated AST generator arm.**
   `cedar-policy-generators/src/expr.rs`: `#[cfg(feature = "anyall")]` arm generating
