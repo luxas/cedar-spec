@@ -1141,6 +1141,52 @@ private theorem compile_interpret_call_on_footprint {xfn : ExtFun} {xs : List Ex
   simp only [hr₁, Except.ok.injEq] at hr₂
   exact hr₂
 
+/--
+D-70 option A, step (3): the predicate analogue of `CompileInterpretOnFootprint`.
+Adds the element-term agreement `it.interpret I₁ = it.interpret I₂`, `it`
+well-formedness/typing, and `NoItDependentIn p` as hypotheses — the latter guards
+the one arm (`.binaryApp .mem`) whose compiled form would otherwise consult the
+`it`-dependent ancestor function.
+-/
+private def CompilePredInterpretOnFootprint (p : PredExpr) (ft : Set Term) (εnv : SymEnv) (it : Term) (elemTy : TermType) (I₁ I₂ : Interpretation) : Prop :=
+  ∀ {pt : Term},
+    I₁.WellFormed εnv.entities →
+    I₂.WellFormed εnv.entities →
+    εnv.WellFormed →
+    it.WellFormed εnv.entities →
+    it.typeOf = .option elemTy →
+    it.interpret I₁ = it.interpret I₂ →
+    εnv.SameOn ft I₁ I₂ →
+    footprintPred p it εnv ⊆ ft →
+    p.NoItDependentIn = true →
+    compilePred p it εnv = .ok pt →
+    pt.interpret I₁ = pt.interpret I₂
+
+private theorem compilePred_interpret_item_on_footprint {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term}
+  (hit : it.interpret I₁ = it.interpret I₂)
+  (hok : compilePred .item it εnv = .ok pt) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  simp only [compilePred, Except.ok.injEq] at hok; subst hok; exact hit
+
+private theorem compilePred_interpret_lit_on_footprint {l : Prim} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term}
+  (hok : compilePred (.lit l) it εnv = .ok pt) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  rw [compilePred_toExpr_eq (q := .lit l) (by simp only [PredExpr.mentionsIt])] at hok
+  simp only [PredExpr.toExpr] at hok
+  exact compile_interpret_lit_on_footprint hok
+
+private theorem compilePred_interpret_var_on_footprint {v : Var} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term}
+  (hwε : εnv.WellFormed)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hok : compilePred (.var v) it εnv = .ok pt) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  rw [compilePred_toExpr_eq (q := .var v) (by simp only [PredExpr.mentionsIt])] at hok
+  simp only [PredExpr.toExpr] at hok
+  exact compile_interpret_var_on_footprint ⟨hwε, Expr.ValidRefs.var_valid⟩ hsm hok
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
