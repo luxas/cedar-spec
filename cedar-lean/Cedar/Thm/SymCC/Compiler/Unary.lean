@@ -26,7 +26,7 @@ namespace Cedar.Thm
 
 open Batteries Data Spec SymCC Factory
 
-private theorem compileApp₁_implies_apply₁ {op₁ : UnaryOp} {v₁ : Value} {t₁ t₂ : Term} {εs : SymEntities}
+public theorem compileApp₁_implies_apply₁ {op₁ : UnaryOp} {v₁ : Value} {t₁ t₂ : Term} {εs : SymEntities}
   (hwφ₁ : Term.WellFormed εs t₁)
   (ih : v₁ ∼ t₁)
   (hr : compileApp₁ op₁ t₁ = Except.ok t₂) :
