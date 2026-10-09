@@ -1159,6 +1159,7 @@ private def CompilePredInterpretOnFootprint (p : PredExpr) (ft : Set Term) (εnv
     εnv.SameOn ft I₁ I₂ →
     footprintPred p it εnv ⊆ ft →
     p.NoItDependentIn = true →
+    p.ValidRefs (εnv.entities.isValidEntityUID ·) →
     compilePred p it εnv = .ok pt →
     pt.interpret I₁ = pt.interpret I₂
 
@@ -1400,6 +1401,163 @@ private theorem compilePred_interpret_ite_on_footprint {x₁ x₂ x₃ : PredExp
       (ih₂ hft.left.right hok₂)
       (ih₃ hft.right hok₃)
 
+
+private theorem compilePred_interpret_binaryApp_on_footprint {op₂ : BinaryOp} {x₁ x₂ : PredExpr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hitI : it.interpret I₁ = it.interpret I₂)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.binaryApp op₂ x₁ x₂) it εnv ⊆ ft)
+  (hnoit : (PredExpr.binaryApp op₂ x₁ x₂).NoItDependentIn = true)
+  (hpvr : (PredExpr.binaryApp op₂ x₁ x₂).ValidRefs (εnv.entities.isValidEntityUID ·))
+  (hok : compilePred (.binaryApp op₂ x₁ x₂) it εnv = .ok pt)
+  (ih₁ : ∀ {t₁}, footprintPred x₁ it εnv ⊆ ft → compilePred x₁ it εnv = .ok t₁ → t₁.interpret I₁ = t₁.interpret I₂)
+  (ih₂ : ∀ {t₂}, footprintPred x₂ it εnv ⊆ ft → compilePred x₂ it εnv = .ok t₂ → t₂.interpret I₁ = t₂.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  replace ⟨t₁, t₂, t₃, hok₁, hok₂, hok, ht⟩ := compilePred_binaryApp_ok_implies hok
+  subst ht
+  simp only [footprintPred, Set.union_subset] at hft
+  have hihsub₁ := ih₁ hft.left.right hok₁
+  have hihsub₂ := ih₂ hft.right hok₂
+  have ⟨hwt₁', ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo₁ := wf_option_get hwt₁' hty₁
+  have ⟨hwt₂', ty₂, hty₂⟩ := compilePred_wf hwε hitw hitty hok₂
+  have hwo₂ := wf_option_get hwt₂' hty₂
+  have hwt₁ : t₁.WellFormed εnv.entities ∧ t₁.typeOf = .option ty₁ := ⟨hwt₁', hty₁⟩
+  have hwt₂ : t₂.WellFormed εnv.entities ∧ t₂.typeOf = .option ty₂ := ⟨hwt₂', hty₂⟩
+  have ⟨hwt₃, ty₃, hty₃⟩ := compileApp₂_wf hwε.right hwo₁.left hwo₂.left hok
+  have hwt₂₃ := wf_ifSome_option hwt₂.left hwt₃ hty₃
+  simp_ifSome_eq hI₁ hI₂ hwt₁.left hwt₁.right hwt₂₃.left hwt₂₃.right hihsub₁
+  rename_i t₁' hlit₁ hty₁'
+  simp_ifSome_eq hI₁ hI₂ hwt₂.left hwt₂.right hwt₃ hty₃ hihsub₂
+  rename_i hlit₂ _
+  clear hwt₃ hty₃ hwt₂₃
+  have ih₁' := interpret_option_get_eq hwt₁.left hwt₁.right hihsub₁ hlit₁
+  have ih₂' := interpret_option_get_eq hwt₂.left hwt₂.right hihsub₂ hlit₂
+  cases op₂
+  case eq =>
+    rcases compileApp₂_eq_ok_implies hok with ⟨_, hok⟩ | ⟨_, hok⟩ <;> subst hok
+    · simp only [interpret_term_some, interpret_eq hI₁ hwo₁.left hwo₂.left,
+        interpret_eq hI₂ hwo₁.left hwo₂.left, ih₁', ih₂']
+    · simp only [interpret_term_some, interpret_term_prim]
+  case mem =>
+    -- NoItDependentIn ⇒ left operand x₁ is it-free ⇒ its compiled term is compile x₁.toExpr εnv,
+    -- whose footprint is in ft, so same_footprint_ancestors applies to x₁.toExpr.
+    simp only [PredExpr.NoItDependentIn, Bool.and_eq_true, Bool.not_eq_true'] at hnoit
+    have hfree₁ : x₁.mentionsIt = false := hnoit.1.1
+    cases hpvr with | binaryApp_valid hvr₁ hvr₂ =>
+    have hwεx₁ : εnv.WellFormedFor x₁.toExpr := ⟨hwε, PredExpr.toExpr_validRefs hvr₁⟩
+    have hok₁' : compile x₁.toExpr εnv = .ok t₁ := by rw [← compilePred_toExpr_eq hfree₁]; exact hok₁
+    have hftx₁ : footprint x₁.toExpr εnv ⊆ ft := by
+      rw [← footprintPred_toExpr_eq hfree₁]; exact hft.left.right
+    replace ⟨ety₁, ety₂, hety₁, hok⟩ := compileApp₂_mem_ok_implies hok
+    have hwl₁₁ := interpret_term_wf hI₁ hwo₁.left
+    have hwl₁₂ := interpret_term_wf hI₁ hwo₂.left
+    have hwl₂₁ := interpret_term_wf hI₂ hwo₁.left
+    have hwl₂₂ := interpret_term_wf hI₂ hwo₂.left
+    rcases hok with ⟨hety₂, hok⟩ | ⟨hety₂, hok⟩
+    all_goals {
+      subst hok
+      simp only [hwo₁.right] at hety₁
+      simp only [hwo₂.right] at hety₂
+      subst hety₁ hety₂
+      have ⟨uid₁, heqt, heqty, heqf⟩ := same_footprint_ancestors hwεx₁ hI₁ hsm hftx₁ hok₁' hihsub₁ hlit₁ hty₁'
+      subst heqt heqty
+      simp only [interpret_term_some]
+      try simp only [
+        interpret_compileInₑ hwε.right hI₁ hwo₁.left hwo₂.left hwl₁₁ hwl₁₂ hwo₁.right hwo₂.right,
+        interpret_compileInₑ hwε.right hI₂ hwo₁.left hwo₂.left hwl₂₁ hwl₂₂ hwo₁.right hwo₂.right]
+      try simp only [
+        interpret_compileInₛ hwε.right hI₁ hwo₁.left hwo₂.left hwl₁₁ hwl₁₂ hwo₁.right hwo₂.right,
+        interpret_compileInₛ hwε.right hI₂ hwo₁.left hwo₂.left hwl₂₁ hwl₂₂ hwo₁.right hwo₂.right]
+      simp only [ih₁', ih₂',
+        interpret_option_get I₂ hwt₁.left hwt₁.right,
+        interpret_option_get I₂ hwt₂.left hwt₂.right,
+        hlit₁, hlit₂, pe_option_get'_some, compileInₑ, compileInₛ, Term.some.injEq]
+      cases hancs : εnv.entities.ancestorsOfType uid₁.ty ety₂
+      case none =>
+        simp only [interpret_entities_ancestorsOfType_none hancs]
+      case some f =>
+        simp only [interpret_entities_ancestorsOfType_some hancs]
+        specialize heqf ety₂ f hancs
+        simp only [SymCC.compileInₑ.isIn, SymCC.compileInₛ.isIn₁, SymCC.compileInₛ.isIn₂]
+        congr 2
+    }
+  case less =>
+    rcases compileApp₂_less_ok_implies hok with ⟨hty₁, hty₂, hok⟩ | ⟨hty₁, hty₂, hok⟩ | ⟨hty₁, hty₂, hok⟩
+    all_goals(
+      subst hok
+      simp only [interpret_term_some, interpret_bvslt, interpret_ext_duration_val,
+        interpret_ext_datetime_val, ih₁', ih₂']
+    )
+  case lessEq =>
+    rcases compileApp₂_lessEq_ok_implies hok with ⟨hty₁, hty₂, hok⟩ | ⟨hty₁, hty₂, hok⟩ | ⟨hty₁, hty₂, hok⟩
+    all_goals(
+      subst hok
+      simp only [interpret_term_some, interpret_bvsle, interpret_ext_duration_val,
+        interpret_ext_datetime_val, ih₁', ih₂']
+    )
+  case contains =>
+    replace ⟨_, hok⟩ := compileApp₂_contains_ok_implies hok
+    subst hok
+    simp only [interpret_term_some, interpret_set_member hwo₂.left hwo₁.left, ih₁', ih₂']
+  case containsAll =>
+    replace ⟨_, _, _, hok⟩ := compileApp₂_containsAll_ok_implies hok
+    subst hok
+    simp only [interpret_term_some, interpret_set_subset hwo₂.left hwo₁.left, ih₁', ih₂']
+  case containsAny =>
+    replace ⟨_, hty₁, hty₂, hok⟩ := compileApp₂_containsAny_ok_implies hok
+    subst hok
+    simp only [interpret_term_some, interpret_set_intersects hI₁ hwo₁.left hwo₂.left hty₁ hty₂,
+      ih₁', ih₂', interpret_set_intersects hI₂ hwo₁.left hwo₂.left hty₁ hty₂]
+  case add =>
+    replace ⟨hty₁, hty₂, hok⟩ := compileApp₂_add_ok_implies hok
+    subst hok
+    have hwa := wf_bvadd hwo₁.left hwo₂.left hty₁ hty₂
+    have hws := wf_bvsaddo hwo₁.left hwo₂.left hty₁ hty₂
+    simp only [interpret_ifFalse hI₁ hws.left hws.right hwa.left,
+      interpret_ifFalse hI₂ hws.left hws.right hwa.left,
+      interpret_bvsaddo, interpret_bvadd, ih₁', ih₂']
+  case sub =>
+    replace ⟨hty₁, hty₂, hok⟩ := compileApp₂_sub_ok_implies hok
+    subst hok
+    have hwa := wf_bvsub hwo₁.left hwo₂.left hty₁ hty₂
+    have hws := wf_bvssubo hwo₁.left hwo₂.left hty₁ hty₂
+    simp only [interpret_ifFalse hI₁ hws.left hws.right hwa.left,
+      interpret_ifFalse hI₂ hws.left hws.right hwa.left,
+      interpret_bvssubo, interpret_bvsub, ih₁', ih₂']
+  case mul =>
+    replace ⟨hty₁, hty₂, hok⟩ := compileApp₂_mul_ok_implies hok
+    subst hok
+    have hwa := wf_bvmul hwo₁.left hwo₂.left hty₁ hty₂
+    have hws := wf_bvsmulo hwo₁.left hwo₂.left hty₁ hty₂
+    simp only [interpret_ifFalse hI₁ hws.left hws.right hwa.left,
+      interpret_ifFalse hI₂ hws.left hws.right hwa.left,
+      interpret_bvsmulo, interpret_bvmul, ih₁', ih₂']
+  case hasTag =>
+    replace ⟨ety, hty₁, _, hok⟩ := compileApp₂_hasTag_ok_implies hok
+    replace hok := compileHasTag_ok_implies hok
+    rcases hok with ⟨_, hok⟩ | ⟨τs, hτs, hok⟩ <;> subst hok
+    · simp only [interpret_term_some, interpret_term_prim]
+    · simp only [interpret_term_some,
+        ← interpret_hasTag (wf_εs_implies_wf_tags hwε.right hτs) hI₁ hwo₁.left hwo₂.left hty₁,
+        ← interpret_hasTag (wf_εs_implies_wf_tags hwε.right hτs) hI₂ hwo₁.left hwo₂.left hty₁,
+        ih₁', ih₂', Term.some.injEq]
+      simp only [SymEntities.tags, Option.map_eq_some_iff] at hτs
+      replace ⟨δ, hδ, hτs⟩ := hτs
+      simp only [(hsm.right ety δ hδ).right.right τs hτs]
+  case getTag =>
+    replace ⟨ety, hty₁, hty₂, hok⟩ := compileApp₂_getTag_ok_implies hok
+    replace ⟨τs, hτs, hok⟩ := compileGetTag_ok_implies hok
+    subst hok
+    simp only [
+      ← interpret_getTag (wf_εs_implies_wf_tags hwε.right hτs) hI₁ hwo₁.left hwo₂.left hty₁ hty₂,
+      ← interpret_getTag (wf_εs_implies_wf_tags hwε.right hτs) hI₂ hwo₁.left hwo₂.left hty₁ hty₂,
+      ih₁', ih₂']
+    simp only [SymEntities.tags, Option.map_eq_some_iff] at hτs
+    replace ⟨δ, hδ, hτs⟩ := hτs
+    simp only [(hsm.right ety δ hδ).right.right τs hτs]
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
