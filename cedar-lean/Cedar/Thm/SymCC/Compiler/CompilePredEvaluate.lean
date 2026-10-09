@@ -16,6 +16,7 @@ import Cedar.Thm.SymCC.Compiler.Unary
 import Cedar.Thm.SymCC.Compiler.Binary
 import Cedar.Thm.SymCC.Compiler.Attr
 import Cedar.Thm.SymCC.Compiler.ExtHasAttr
+import Cedar.Thm.SymCC.Compiler.Record
 import Cedar.Thm.SymCC.Compiler.WF
 import Cedar.Thm.SymCC.Compiler.CompilePredInterpret
 import Cedar.Thm.SymCC.Compiler.EvaluatePredWF
@@ -553,5 +554,128 @@ theorem compilePred_evaluate_ite {x₁ x₂ x₃ : PredExpr} {env : Env} {εnv :
           replace ih₁ := wfl_of_type_bool_is_true_or_false (And.intro hwφ₁ ih₁) h₄.left
           rcases ih₁ with ih₁ | ih₁ <;>
           simp [ih₁] at h₅ h₆
+
+/-- Extraction for the `.record` predicate arm (mirrors `compile_record_ok_implies`). -/
+theorem compilePred_record_ok_implies {axs : List (Attr × PredExpr)} {it : Term} {εnv : SymEnv} {t : Term}
+    (hok : compilePred (.record axs) it εnv = .ok t) :
+    ∃ ats,
+      List.Forall₂ (λ px pt => px.fst = pt.fst ∧ compilePred px.snd it εnv = .ok pt.snd) axs ats ∧
+      t = compileRecord ats := by
+  rw [compilePred.eq_def] at hok
+  simp_do_let (axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do .ok (a₁, ← compilePred x₁ it εnv))) at hok
+  rename_i ats hts
+  simp only [List.mapM₂_eq_mapM λ (p : Attr × PredExpr) => do
+      .ok (p.fst, ← compilePred p.snd it εnv),
+    List.mapM_ok_iff_forall₂] at hts
+  simp only [Except.ok.injEq] at hok
+  exists ats
+  simp only [hok, and_true]
+  apply List.Forall₂.imp _ hts
+  intro px pt hp
+  simp_do_let (compilePred px.snd it εnv) at hp
+  rename_i t' hr
+  simp only [Except.ok.injEq] at hp
+  simp only [← hp, and_self]
+
+/-- Per-element IH threading for `.record`/`.call` (pred twin of `compile_evaluate_ihs`). -/
+theorem compilePred_evaluate_ihs {axs : List (Attr × PredExpr)} {ats : List (Attr × Term)}
+    {env : Env} {εnv : SymEnv} {it : Term} {v : Value} {elemTy : TermType}
+    (heq : env ∼ εnv) (hwfenv : env.WellFormed) (hwε : εnv.WellFormed)
+    (hvwf : v.WellFormed env.entities)
+    (hitv : (Except.ok v : Spec.Result Value) ∼ it)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (ih  : ∀ a x, (a, x) ∈ axs → CompilePredEvaluate x)
+    (hok : List.Forall₂ (fun px pt => px.fst = pt.fst ∧ compilePred px.snd it εnv = Except.ok pt.snd) axs ats) :
+    List.Forall₂ (fun px pt => px.fst = pt.fst ∧ evaluatePred px.snd v env.request env.entities ∼ pt.snd) axs ats := by
+  cases axs
+  case nil =>
+    simp only [List.not_mem_nil, false_implies, forall_const, List.forall₂_nil_left_iff] at *
+    assumption
+  case cons xhd xtl =>
+    simp only [List.mem_cons, forall_eq_or_imp, List.forall₂_cons_left_iff, exists_and_left] at *
+    replace ⟨thd, hok, ttl, htl, hts⟩ := hok
+    subst hts
+    exists thd
+    simp only [hok.left,
+      ih xhd.fst xhd.snd (by simp only [true_or]) heq hwfenv hwε hvwf hitv hitw hitty hok.right, and_self,
+      List.cons.injEq, true_and, exists_eq_right']
+    apply compilePred_evaluate_ihs heq hwfenv hwε hvwf hitv hitw hitty _ htl
+    intro a x h
+    apply ih a x
+    exact Or.inr h
+
+/-- Pred twin of `compile_evaluate_prods`. -/
+theorem compilePred_evaluate_prods {axs : List (Attr × PredExpr)} {ats : List (Attr × Term)}
+    {avs : List (Attr × Value)} {env : Env} {v : Value}
+    (h₁ : List.Forall₂ (λ px pt => px.fst = pt.fst ∧ evaluatePred px.snd v env.request env.entities ∼ pt.snd) axs ats)
+    (h₂ : List.Forall₂ (λ px pv => bindAttr px.fst (evaluatePred px.snd v env.request env.entities) = Except.ok pv) axs avs) :
+    ∃ (ats' : List (Attr × Term)),
+      ats = ats'.map (Prod.map id Term.some) ∧
+      List.Forall₂ (λ pt pv => pt.fst = pv.fst ∧ pv.snd ∼ pt.snd) ats' avs := by
+  cases axs
+  case nil =>
+    rw [List.forall₂_nil_left_iff] at h₁ h₂
+    subst h₁ h₂
+    exists []
+    simp only [List.map_nil, List.Forall₂.nil, and_self]
+  case cons xhd xtl =>
+    replace ⟨thd, ttl, h₁, htl₁, hts⟩ := List.forall₂_cons_left_iff.mp h₁
+    replace ⟨vhd, vtl, h₂, htl₂, hvs⟩ := List.forall₂_cons_left_iff.mp h₂
+    subst hts hvs
+    have ⟨tl', ih⟩ := compilePred_evaluate_prods htl₁ htl₂
+    simp only [bindAttr] at h₂
+    simp_do_let (evaluatePred xhd.snd v env.request env.entities) at h₂
+    rename_i v' hok
+    simp only [pure, Except.pure, Except.ok.injEq] at h₂
+    subst h₂
+    simp only [hok] at h₁
+    have ⟨hd', hhd⟩ := same_ok_implies h₁.right
+    exists ((thd.fst, hd') :: tl')
+    simp only [ih.left, List.map_cons, Prod.map, id_eq, ← hhd.left, h₁.left, List.forall₂_cons,
+      hhd.right, and_self, ih.right]
+
+/-- `.record` arm (mirrors `compile_evaluate_record`). -/
+theorem compilePred_evaluate_record {axs : List (Attr × PredExpr)} {env : Env} {εnv : SymEnv}
+    {it pt : Term} {v : Value} {elemTy : TermType}
+    (heq : env ∼ εnv) (hwfenv : env.WellFormed) (hwε : εnv.WellFormed)
+    (hvwf : v.WellFormed env.entities)
+    (hitv : (Except.ok v : Spec.Result Value) ∼ it)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hok : compilePred (.record axs) it εnv = .ok pt)
+    (ih : ∀ a x, (a, x) ∈ axs → CompilePredEvaluate x) :
+    evaluatePred (.record axs) v env.request env.entities ∼ pt := by
+  replace ⟨ats, hok, ht⟩ := compilePred_record_ok_implies hok
+  subst ht
+  replace ih := compilePred_evaluate_ihs heq hwfenv hwε hvwf hitv hitw hitty ih hok
+  simp only [compileRecord, someOf, evaluatePred,
+      List.mapM₂_eq_mapM λ (p : Attr × PredExpr) => bindAttr p.fst (evaluatePred p.snd v env.request env.entities)]
+  simp_do_let (axs.mapM λ p => bindAttr p.fst (evaluatePred p.snd v env.request env.entities))
+  case error he =>
+    replace ⟨px, hx, he⟩ := List.mapM_error_implies_exists_error he
+    replace ⟨pt, ht, ih⟩ := List.forall₂_implies_all_left ih px hx
+    simp only [bindAttr] at he
+    simp_do_let (evaluatePred px.snd v env.request env.entities) at he
+    case error =>
+      simp at he ; subst he ; rename_i he
+      rw [he] at ih
+      have hmem : pt.snd ∈ List.map Prod.snd ats := by
+        simp only [List.mem_map]
+        exists pt
+      exact same_error_implies_ifAllSome_error ih.right hmem typeOf_term_some
+    case ok =>
+      simp [pure, Except.pure] at he
+  case ok avs hok' =>
+    rw [List.mapM_ok_iff_forall₂] at hok'
+    replace ⟨ats', hts, ih⟩ := compilePred_evaluate_prods ih hok'
+    subst hts
+    clear hok'
+    simp only [List.map_map, prod_snd_comp_prod_map_eq, prod_map_id_comp_eq]
+    rw [← List.map_map, pe_ifAllSome_some typeOf_term_some]
+    have hid : (Prod.map (@id Attr) (option.get ∘ Term.some)) = id := by
+      apply funext
+      intro x
+      simp only [Prod.map, id_eq, Function.comp_apply, pe_option_get_some]
+    simp only [Same.same, SameResults, SameValues, recordOf, hid, List.map_id]
+    exact same_forall₂_implies_same_record ih
 
 end Cedar.Thm

@@ -223,7 +223,7 @@ private theorem compile_evaluate_ihs {axs : List (Attr × Expr)} {ats : List (At
     apply ih a x
     exact Or.inr h
 
-private theorem compile_evaluate_prods {axs : List (Attr × Expr)} {ats : List (Attr × Term)} {avs : List (Attr × Value)} {env : Env}
+public theorem compile_evaluate_prods {axs : List (Attr × Expr)} {ats : List (Attr × Term)} {avs : List (Attr × Value)} {env : Env}
   (h₁ : List.Forall₂ (λ px pt => px.fst = pt.fst ∧ evaluate px.snd env.request env.entities ∼ pt.snd) axs ats)
   (h₂ : List.Forall₂ (λ px pv => bindAttr px.fst (evaluate px.snd env.request env.entities) = Except.ok pv) axs avs) :
   ∃ (ats' : List (Attr × Term)),
@@ -252,7 +252,7 @@ private theorem compile_evaluate_prods {axs : List (Attr × Expr)} {ats : List (
     simp only [ih.left, List.map_cons, Prod.map, id_eq, ← hhd.left, h₁.left, List.forall₂_cons,
       hhd.right, and_self, ih.right]
 
-private theorem same_forall₂_implies_same_record {ats : List (Attr × Term)} {avs : List (Attr × Value)}
+public theorem same_forall₂_implies_same_record {ats : List (Attr × Term)} {avs : List (Attr × Value)}
   (hs : List.Forall₂ (λ pt pv => pt.fst = pv.fst ∧ pv.snd ∼ pt.snd) ats avs) :
   Term.value? (Term.record (Map.make ats)) = some (Value.record (Map.make avs))
 := by
