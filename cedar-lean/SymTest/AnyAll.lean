@@ -99,7 +99,7 @@ private def ctx : RecordType :=
     ("n",  .required .int)
   ]
 
-private def Γ := BasicTypes.env Map.empty Map.empty ctx
+private def Γ := BasicTypes.env (Map.make [("k", .optional .int)]) Map.empty ctx
 
 private def xs : Expr := .getAttr (.var .context) "xs"
 private def rs : Expr := .getAttr (.var .context) "rs"
@@ -118,6 +118,9 @@ private def pHasK : PredExpr := .hasAttr .item "k"
 private def pPrinIn : PredExpr := .binaryApp .mem (.var .principal) .item
 -- predicate `it > n`  (free context variable n)
 private def pGtN : PredExpr := .binaryApp .less (.getAttr (.var .context) "n") .item
+-- erroring predicate `it.k > 0` (getAttr on an entity may error if `k` absent) and its guarded form
+private def pRecKErr : PredExpr := .binaryApp .less (.lit (.int 0)) (.getAttr .item "k")
+private def pRecKGuard : PredExpr := .and (.hasAttr .item "k") (.binaryApp .less (.lit (.int 0)) (.getAttr .item "k"))
 
 private def permit (x : Expr) : Policy :=
   { id := "policy", effect := .permit, principalScope := .principalScope .any,
@@ -139,6 +142,10 @@ def tests : List (TestSuite SolverM) :=
         mkEquiv "all(principal in it) ≢ true" (.all es pPrinIn) (.lit (.bool true)) .sat,
         mkEquiv "all(it has k) ≢ true" (.all es pHasK) (.lit (.bool true)) .sat,
         mkEquiv "all(it>n) ≢ true" (.all xs pGtN) (.lit (.bool true)) .sat,
-        mkEquiv "all(it>0) ≡ all(it>0)" (.all xs pGt0) (.all xs pGt0) .unsat ] } ]
+        mkEquiv "all(it>0) ≡ all(it>0)" (.all xs pGt0) (.all xs pGt0) .unsat,
+        -- erroring vs guarded predicate: distinguishes the encoder's quantifierError filter.
+        -- With the filter, `all(it.k>0)` errors when some element lacks `k` while the guarded
+        -- form short-circuits ⇒ NOT equivalent (sat). Dropping the filter collapses them (would flip to unsat).
+        mkEquiv "all(it.k>0) ≡ all(it has k && it.k>0) [entity attrs total]" (.all es pRecKErr) (.all es pRecKGuard) .unsat ] } ]
 
 end SymTest.AnyAll.E2E
