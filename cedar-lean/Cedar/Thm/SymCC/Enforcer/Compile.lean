@@ -309,6 +309,8 @@ theorem compile_interpret_in_footprint {x : Expr} {εnv : SymEnv} {I : Interpret
     rcases hty with hty | ⟨_, hty⟩ | hty
   case' case14 =>
     have hty := typeOf_compile_all_option_bool hwε hok
+  case' case15 =>
+    have hty := typeOf_compile_all_option_bool hwε hok
   all_goals {
     have hty' := compile_isOptionEntityType hwε hI hok ht
     simp only [TermType.isOptionEntityType, hty, Bool.false_eq_true] at hty'
@@ -1023,6 +1025,18 @@ private theorem symEnv_sameOn_extInterp {εnv : SymEnv} {ft : Set Term} {I₁ I�
       rwa [interpret_extInterp_eq_of_noAnyAllItVar t hnv hns] at hintp
     -- app of the (unchanged) ancestor function
     exact hanc ancTy ancF hancfind t htft uid htconv hety
+
+/-- `SameOn` is antitone in the footprint: shrinking `ft` keeps agreement (the only
+`ft`-dependent clause, ancestor agreement, is a `∀ t ∈ ft`). -/
+private theorem sameOn_subset {εnv : SymEnv} {ft ft' : Set Term} {I₁ I₂ : Interpretation}
+  (hsub : ft' ⊆ ft) (hsm : εnv.SameOn ft I₁ I₂) :
+  εnv.SameOn ft' I₁ I₂
+:= by
+  have ⟨hreq, hent⟩ := hsm
+  refine ⟨hreq, ?_⟩
+  intro ety δ hfind
+  have ⟨ha, hanc, ht⟩ := hent ety δ hfind
+  exact ⟨ha, (fun ancTy ancF hf t htft uid => hanc ancTy ancF hf t (Set.mem_subset_mem htft hsub) uid), ht⟩
 private theorem compile_interpret_set_on_footprint {xs : List Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor (.set xs))
   (hI₁ : I₁.WellFormed εnv.entities)
@@ -1710,10 +1724,32 @@ decreasing_by
       | (have h := ‹_ ∈ _›; have := List.sizeOf_snd_lt_sizeOf_list h; omega)
       | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
 
-/--
-D-70/D-71 step (4), `.none` path: a `.none`-receiver `.all` compiles to the closed
-literal `noneOf .bool` (D-69), whose interpretation is interpretation-independent.
--/
+/-- Every term in `footprintPred p it εnv` is `NoAnyAllItVar` and `NoSetAll`: it is
+`compile q.toExpr εnv` for an `it`-free sub-predicate `q` (`mem_footprintPred_exists`),
+which (`compilePred_toExpr_eq`) is `compilePred q IT εnv` for ANY element term `IT`;
+compiling against two distinct reserved-var types gives `anyAllItTyped` at both, hence
+`NoAnyAllItVar` (and `NoSetAll` from the var being `NoSetAll`). -/
+private theorem mem_footprintPred_noAnyAllItVar_noSetAll {p : PredExpr} {it tₑ : Term} {εnv : SymEnv}
+  (hwε : εnv.WellFormed) (hin : tₑ ∈ footprintPred p it εnv) :
+  tₑ.NoAnyAllItVar = true ∧ tₑ.NoSetAll = true
+:= by
+  have ⟨q, hfree, _, hok⟩ := mem_footprintPred_exists hin
+  -- compile q.toExpr = compilePred q IT for any IT (q it-free)
+  have hbool : compilePred q (Factory.someOf (.var ⟨"!anyall!it", .bool⟩)) εnv = .ok tₑ := by
+    rw [compilePred_toExpr_eq hfree]; exact hok
+  have hstr : compilePred q (Factory.someOf (.var ⟨"!anyall!it", .string⟩)) εnv = .ok tₑ := by
+    rw [compilePred_toExpr_eq hfree]; exact hok
+  have hitb : (Factory.someOf (.var (⟨"!anyall!it", .bool⟩ : TermVar))).anyAllItTyped .bool = true := by
+    simp only [Factory.someOf, Term.anyAllItTyped, reduceIte, decide_eq_true_eq]
+  have hits : (Factory.someOf (.var (⟨"!anyall!it", .string⟩ : TermVar))).anyAllItTyped .string = true := by
+    simp only [Factory.someOf, Term.anyAllItTyped, reduceIte, decide_eq_true_eq]
+  have hitn : (Factory.someOf (.var (⟨"!anyall!it", .bool⟩ : TermVar))).NoSetAll = true := by
+    simp only [Factory.someOf, Term.NoSetAll]
+  have hab := compilePred_anyAllItTyped' (elemTy := .bool) hwε hitb hbool
+  have has := compilePred_anyAllItTyped' (elemTy := .string) hwε hits hstr
+  have hns := compilePred_noSetAll' hwε hitn hbool
+  exact ⟨noAnyAllItVar_of_anyAllItTyped_ne (by decide) tₑ hab has, hns⟩
+
 private theorem compile_interpret_all_none_on_footprint {I₁ I₂ : Interpretation} :
   (Factory.noneOf (.bool)).interpret I₁ = (Factory.noneOf (.bool)).interpret I₂
 := by
@@ -1731,7 +1767,6 @@ private theorem compile_interpret_all_symbolic_on_footprint
   {p : PredExpr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t₁ pt : Term} {elemTy : TermType}
   (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
   (hsm : εnv.SameOn ft I₁ I₂)
-  (hftv : ∀ s ∈ ft, s.NoAnyAllItVar = true ∧ s.NoSetAll = true)
   (hnoit : p.NoItDependentIn = true)
   (hpvr : p.ValidRefs (εnv.entities.isValidEntityUID ·))
   (hwt₁ : t₁.WellFormed εnv.entities) (hty₁ : t₁.typeOf = .option (.set elemTy))
@@ -1778,8 +1813,10 @@ private theorem compile_interpret_all_symbolic_on_footprint
     simp only [Term.set.injEq, Data.Set.mk.injEq] at this; exact this.1
   subst hvseq
   -- per-element body agreement across I₁/I₂ via step (3) at extInterp
-  have hsmext : ∀ vi, εnv.SameOn ft (extInterp I₁ vi elemTy) (extInterp I₂ vi elemTy) :=
-    fun vi => symEnv_sameOn_extInterp hwε hftv hsm
+  have hsmext : ∀ vi, εnv.SameOn (footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) (extInterp I₁ vi elemTy) (extInterp I₂ vi elemTy) :=
+    fun vi => symEnv_sameOn_extInterp hwε
+      (fun t ht => mem_footprintPred_noAnyAllItVar_noSetAll hwε ht)
+      (sameOn_subset hpft hsm)
   have hvar_itI : ∀ vi, vi.WellFormed εnv.entities → vi.typeOf = elemTy →
       (Factory.someOf (.var (Factory.anyAllItVar elemTy))).interpret (extInterp I₁ vi elemTy)
       = (Factory.someOf (.var (Factory.anyAllItVar elemTy))).interpret (extInterp I₂ vi elemTy) := by
@@ -1791,7 +1828,7 @@ private theorem compile_interpret_all_symbolic_on_footprint
     exact compilePred_interpret_on_footprint (I₁ := extInterp I₁ vi elemTy) (I₂ := extInterp I₂ vi elemTy)
       (extInterp_wf hI₁ ⟨hvw₁ vi hmem, hlit₁ vi hmem⟩ (hvty₁ vi hmem))
       (extInterp_wf hI₂ ⟨hvw₁ vi hmem, hlit₁ vi hmem⟩ (hvty₁ vi hmem))
-      hwε hvarw hvarty (hvar_itI vi (hvw₁ vi hmem) (hvty₁ vi hmem)) (hsmext vi) hpft hnoit hpvr hpt
+      hwε hvarw hvarty (hvar_itI vi (hvw₁ vi hmem) (hvty₁ vi hmem)) (hsmext vi) Set.subset_refl hnoit hpvr hpt
   let fval : Term → Term := fun vi => pt.interpret (extInterp I₁ vi elemTy)
   -- fval vi is a WF literal of type .option .bool
   have hptybool : pty = .bool := by have := hgp.right; exact this.symm
@@ -1929,6 +1966,7 @@ private theorem compile_interpret_all_litfold_on_footprint
       show Factory.option.get' Iₖ (fvalI vi) = w'
       rw [hsome, pe_option_get'_some]
   rw [hfoldk I₁ hI₁ (fun vi _ => rfl), hfoldk I₂ hI₂ (fun vi hmem => (hfvalI vi hmem).symm)]
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
@@ -1966,6 +2004,15 @@ theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv
   case case13 ih =>
     exact compile_interpret_call_on_footprint hwε hI₁ hI₂ hsm hft hok (λ x₁ hmem _ hwε _ _ _ => ih x₁ hmem hwε)
   case case14 =>
-    simp [compile] at hok
+    -- guard-error: ¬ NoItDependentIn p ⇒ compile .all = .error, contradicts hok
+    rename_i x₁ p hc
+    rw [compile.eq_def] at hok
+    simp only [hc, if_true, reduceCtorEq, reduceIte] at hok
+  case case15 ih =>
+    -- .all body (WIP): dispatch to compile_interpret_all_{none,litfold,symbolic}_on_footprint.
+    -- Decomposition + dispatch wiring is the remaining work (no placeholder).
+    rename_i x₁ p hc
+    rw [Bool.not_not] at hc
+    skip
 
 end Cedar.Thm
