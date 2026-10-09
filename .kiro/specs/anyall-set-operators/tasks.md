@@ -27,9 +27,9 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 2 | `phase2-anyall-lean-spec` | DONE — review converged (2 rounds); T2.3 type rule deferred (D-11) |
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
-| 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
+| 5 | `phase5-anyall-symcc` | DONE — review-clean (round 2: NO ACTIONABLE FINDINGS); full type rule + SymCC `set.filter` encoding (D-33/D-52), soundness proven; D-74 OPEN behind interim `SymCCSupported(.all)=false` (completeness lane); see `branches/phase5-anyall-symcc/OUTCOMES.md` |
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
-| 6.5 | `phase6_5-anyall-tpe` | not started |
+| 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
 | 7 | `phase7-anyall-docs` | not started |
 | 8 | `phase8-anyall-benchmarks` | not started |
 
@@ -237,6 +237,20 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
 
 ## Phase 6.5 — Typed partial evaluation (late commit)
 
+> **Status: DONE — review converged (2 rounds).** Plan:
+> `branches/phase6.5-anyall-tpe/PLAN.md`; outcomes: `branches/phase6.5-anyall-tpe/OUTCOMES.md`.
+> Commits: W1–W4 cedar `71c6912`; R1 fixes `004c032`/`821313c`/`4b365ea` + cedar-spec `23edc0d`;
+> R2 hardening cedar `9dc62e8`. R1 = 3 findings fixed (coverage/wording; production code was
+> already correct); R2 = NO ACTIONABLE FINDINGS + one LOW nit addressed as hardening (D-83).
+> Branches cut off `phase6-anyall-drt-differential` (cedar-spec `d923c63`, cedar `826cc339`) —
+> **rebase onto Phase 6's final tip before merge still pending.** Forks RESOLVED: **F1 → D-80**
+> option A (fold concretely, re-implemented over `Residual` + parity-tested vs Phase-3; residual
+> per-element predicate ⇒ conservative residual `All`; full per-element refinement deferred to
+> Phase 9); **F2 → D-81** Lean TPE stays conservative (parity = "re-authorized residual agrees",
+> not shape-equal); **F3 → D-82** in-crate parity tests, no new DRT TPE harness. Result: tpe
+> tests 93→109 (+16 anyall-gated), whole-lib 1737; 4 mutations caught; full feature matrix +
+> clippy green; non-anyall build byte-unchanged.
+
 - **T6.5.1 TPE residual node + concrete-receiver evaluation (gated).**
   Add `ResidualKind::All { expr, pred }` in `cedar-policy-core/src/tpe/residual.rs` and the
   `Residual::from_expr` arm. In `tpe/evaluator.rs`, evaluate `All` when the receiver reduces to
@@ -246,6 +260,10 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
   _Green check:_ core tests with `--features anyall`; parity vs. the concrete evaluator on
   concrete-receiver cases.
   _Satisfies:_ 7.1, 7.3.
+  _Status:_ DONE (cedar `71c6912`, W1+W2). `ResidualKind::All` + `try_from_typed_expr` arm;
+  concrete-receiver fold reuses the Phase-3 semantics via per-element `instantiate` +
+  `Residual::from_untyped_expr` (D-80 A). 10 evaluator + 2 residual parity tests; empty/false/
+  error-short-circuit mutations each caught.
 
 - **T6.5.2 Residual-receiver passthrough + soundness (gated).**
   When the receiver is `Partial`, produce a residual `All` rather than erroring; preserve the
@@ -254,6 +272,11 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
   Runs LATE — a conservative "always residualize non-trivial `All`" is an acceptable first cut.
   _Green check:_ `lake build Cedar` (if Lean TPE touched) + core tests with `--features anyall`;
   confirm non-`anyall` TPE behavior is byte-unchanged (3.1).
+  _Status:_ DONE (cedar `71c6912`, W3) for the Rust side: residual receiver ⇒ node retained;
+  concrete-receiver-residual-predicate ⇒ conservative whole-node residual (D-80). Lean TPE
+  refinement intentionally SKIPPED (D-81): the conservative Lean `.all` arm + soundness already
+  exist (D-48) and parity is defined as "re-authorized residual agrees". Non-anyall tpe suite
+  byte-unchanged (93).
   _Satisfies:_ 7.2, 7.4.
 
 ## Phase 7 — Docs & open questions
