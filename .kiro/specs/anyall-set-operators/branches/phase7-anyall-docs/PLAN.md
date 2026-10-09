@@ -303,6 +303,17 @@ spec docs, one for `tasks.md`. All commits via `git commit -F <file>` with a bla
 
 ## Open questions (genuine user-decision forks only)
 
+> **RESOLVED (user 2026-10-09), recorded as D-84/D-85/D-86 in `DECISIONS.md`:**
+> - **Q1 → D-84 — BOTH.** In-repo rustdoc/CHANGELOG/Lean/DRT docs AND a paste-ready
+>   user-language reference at `docs/language-reference-anyall.md`, plus
+>   `docs/CEDAR-DOCS-HANDOFF.md` naming the target `cedar-docs` website pages.
+> - **Q2 → D-85 — runnable one-liner via the public `Policy` parse path**
+>   (`Policy::from_str("… resource.ports.all(it > 0) …")`), gated on the
+>   `SetTermInQuantifier` variant so it runs under `cargo test --doc --features anyall`.
+> - **Q3 → D-86 — the feature-summary + open-items table lives in `design.md`.**
+
+The original fork analysis is retained below for traceability.
+
 - **Q1 — Docs website hand-off vs in-repo markdown (the one real fork).** Policy-author
   LANGUAGE docs for `.all`/`.any` belong in the separate `cedar-policy/cedar-docs` website repo
   (per `cedar/README.md`), which is NOT in these worktrees. **Recommended:** Phase 7 writes

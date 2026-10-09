@@ -480,3 +480,77 @@ and Bounded Quantifiers*, FMCAD 2025,
 Non-nested bounded set quantifiers over a set-free predicate compile to a bounded conjunction
 the SMT solver can decide; nested quantifiers and set-valued predicates are excluded precisely
 because they fall outside this decidable fragment.
+
+Sets of sets are out of scope by design, not merely deferred — see **OQ-1** in
+`requirements.md`: a set-valued element would make the predicate mention a set term, violating
+Condition 1, and the paper proves (§III-D) that dropping Condition 1 makes satisfiability
+undecidable (reduction from Hilbert's Tenth Problem). The symbolic compiler therefore refuses a
+non-set-free predicate (req 5.2) rather than emitting an undecidable encoding.
+
+---
+
+## Phase 7 — feature summary & open items (docs)
+
+This section is the reviewer-facing map for the Phase 7 documentation (`phase7-anyall-docs`,
+tasks T7.1/T7.2). Every claim here is verified against the source files named; a blind reviewer
+should re-run the greps.
+
+### Where the docs live
+
+- **In-repo:** rustdoc on the public API (`Expr::all`/`Expr::any` in `cedar-policy-core`, the
+  `ast::pred` module, `cedar_policy::ValidationError::SetTermInQuantifier` with a runnable
+  doctest), the `anyall` bullet in each crate's `lib.rs` feature docs, `## [Unreleased]`
+  CHANGELOG entries in `cedar-policy` and `cedar-policy-symcc` (none in `cedar-policy-core`,
+  which has no CHANGELOG by convention), Lean doc comments (already present on `PredExpr` /
+  `Expr.all` / `Error.quantifierError` / `evalAll` / the SymCC `.all` arm), and the
+  `cedar-drt` README `anyall` section.
+- **Paste-ready user docs:** `docs/language-reference-anyall.md` (D-84).
+- **Website hand-off:** `docs/CEDAR-DOCS-HANDOFF.md` — the policy-author language reference's
+  real home is the separate `cedar-policy/cedar-docs` website repo, not these two repos.
+
+### Exact behavior, with the verbatim error strings (doc-claim anchors)
+
+| Surface | Behavior | Verbatim string (source) |
+|---|---|---|
+| Parser | invalid predicate | ``invalid `.all`/`.any` predicate: {0}`` (`parser/err.rs`) |
+| Parser | help | "a predicate may use `it`, request variables, literals and non-set operators, but no set literals, set operators, or nested `.all`/`.any`" |
+| Parser | `it` misplaced | ``` `it` can only be used inside the predicate of `.all(..)` or `.any(..)` ``` (`parser/err.rs`) |
+| Validator | set-typed predicate | ``for policy `{policy_id}`, the predicate of a set quantifier contains a set-typed expression`` (`validator/diagnostics/validation_errors.rs`) |
+| Validator | help | "`.all`/`.any` predicates may not use set values, set literals, or set operators" |
+| Evaluator | element error | "the predicate of a set quantifier errored on at least one element" (`evaluator/err.rs`) |
+
+- Syntax: `e.all(p)` / `e.any(p)`, element keyword `it`; `.any` has no AST node and lowers to
+  `!e.all(!p)` at the `ExprBuilder` layer (D-05/D-28).
+- Semantics: deterministic `QuantifierError`, no short-circuit on `false`, empty-set
+  `all`⇒true / `any`⇒false (reqs 2.5/2.6/2.7/2.8).
+- Typing: `E : Set<τ>`, `P : Bool` under `it:τ` ⇒ `Bool` (req 6.1).
+- TPE: concrete receiver folds; else residual `All` (D-80, req 7.4).
+
+### SymCC analyzability — supported vs unsupported (verified against code)
+
+- **Supported:** `.all`/`.any` over a **set-free** predicate — compiled via the decidable
+  `set.filter` encoding (D-52), with `compile` / interpret / evaluate / footprint all proven
+  (M1–M4). Source of truth: the `.all` arm in `cedar-lean/Cedar/SymCC/Compiler.lean` and the
+  Rust mirror in `cedar-policy-symcc/src/symcc/compiler.rs`.
+- **Unsupported (rejected):** a predicate whose `in` has an `it`-dependent left operand
+  (`.error .unsupportedError`), pending the Phase-9 set-typed-footprint extension (D-70 option
+  A shipped; option B is Phase 9).
+- **Completeness caveat (D-74-interim):** the "well-typed ⇒ compiles" fragment currently
+  **excludes every `.all`** — `TypedExpr.SymCCSupported (.all _ _ _) := false` in
+  `cedar-lean/Cedar/Validation/TypedExpr.lean`. This narrows ONLY that one theorem; soundness,
+  compile, interpret, evaluate, and footprint of `.all` are fully proven. The docs state this
+  interim state, not the eventual option-A/C' state.
+
+### Open items / deferred
+
+| Item | Status | Where |
+|---|---|---|
+| D-74 — `.all` SymCC completeness (`well-typed ⇒ compiles`) | **OPEN** (interim excludes all `.all`) | `DECISIONS.md` D-74 |
+| D-01 — "phase 9" meaning | resolved to the D-70-B follow-up | `DECISIONS.md` D-01/D-70 |
+| D-70 option B — set-typed footprint entries (lifts the `it`-dependent-`in` restriction) | **Phase 9** | `branches/phase9-anyall-set-footprint/PLAN.md` |
+| D-80 — full per-element-residual TPE refinement (req 7.3 full form) | **Phase 9** | `DECISIONS.md` D-80 |
+| D-81 — optional Lean TPE concrete-fold parity | **Phase 9** (optional) | `DECISIONS.md` D-81 |
+| D-82 — optional DRT TPE differential | **Phase 9** (optional) | `DECISIONS.md` D-82 |
+| cvc5 runtime benchmarks | **Phase 8** | `tasks.md` Phase 8 |
+
+Nothing above is claimed DONE; each row's status matches `DECISIONS.md` as of this writing.
