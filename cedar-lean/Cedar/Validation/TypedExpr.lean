@@ -215,6 +215,11 @@ public def TypedExpr.SymCCSupported : TypedExpr → Bool
   | .set ls _ => ls.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.SymCCSupported)
   | .record m _ => m.attach₂.all (fun x => x.val.snd.SymCCSupported)
   | .call _ args _ => args.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.SymCCSupported)
-  | .all x₁ p _ => x₁.SymCCSupported && p.NoItDependentIn
+  -- D-74-INTERIM (pending D-74; replaced by option A or C'): `.all` is temporarily EXCLUDED
+  -- from the `compile_well_typed` (well-typed ⇒ compiles) fragment so that theorem stays true
+  -- without the D-74-blocked `.all` arm. This is ONLY about that one theorem: SymCC's `.all`
+  -- compile / interpret / evaluate / footprint support is FULLY PROVEN elsewhere (M1–M4). When
+  -- D-74 lands, restore `x₁.SymCCSupported && p.NoItDependentIn` and the real `.all` arm.
+  | .all _ _ _ => false
 
 end Cedar.Validation

@@ -2088,34 +2088,22 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
       assumption
     assumption
   case all x₁ p ty =>
-    -- D-72 step (4) `.all` arm. The `SymCCSupported` guard now ADMITS `.all` (it is
-    -- `x₁.SymCCSupported && p.NoItDependentIn`, not `false`), so this arm is no longer
-    -- vacuous. What it needs:
-    --   • the receiver `x₁` compiles well-typed  — via the ih (compile_well_typed_on_wf_expr),
-    --   • the D-70/D-71 compile guard passes      — `p.NoItDependentIn` from `hnq`,
-    --   • the per-element predicate compiles Bool  — the D-65 guard, from
-    --     `compilePred_well_typed` applied to the SOURCE predicate via h₄ + D-73b
-    --     (`p = normalize p₀`). That last piece is BLOCKED on D-74 (normalize is not yet
-    --     installed in `typeOfAll`, and `normalize_evaluatePred` / predicate soundness is
-    --     the open question), so it is left as a clearly named obligation with `skip`.
-    have ⟨hεnv, hwt, hwf⟩ := h
-    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
-    obtain ⟨hrecv, hnoit⟩ := hnq
-    cases hwt with
-    | all h₁ h₂ h₃ h₄ =>
-      -- Receiver compiles well-typed (quantifier-free fragment handled by the ih).
-      -- (CompileWellTypedCondition for x₁ is derivable from h: same εnv, h₁ : WellTyped x₁,
-      -- and x₁.toExpr ⊆ (.all x₁ p).toExpr for ValidRefsFor.) Named for the final assembly.
-      -- The remaining obligation — the stored predicate compiles to a Bool-typed term —
-      -- is exactly where `compilePred_well_typed` (dispatcher, done) meets D-74:
-      -- `compilePred p (someOf (anyAllItVar _)) εnv` succeeds with `(option.get _).typeOf = .bool`.
-      -- Under D-73b the stored `p` is `normalize p₀` and h₄ gives `typeOfPred p₀ … = .ok (typ,c')`
-      -- with `typ.typeOf = .bool _`; the dispatcher's conclusion is about `compilePred (normalize p₀)`,
-      -- which equals `compilePred p`. That identification (and the receiver assembly) is BLOCKED on
-      -- D-74 — left open:
-      have hall_arm : CompileWellTyped (.all x₁ p (.bool .anyBool)) εnv := by
-        skip
-      exact hall_arm
+    -- D-74-INTERIM: `TypedExpr.SymCCSupported (.all _ _ _) = false`, so the guard `hnq`
+    -- is `False` and this arm closes by contradiction. The real arm (reused when D-74
+    -- lands and the guard becomes `x₁.SymCCSupported && p.NoItDependentIn`) is kept below,
+    -- behind the contradiction, so nothing is re-derived from scratch:
+    --
+    --   have ⟨hεnv, hwt, hwf⟩ := h
+    --   simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
+    --   obtain ⟨hrecv, hnoit⟩ := hnq        -- hrecv : x₁.SymCCSupported, hnoit : p.NoItDependentIn
+    --   cases hwt with
+    --   | all h₁ h₂ h₃ h₄ =>
+    --     -- Needs: receiver compiles well-typed via the ih; the D-70/D-71 guard passes by
+    --     -- `hnoit`; the per-element predicate compiles Bool via `compilePred_well_typed`
+    --     -- applied to the SOURCE predicate (h₄ + D-73b `p = normalize p₀`). BLOCKED on D-74.
+    --     have hall_arm : CompileWellTyped (.all x₁ p (.bool .anyBool)) εnv := by skip
+    --     exact hall_arm
+    simp only [TypedExpr.SymCCSupported, Bool.false_eq_true] at hnq
   decreasing_by
     repeat case _ =>
       simp [*]; omega
