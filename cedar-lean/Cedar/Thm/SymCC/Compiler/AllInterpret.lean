@@ -55,4 +55,37 @@ theorem symEnv_interpret_extInterp {εnv : SymEnv} {I : Interpretation} {v : Ter
 --   I' := extInterp I vi elemTy + `symEnv_interpret_extInterp` (above) +
 --   `extInterp_wf`. See .kiro/.../phase5b/D-68-compiler-fold.md.
 
+/-- The reserved element variable, interpreted under `extInterp I vi elemTy`, is `vi`. -/
+theorem interpret_someOf_itVar_extInterp {I : Interpretation} {vi : Term} {elemTy : TermType} :
+    (Factory.someOf (.var (Factory.anyAllItVar elemTy))).interpret (extInterp I vi elemTy) = Factory.someOf vi := by
+  simp only [Factory.someOf, Term.interpret, Term.interpretWith, extInterp, Factory.anyAllItVar, and_self, if_true]
+
+/-- D-68 per-element bridge: compiling the symbolic predicate `pt` and then
+substituting a well-formed literal element `vi` for the bound variable (via
+interpretation under `extInterp I vi elemTy`) equals compiling the predicate
+directly with `it := someOf vi` under the interpreted environment. This is the
+link between the symbolic receiver's `interpret_set_all_lit` fold bodies and the
+interpreted-side per-element `compilePred` calls. -/
+theorem compilePred_interpret_someOf_lit {p : PredExpr} {εnv : SymEnv} {I : Interpretation} {pt vi : Term} {elemTy : TermType}
+    (hI : I.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+    (hvw : vi.WellFormed εnv.entities) (hvlit : vi.isLiteral = true) (hvty : vi.typeOf = elemTy)
+    (hpt : compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv = .ok pt) :
+    compilePred p (Factory.someOf vi) (εnv.interpret I) = .ok (pt.interpret (extInterp I vi elemTy)) := by
+  let I' := extInterp I vi elemTy
+  have hitw : (Factory.someOf (.var (Factory.anyAllItVar elemTy))).WellFormed εnv.entities := by
+    apply Term.WellFormed.some_wf
+    apply Term.WellFormed.var_wf
+    -- elemTy is WF: vi is a WF term of type elemTy
+    have := typeOf_wf_term_is_wf hvw
+    rw [hvty] at this; exact this
+  have hitty : (Factory.someOf (.var (Factory.anyAllItVar elemTy))).typeOf = .option elemTy := by
+    simp only [Factory.someOf, typeOf_term_some, typeOf_term_var, Factory.anyAllItVar]
+  have hI' : I'.WellFormed εnv.entities := extInterp_wf hI ⟨hvw, hvlit⟩ hvty
+  -- apply compilePred_interpret at I'
+  have hci := compilePred_interpret hI' hwε hitw hitty hpt
+  -- rewrite it.interpret I' = someOf vi and εnv.interpret I' = εnv.interpret I
+  rw [interpret_someOf_itVar_extInterp (I := I) (vi := vi) (elemTy := elemTy),
+      symEnv_interpret_extInterp (I := I) (v := vi) (ety := elemTy) hwε] at hci
+  exact hci
+
 end Cedar.Thm
