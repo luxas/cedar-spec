@@ -1997,15 +1997,14 @@ private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv
   simp_do_let (compile x₁ εnv) at hok
   rename_i t₁ hr₁
   refine ⟨t₁, (by first | exact hr₁ | rfl), ?_⟩
-  split at hok
-  · -- .none receiver
-    rename_i ty
+  cases t₁ with
+  | none ty =>
+    simp only [] at hok
     split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
-    subst hok
-    exact Or.inl ⟨ty, rfl, rfl⟩
-  · rename_i hnotnone
-    have hnotnone' : ∀ ty, t₁ ≠ .none ty := by
-      intro ty hc; exact hnotnone (by rw [hc])
+    exact Or.inl ⟨ty, rfl, hok.symm⟩
+  | _ =>
+    have hnotnone' : ∀ ty, _ ≠ Term.none ty := by intro ty; simp only [reduceCtorEq, not_false_eq_true]
+    simp only [] at hok
     split at hok
     · rename_i elemTy helemq
       split at hok
@@ -2014,16 +2013,14 @@ private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv
           rw [hvseq] at helemq; simp only [Term.typeOf, TermType.set.injEq] at helemq; exact helemq.symm
         subst htyeq
         split at hok
-        · -- literal fold
-          rename_i hlit
+        · rename_i hlit
           simp_do_let (vs.mapM (fun vi => do
             let pti ← compilePred p (Factory.someOf vi) εnv
             if (Factory.option.get pti).typeOf = TermType.bool then Except.ok pti else Except.error SymCC.Error.typeError)) at hok
           rename_i pts hpts
           simp only [Except.ok.injEq] at hok; subst hok
           exact Or.inr (Or.inl ⟨elemTy, vs, pts, hnotnone', helemq, hvseq, hlit, (List.mapM_ok_iff_forall₂).mp hpts, rfl⟩)
-        · -- literal set, non-literal element ⇒ symbolic
-          rename_i hlit
+        · rename_i hlit
           simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
           rename_i pt hpt
           split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
@@ -2032,8 +2029,7 @@ private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv
             intro vs' ety' heq; rw [hvseq] at heq
             simp only [Term.set.injEq, Data.Set.mk.injEq] at heq
             obtain ⟨rfl, _⟩ := heq; exact hlit), hpt, hpbool, rfl⟩)
-      · -- non-literal-set receiver ⇒ symbolic
-        rename_i hnotset
+      · rename_i hnotset
         simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
         rename_i pt hpt
         split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
