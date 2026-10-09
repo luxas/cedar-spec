@@ -45,6 +45,41 @@ open Cedar.Spec
 open Factory
 
 /--
+Footprint of a quantifier predicate `p` compiled against the element term `it`
+(D-70, option A): the entity-typed compiled terms of the `it`-FREE subexpressions
+of `p`, in the same `ofEntity`/`ofBranch` shape as `footprint` for `Expr` (over
+`compilePred`). An `it`-dependent subexpression contributes only its `it`-free
+children — its own compiled term mentions `it` and so cannot be grounded.
+-/
+def footprintPred (p : PredExpr) (it : Term) (εnv : SymEnv) : Set Term :=
+  match p with
+  | .item                  => Set.empty
+  | .lit _                 => ofEntity p
+  | .var _                 => ofEntity p
+  | .ite c t e             => ofBranch c (footprintPred c it εnv) (footprintPred t it εnv) (footprintPred e it εnv)
+  | .and a b               => ofBranch a (footprintPred a it εnv) (footprintPred b it εnv) Set.empty
+  | .or a b                => ofBranch a (footprintPred a it εnv) Set.empty (footprintPred b it εnv)
+  | .binaryApp _ a b       => ofEntity p ∪ footprintPred a it εnv ∪ footprintPred b it εnv
+  | .getAttr e _           => ofEntity p ∪ footprintPred e it εnv
+  | .hasAttr e _
+  | .extHasAttr e _ _
+  | .unaryApp _ e          => footprintPred e it εnv
+  | .call _ xs             => xs.mapUnion₁ (λ ⟨xᵢ, _⟩ => footprintPred xᵢ it εnv)
+  | .record m              => m.mapUnion₂ (λ ⟨(_, xᵢ), _⟩ => footprintPred xᵢ it εnv)
+where
+  ofEntity (q : PredExpr) : Set Term :=
+    if q.mentionsIt then Set.empty
+    else match compilePred q it εnv with
+      | .ok t => if t.typeOf.isOptionEntityType then Set.singleton t else Set.empty
+      | _     => Set.empty
+  ofBranch (q : PredExpr) (ft₁ ft₂ ft₃ : Set Term) : Set Term :=
+    match compilePred q it εnv with
+    | .ok (.some (.bool true))  => ft₂
+    | .ok (.some (.bool false)) => ft₃
+    | .ok _                     => ft₁ ∪ ft₂ ∪ ft₃
+    | .error _                  => Set.empty
+
+/--
 Returns the terms corresponding to subexpressions of `x` of the following form:
 
   * A variable term with an entity type
@@ -73,9 +108,16 @@ def footprint (x : Expr) (εnv : SymEnv) : Set Term :=
   | .call _ xs
   | .set xs            => xs.mapUnion₁ (λ ⟨xᵢ, _⟩ => footprint xᵢ εnv)
   | .record axs        => axs.mapUnion₂ (λ ⟨(_, xᵢ), _⟩ => footprint xᵢ εnv)
-  -- Empty until SymCC supports `.all` (anyall Phase 5): `compile` rejects
-  -- `.all`, so no verification query over such an expression is ever built.
-  | .all _ _           => Set.empty
+  -- The receiver's own footprint, plus the `it`-free entity subterms of the
+  -- predicate compiled against the reserved element variable (D-70, option A).
+  | .all x₁ p          =>
+    match compile x₁ εnv with
+    | .ok t =>
+      match (Factory.option.get t).typeOf with
+      | .set elemTy =>
+        footprint x₁ εnv ∪ footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
+      | _ => footprint x₁ εnv
+    | .error _ => Set.empty
 where
   ofEntity : Set Term :=
     match compile x εnv with

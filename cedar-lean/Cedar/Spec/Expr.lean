@@ -285,4 +285,59 @@ decreasing_by
     try replace h := List.sizeOf_lt_of_mem h
     omega
 
+/--
+Does the predicate syntactically mention the current set element `it`
+(`PredExpr.item`)?  SymCC uses this to keep the quantifier footprint `it`-free.
+-/
+public def PredExpr.mentionsIt : PredExpr → Bool
+  | .item                    => true
+  | .lit _                   => false
+  | .var _                   => false
+  | .ite c t e               => c.mentionsIt || t.mentionsIt || e.mentionsIt
+  | .and a b                 => a.mentionsIt || b.mentionsIt
+  | .or a b                  => a.mentionsIt || b.mentionsIt
+  | .unaryApp _ e            => e.mentionsIt
+  | .binaryApp _ a b         => a.mentionsIt || b.mentionsIt
+  | .getAttr e _             => e.mentionsIt
+  | .hasAttr e _             => e.mentionsIt
+  | .extHasAttr e _ _        => e.mentionsIt
+  | .record axs              => axs.attach₂.any (λ x => x.val.snd.mentionsIt)
+  | .call _ xs               => xs.attach.any (λ x => have := List.sizeOf_lt_of_mem x.property; x.val.mentionsIt)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
+/--
+`p` applies no `in` (ancestors) to an `it`-dependent left operand: every
+`.binaryApp .mem l r` in `p` has `l.mentionsIt = false`.  This is the predicate
+whose compiled footprint-sensitive `in` operands are all `it`-free, hence covered
+by `footprintPred` (D-70, option A — `compile` guarantees it).
+-/
+public def PredExpr.NoItDependentIn : PredExpr → Bool
+  | .item                    => true
+  | .lit _                   => true
+  | .var _                   => true
+  | .ite c t e               => c.NoItDependentIn && t.NoItDependentIn && e.NoItDependentIn
+  | .and a b                 => a.NoItDependentIn && b.NoItDependentIn
+  | .or a b                  => a.NoItDependentIn && b.NoItDependentIn
+  | .unaryApp _ e            => e.NoItDependentIn
+  | .binaryApp .mem l r      => (!l.mentionsIt) && l.NoItDependentIn && r.NoItDependentIn
+  | .binaryApp _ a b         => a.NoItDependentIn && b.NoItDependentIn
+  | .getAttr e _             => e.NoItDependentIn
+  | .hasAttr e _             => e.NoItDependentIn
+  | .extHasAttr e _ _        => e.NoItDependentIn
+  | .record axs              => axs.attach₂.all (λ x => x.val.snd.NoItDependentIn)
+  | .call _ xs               => xs.attach.all (λ x => have := List.sizeOf_lt_of_mem x.property; x.val.NoItDependentIn)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
 end Cedar.Spec
