@@ -105,14 +105,14 @@ theorem getAttrInRecord_ok_find
   case _ hfind => simp only [Validation.err, reduceCtorEq] at h
 
 theorem compilePred_well_typed_getAttr
-    {a : Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr}
+    {a : Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr} {e₁ : Cedar.Spec.Expr}
     {c c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
     (hitty : it.typeOf = .option (TermType.ofType ty₁.typeOf))
     (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
-    (htp : typeOfGetAttr ty₁ x₁.toExpr a c Γ = .ok (typ, c')) :
+    (htp : typeOfGetAttr ty₁ e₁ a c Γ = .ok (typ, c')) :
     ∃ t, compilePred (.getAttr x₁ a) it (SymEnv.ofEnv Γ) = .ok t ∧
       t.typeOf = .option (TermType.ofType typ.typeOf) := by
   have ⟨hwf_comp_x, _, _⟩ := compilePred_wf hwε hitw hitty hok₁

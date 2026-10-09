@@ -351,7 +351,7 @@ sub-result hypotheses, `compileApp₂` is shown to succeed, and the result type 
 off `compileApp₂_wf_types` and matched to `.option (TermType.ofType typ.typeOf)`.
 -/
 theorem compilePred_well_typed_binaryApp
-    {op₂ : BinaryOp} {x₁ x₂ : Cedar.Spec.PredExpr} {ty₁ ty₂ typ : TypedExpr}
+    {op₂ : BinaryOp} {x₁ x₂ : Cedar.Spec.PredExpr} {ty₁ ty₂ typ : TypedExpr} {e₁ e₂ : Cedar.Spec.Expr}
     {itTy : CedarType} {c c' : Capabilities} {Γ : TypeEnv} {it t₁ t₂ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
@@ -360,7 +360,9 @@ theorem compilePred_well_typed_binaryApp
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
     (hok₂ : compilePred x₂ it (SymEnv.ofEnv Γ) = .ok t₂)
     (hty₂ : t₂.typeOf = .option (TermType.ofType ty₂.typeOf))
-    (htp : typeOfBinaryApp op₂ ty₁ ty₂ x₁.toExpr x₂.toExpr c Γ = .ok (typ, c')) :
+    (hlit₁ : ∀ p, e₁ = .lit p → x₁ = .lit p)
+    (hlit₂ : ∀ p, e₂ = .lit p → x₂ = .lit p)
+    (htp : typeOfBinaryApp op₂ ty₁ ty₂ e₁ e₂ c Γ = .ok (typ, c')) :
     ∃ t, compilePred (.binaryApp op₂ x₁ x₂) it (SymEnv.ofEnv Γ) = .ok t ∧
       t.typeOf = .option (TermType.ofType typ.typeOf) := by
   have ⟨hwf_comp_1, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
@@ -395,12 +397,8 @@ theorem compilePred_well_typed_binaryApp
       rw [hty_get_1, hty_get_2]
       rcases hdisc with ⟨p₁, p₂, hx₁, hx₂⟩ | hb
       · -- both operands are literals: `compilePred (.lit _)` ⇒ primitive compiled type.
-        have hx₁' : x₁ = .lit p₁ := by
-          cases x₁ <;> simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq,
-            PredExpr.lit.injEq]
-        have hx₂' : x₂ = .lit p₂ := by
-          cases x₂ <;> simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq,
-            PredExpr.lit.injEq]
+        have hx₁' : x₁ = .lit p₁ := hlit₁ p₁ hx₁
+        have hx₂' : x₂ = .lit p₂ := hlit₂ p₂ hx₂
         subst hx₁' hx₂'
         have hp₁ := compilePred_lit_option_get_isPrim hok₁
         have hp₂ := compilePred_lit_option_get_isPrim hok₂
