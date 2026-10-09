@@ -32,6 +32,14 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-22 | 3 | In the Rust evaluator, a `RecursionLimit` error inside a predicate propagates unchanged rather than becoming `QuantifierError` (it is an implementation limit with no Lean counterpart). | OPEN — check in Phase 6 differential |
 | D-23 | 3 | Level validation: dereferencing `it` is charged the level of the receiver's elements (max over a set literal's elements). | SETTLED |
 | D-24 | 3 | When an `.all` receiver is not a set, the predicate is still typechecked with `it : Never`, which can add cascade errors next to the "expected set" error. Sound (the policy is rejected); diagnostics could be tightened later. | OPEN — diagnostic quality |
+| D-25 | 4 | In every builder, `it` is built as `item()`: the reserved unknown `IT_SENTINEL` for AST/PST and a dedicated `{"it": {}}` node for EST. Converting to a predicate turns it into `PredExprKind::Item`. | SETTLED |
+| D-26 | 4 | `it` is not a reserved word: under `anyall` a bare `it` used as a value is the element keyword, and is rejected outside a predicate after the whole expression is built (req 1.6). `principal.it`, `{it: 1}`, `has it` still work. Off-build is unchanged. | SETTLED |
+| D-27 | 4 | Protobuf: `All { arg, pred: Expr }` (field 17) plus an empty `Item` message (field 18) for `it`; decode re-checks the predicate (untrusted bytes). | SETTLED |
+| D-28 | 4 | Printing does not re-sugar `.any`: it prints as `!e.all(!p)`, the lowered normal form req 4.1/4.3 allow. | SETTLED |
+| D-29 | 4 | The Lean protobuf decoder (`CedarProto`) gets its `All`/`Item` arms in Phase 6, when DRT first sends `.all` to Lean. | SETTLED |
+| D-30 | 4 | The PST `All` node holds the already-checked AST `PredExpr` (keeps PST→AST conversion infallible); the EST holds a full expression, checked on conversion to the AST. | SETTLED |
+| D-31 | 4 | **Pre-existing, not caused by this work:** `cedar-drt/fuzz` does not compile against the nested cedar checkout (`proto_gen.rs` expects `BTreeMap` proto records, cedar-spec `4149769`, but cedar's `build.rs` does not configure that). Phase 6 needs the fuzz targets, so it must align the cedar checkout or the generator. | OPEN — blocks Phase 6 fuzzing |
+| D-32 | 4 | The stray-`it` check runs at each entry point (text `parse_expr` and policy conditions, EST `Clause`, proto policy bodies), not centrally. A future entry point that forgets it would let the sentinel reach evaluation as a residual unknown instead of an error. Optional hardening: a central guard (e.g. in partial evaluation / TPE). Revisit in Phase 6.5. | OPEN (review NIT) |
 
 ## Details
 
