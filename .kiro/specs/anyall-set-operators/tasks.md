@@ -31,7 +31,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
 | 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
 | 7 | `phase7-anyall-docs` | DONE — review converged (R1: 2 findings fixed, docsrs badge + a local path; R2: NO ACTIONABLE FINDINGS); see `branches/phase7-anyall-docs/OUTCOMES.md`. A1–E1 done: rustdoc (`anyall` in both `lib.rs`, enriched `Expr::all`/`any`, runnable gated doctest on `SetTermInQuantifier`), CHANGELOGs (`cedar-policy` + `cedar-policy-symcc`; core has none), Lean doc comments verified (already complete), `cedar-drt` README `anyall` section, paste-ready `docs/language-reference-anyall.md` + `docs/CEDAR-DOCS-HANDOFF.md`, design.md Phase-7 feature-summary/open-items section, OQ-1 cross-link. D-84/85/86. Doctests 34→35; rustdoc adds no new diagnostics (pre-existing repo doc-lint debt only). |
-| 8 | `phase8-anyall-benchmarks` | not started |
+| 8 | `phase8-anyall-cvc5-benchmarks` | IN-PROGRESS — PLAN + hand-measured data point committed; see `branches/phase8-anyall-cvc5-benchmarks/PLAN.md`. Harness = new `anyall`-gated `bench=false` bin in `cedar-drt/fuzz` (reuses `symcc.rs` `local_solver()` 1 GB cap + cvc5 + generator). Hand point: symbolic `context.ports.all(it>0)` vs `all(it>=0)` → cvc5 SAT in ≈0.032 s (prod path) / ≈0.029 s (raw D-52 `set.filter`/`HO_ALL`). |
 
 ---
 
@@ -301,6 +301,13 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
   _Satisfies:_ OQ-1.
 
 ## Phase 8 — cvc5 runtime benchmarks (LAST — empirical analyzability characterization)
+
+> **Status: IN-PROGRESS — PLAN committed.** Plan + the single hand-measured data point are on
+> `phase8-anyall-cvc5-benchmarks`; see `branches/phase8-anyall-cvc5-benchmarks/PLAN.md` (work items
+> P0–P9, dimensions, gating, the D-68 symbolic-receiver constraint, baseline isolation, smoke/full
+> configs, review checklist, and the one user fork: the full-sweep wall-clock budget). No code
+> beyond P0 yet.
+
 
 Motivation: RFC 0021 explicitly flagged that these operators "will likely have a negative
 impact on analysis performance," and Mohamed et al. (FMCAD 2025) measured exactly this — solver
