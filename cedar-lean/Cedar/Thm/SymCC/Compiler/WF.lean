@@ -1149,7 +1149,7 @@ private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t :
   (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
   (hok : compile (Expr.all x₁ p) εnv = Except.ok t)
   (ih₁ : CompileWF x₁) :
-  t.WellFormed εnv.entities ∧ ∃ ty, t.typeOf = .option ty := by
+  t.WellFormed εnv.entities ∧ t.typeOf = .option .bool := by
   have hwφ₁ : SymEnv.WellFormedFor εnv x₁ := by
     refine ⟨hwf.left, ?_⟩
     have hv := hwf.right
@@ -1164,7 +1164,7 @@ private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t :
     rename_i ty
     split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
     subst hok
-    refine ⟨Term.WellFormed.none_wf TermType.WellFormed.bool_wf, .bool, ?_⟩
+    refine ⟨Term.WellFormed.none_wf TermType.WellFormed.bool_wf, ?_⟩
     simp only [Factory.noneOf, typeOf_term_none]
   · -- non-`.none` receiver: existing structure
     split at hok
@@ -1255,7 +1255,7 @@ private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t :
             refine ⟨hcpw, ?_⟩
             rw [hcpty, hgcp.right]
           have hres := compile_all_fold_result_wf (ety := ety') ih1w (by rw [hty1, htys]) hptsfacts
-          exact ⟨hres.left, _, hres.right⟩
+          exact ⟨hres.left, hres.right⟩
         · -- inner symbolic path (else of the literal guard)
           rename_i hlit
           simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar ety'))) εnv) at hok
@@ -1263,14 +1263,14 @@ private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t :
           split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
           rename_i hpbool; subst hok
           have h := symbolic hpt hpbool
-          exact ⟨h.left, _, h.right⟩
+          exact ⟨h.left, h.right⟩
       · -- typeOf-symbolic path (option.get t₁ not a literal set)
         simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
         rename_i pt hpt
         split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
         rename_i hpbool; subst hok
         have h := symbolic hpt hpbool
-        exact ⟨h.left, _, h.right⟩
+        exact ⟨h.left, h.right⟩
     · simp only [reduceCtorEq] at hok
 
 public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
@@ -1329,7 +1329,15 @@ public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
     exact compile_call_wf hwf hok ih
   | .all x₁ p        =>
     have ih₁ := @compile_wf x₁
-    exact compile_all_wf hwf hok ih₁
+    have h := compile_all_wf hwf hok ih₁
+    exact ⟨h.1, .bool, h.2⟩
+
+/-- The compiled `.all` term is well-formed of type `.option .bool`. -/
+public theorem typeOf_compile_all_option_bool {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
+    (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
+    (hok : compile (Expr.all x₁ p) εnv = Except.ok t) :
+    t.typeOf = .option .bool :=
+  (compile_all_wf hwf hok (fun h₁ h₂ => compile_wf h₁ h₂)).2
 
 public theorem compile_extHasAttr_typeOf {x₁ : Expr} {a : Attr} {l : List Attr} {εnv : SymEnv} {t : Term}
   (hwf : SymEnv.WellFormedFor εnv (Expr.extHasAttr x₁ a l))

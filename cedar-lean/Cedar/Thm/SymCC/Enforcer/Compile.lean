@@ -308,7 +308,7 @@ theorem compile_interpret_in_footprint {x : Expr} {εnv : SymEnv} {I : Interpret
     have hty := typeOf_compile_call_option_types hwε hok
     rcases hty with hty | ⟨_, hty⟩ | hty
   case' case14 =>
-    simp [compile] at hok
+    have hty := typeOf_compile_all_option_bool hwε hok
   all_goals {
     have hty' := compile_isOptionEntityType hwε hI hok ht
     simp only [TermType.isOptionEntityType, hty, Bool.false_eq_true] at hty'
