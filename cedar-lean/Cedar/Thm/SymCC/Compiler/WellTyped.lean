@@ -6,6 +6,11 @@ import Cedar.Thm.SymCC.Compiler.WF
 import Cedar.Thm.SymCC.Env.ofEnv
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Term.ofType
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.GetAttr
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.ExtHasAttr
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.RecordCall
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.BinaryApp
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.Control
 
 /-!
 This file contains theorems saying that `compile` succeeds
@@ -2110,10 +2115,10 @@ does not carry): after unfolding `typeOfUnaryApp`, each `ok` branch pins `typ` t
 -/
 theorem compilePred_well_typed_unaryApp
     {op : UnaryOp} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr}
-    {c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    {elemTy : TermType} {c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
-    (hitty : it.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (hitty : it.typeOf = .option elemTy)
     (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
     (htp : typeOfUnaryApp op ty₁ = .ok (typ, c')) :
@@ -2204,14 +2209,14 @@ get entity/record-ness, `compileHasAttr_always_ok` gives success, and `compileHa
 gives the `.option .bool` type. No per-op casing needed.
 -/
 theorem compilePred_well_typed_hasAttr
-    {a : Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr}
-    {c c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    {a : Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr} {e₁ : Cedar.Spec.Expr}
+    {elemTy : TermType} {c c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
-    (hitty : it.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (hitty : it.typeOf = .option elemTy)
     (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
-    (htp : typeOfHasAttr ty₁ x₁.toExpr a c Γ = .ok (typ, c')) :
+    (htp : typeOfHasAttr ty₁ e₁ a c Γ = .ok (typ, c')) :
     ∃ t, compilePred (.hasAttr x₁ a) it (SymEnv.ofEnv Γ) = .ok t ∧
       t.typeOf = .option (TermType.ofType typ.typeOf) := by
   have ⟨hwf_comp_x, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
@@ -2254,43 +2259,50 @@ theorem compilePred_well_typed_hasAttr
   rw [hty_tha, htyp_bool]
   simp only [TermType.ofType]
 
+theorem predExpr_toExpr_eq_lit {x : Cedar.Spec.PredExpr} {p : Prim}
+    (h : x.toExpr = .lit p) : x = .lit p := by
+  cases x <;> simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq, PredExpr.lit.injEq]
+
 /--
-D-72 step (3): a predicate that type-checks against element type `itTy` compiles
-(`compilePred`) to a well-typed term, given the reserved element variable `it` is a
-well-formed term of type `.option (TermType.ofType itTy)`. The predicate analogue of
-`compile_well_typed_on_wf_expr`; its `.bool` conclusion is what discharges the D-65
-Bool guard in the `.all` arm. (WIP: leaf arms done, recursive arms building.)
+D-72 step (3) / D-73b: a well-typed source predicate `p₀` compiles — AFTER NORMALIZATION —
+to a well-typed term. Recursion is on the SOURCE `p₀` (following `typeOfPred`'s case
+structure), concluding about `compilePred (normalize p₀ …)`; `.and`/`.or`/`.ite`
+short-circuits are handled by `normalize`, and surviving nodes have both operands
+`.bool`-typed from `typeOfAnd`/`typeOfOr`/`typeOfIf` success. Its `.bool` conclusion
+discharges the D-65 Bool guard in the `.all` arm. (binaryApp arm wired; red elsewhere until done.)
 -/
-theorem compilePred_well_typed {p : Cedar.Spec.PredExpr} {itTy : CedarType} {typ : TypedExpr}
+theorem compilePred_well_typed {p₀ : Cedar.Spec.PredExpr} {itTy : CedarType} {typ : TypedExpr}
     {c c' : Capabilities} {Γ : TypeEnv} {it : Term}
     (hwf : Γ.WellFormed)
-    (hwtp : PredExpr.WellTyped Γ p)
-    (htp : typeOfPred p itTy c Γ = .ok (typ, c'))
+    (htp : typeOfPred p₀ itTy c Γ = .ok (typ, c'))
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
     (hitty : it.typeOf = .option (TermType.ofType itTy)) :
-    ∃ t, compilePred p it (SymEnv.ofEnv Γ) = .ok t ∧ t.typeOf = .option (TermType.ofType typ.typeOf) := by
-  cases hwtp
-  case item =>
+    ∃ t, compilePred (PredExpr.normalize p₀ itTy c Γ) it (SymEnv.ofEnv Γ) = .ok t ∧
+      t.typeOf = .option (TermType.ofType typ.typeOf) := by
+  have hwε := ofEnv_is_wf hwf
+  match p₀ with
+  | .item =>
+    simp only [PredExpr.normalize]
     simp only [typeOfPred, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
     obtain ⟨htyp, _⟩ := htp
     refine ⟨it, by simp only [compilePred], ?_⟩
-    subst htyp
-    simp only [TypedExpr.typeOf]
-    exact hitty
-  case lit_entity uid h₁ =>
-    have hcond : (Γ.ets.isValidEntityUID uid || Γ.acts.contains uid) = true := by
-      rcases h₁ with h | h <;> simp [h]
-    simp only [typeOfPred, typeOfLit, hcond, if_true, Function.comp_apply,
-      Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
-    obtain ⟨htyp, _⟩ := htp
-    subst htyp
-    have hvalid : (SymEnv.ofEnv Γ).entities.isValidEntityUID uid = true :=
-      entity_uid_wf_implies_sym_entities_is_valid_entity_uid hwf h₁
-    refine ⟨⊙Term.prim (TermPrim.entity uid), ?_, ?_⟩
-    · simp only [compilePred, compilePrim, hvalid, if_true]
-    · simp [TypedExpr.typeOf, Factory.someOf, TermType.ofType]
-  case lit_other prim h₁ =>
-    cases prim with
+    subst htyp; simp only [TypedExpr.typeOf]; exact hitty
+  | .lit l =>
+    simp only [PredExpr.normalize]
+    cases l with
+    | entityUID uid =>
+      simp only [typeOfPred, typeOfLit] at htp
+      split at htp <;> simp only [Validation.ok, Validation.err, Function.comp_apply,
+        Except.ok.injEq, Prod.mk.injEq, reduceCtorEq, if_true] at htp
+      rename_i hcond
+      obtain ⟨htyp, _⟩ := htp; subst htyp
+      have h₁ : Γ.ets.isValidEntityUID uid ∨ Γ.acts.contains uid := by
+        rw [Bool.or_eq_true] at hcond; exact hcond
+      have hvalid : (SymEnv.ofEnv Γ).entities.isValidEntityUID uid = true :=
+        entity_uid_wf_implies_sym_entities_is_valid_entity_uid hwf h₁
+      exact ⟨⊙Term.prim (TermPrim.entity uid),
+        by simp only [compilePred, compilePrim, hvalid, if_true],
+        by simp [TypedExpr.typeOf, Factory.someOf, TermType.ofType]⟩
     | bool b =>
       cases b <;>
         (simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
@@ -2304,14 +2316,14 @@ theorem compilePred_well_typed {p : Cedar.Spec.PredExpr} {itTy : CedarType} {typ
       obtain ⟨htyp, _⟩ := htp; subst htyp
       refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
       simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType]
-    | string s =>
+    | string str =>
       simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
         Prod.mk.injEq] at htp
       obtain ⟨htyp, _⟩ := htp; subst htyp
       refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
       simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType]
-    | entityUID uid => exact absurd rfl (h₁ uid)
-  case var v =>
+  | .var v =>
+    simp only [PredExpr.normalize]
     cases v <;>
       (simp only [typeOfPred, typeOfVar, Function.comp_apply, Validation.ok, Except.ok.injEq,
         Prod.mk.injEq] at htp
@@ -2321,5 +2333,151 @@ theorem compilePred_well_typed {p : Cedar.Spec.PredExpr} {itTy : CedarType} {typ
               Term.typeOf, TermType.ofType, TermType.isEntityType, TermType.isRecordType, if_true]; rfl,
          by simp [compilePred, compileVar, SymEnv.ofEnv, SymRequest.ofRequestType,
               Term.typeOf, TermType.ofType, TypedExpr.typeOf, Factory.someOf]⟩)
-  -- recursive arms (ite/and/or/unaryApp/binaryApp/hasAttr/getAttr/extHasAttr/record/call): WIP red
+  | .unaryApp op x₁ =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_unaryApp hwε hitw hitty hok₁ hty₁ htp
+  | .hasAttr x₁ a =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_hasAttr hwε hitw hitty hok₁ hty₁ htp
+  | .getAttr x₁ a =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_getAttr hwε hitw hitty hok₁ hty₁ htp
+  | .extHasAttr x₁ a attrs =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hehp : typeOfExtHasAttr ty₁ x₁.toExpr (a :: attrs) c Γ <;> rw [hehp] at htp <;>
+      simp only [Validation.ok, Validation.err, Except.bind_ok, Except.bind_err, Except.ok.injEq,
+        Prod.mk.injEq, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨bty, c₂⟩ := r₂
+    obtain ⟨htyp, _⟩ := htp; subst htyp
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_extHasAttr hwε hitw hitty hok₁ hty₁ hehp
+  | .binaryApp op x₁ x₂ =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hx₂ : typeOfPred x₂ itTy c Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+    refine compilePred_well_typed_binaryApp hwε hitw hitty hok₁ hty₁ hok₂ hty₂ ?_ ?_ htp
+    · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
+    · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
+  | .ite x₁ x₂ x₃ =>
+    skip
+  | .and x₁ x₂ =>
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hx₂ : typeOfPred x₂ itTy (c ∪ c₁) Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    simp only [PredExpr.normalize, hx₁]
+    -- Case on the left operand's bool subtype (= `normalize`'s and-fold condition).
+    match hb₁ : ty₁.typeOf with
+    | .bool .ff =>
+      -- `typeOfAnd` short-circuits: `typ = ty₁`.
+      simp only [typeOfAnd, hb₁, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp; subst htyp
+      exact ⟨t₁, hok₁, hty₁⟩
+    | .bool .tt =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfAnd, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_and hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .bool .anyBool =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfAnd, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_and hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+      exfalso; simp only [typeOfAnd, hb₁, Validation.err, reduceCtorEq] at htp
+  | .or x₁ x₂ =>
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hx₂ : typeOfPred x₂ itTy c Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    simp only [PredExpr.normalize, hx₁]
+    match hb₁ : ty₁.typeOf with
+    | .bool .tt =>
+      simp only [typeOfOr, hb₁, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp; subst htyp
+      exact ⟨t₁, hok₁, hty₁⟩
+    | .bool .ff =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfOr, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_or hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .bool .anyBool =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfOr, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_or hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+      exfalso; simp only [typeOfOr, hb₁, Validation.err, reduceCtorEq] at htp
+  | .record axs =>
+    skip
+  | .call xfn xs =>
+    skip
+termination_by sizeOf p₀
+decreasing_by
+  all_goals simp_wf
+  all_goals (try omega)
+  all_goals
+    (rename_i h
+     first
+       | (replace h := List.sizeOf_lt_of_mem h; omega)
+       | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+       | omega)
 end Cedar.Thm
