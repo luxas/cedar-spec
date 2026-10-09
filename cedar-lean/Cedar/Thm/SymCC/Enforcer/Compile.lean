@@ -1989,7 +1989,8 @@ private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv
 := by
   have hnoit : p.NoItDependentIn = true := by
     by_contra hc; rw [Bool.not_eq_true] at hc
-    rw [compile.eq_def] at hok; simp only [hc, Bool.not_false, reduceCtorEq, reduceIte] at hok
+    rw [compile.eq_def] at hok
+    simp only [hc, not_false_eq_true, if_true, reduceCtorEq] at hok
   refine ⟨hnoit, ?_⟩
   rw [compile.eq_def] at hok
   simp only [hnoit, not_true, Bool.not_true, Bool.false_eq_true, not_false_eq_true, reduceIte] at hok
