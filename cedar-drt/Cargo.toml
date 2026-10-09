@@ -33,6 +33,7 @@ anyall = [
     "cedar-policy-core/anyall",
     "cedar-policy/anyall",
     "cedar-policy-generators/anyall",
+    "cedar-lean-ffi/anyall",
 ]
 
 [dev-dependencies]

@@ -1122,6 +1122,18 @@ impl From<cedar_policy_symcc::op::Op> for Op {
                 Self::StringLike(pat.get_elems().iter().map(|p| (*p).into()).collect())
             }
             cedar_policy_symcc::op::Op::Ext(op) => Self::Ext(op.into()),
+            // `set.all` (feature `anyall`): the FFI bridge for the SymCC
+            // quantifier op is part of Phase 6 W8 (the SymCC differential),
+            // which is deferred until Phase 5B re-lands and D-74 resolves. The
+            // W6/W7 eval/validation differentials do not translate SymCC Terms
+            // (they send the AST), so this arm is unreachable on those paths;
+            // the SymCC encoder also refuses a `set.all` term earlier
+            // (`EncodeError::SetAllNotEncoded`). Reaching here means a SymCC
+            // target was run under `anyall` before W8 wired this bridge.
+            #[cfg(feature = "anyall")]
+            cedar_policy_symcc::op::Op::SetAll => {
+                unimplemented!("FFI bridge for SymCC `set.all` is Phase 6 W8 (deferred)")
+            }
         }
     }
 }
