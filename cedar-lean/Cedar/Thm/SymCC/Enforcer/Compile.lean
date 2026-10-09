@@ -1996,7 +1996,7 @@ private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv
   simp only [hnoit, not_true, Bool.not_true, Bool.false_eq_true, not_false_eq_true, reduceIte] at hok
   simp_do_let (compile x₁ εnv) at hok
   rename_i t₁ hr₁
-  refine ⟨t₁, hr₁, ?_⟩
+  refine ⟨t₁, (by first | exact hr₁ | rfl), ?_⟩
   split at hok
   · -- .none receiver
     rename_i ty
