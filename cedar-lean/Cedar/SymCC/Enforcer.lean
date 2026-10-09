@@ -73,6 +73,9 @@ def footprint (x : Expr) (εnv : SymEnv) : Set Term :=
   | .call _ xs
   | .set xs            => xs.mapUnion₁ (λ ⟨xᵢ, _⟩ => footprint xᵢ εnv)
   | .record axs        => axs.mapUnion₂ (λ ⟨(_, xᵢ), _⟩ => footprint xᵢ εnv)
+  -- Empty until SymCC supports `.all` (anyall Phase 5): `compile` rejects
+  -- `.all`, so no verification query over such an expression is ever built.
+  | .all _ _           => Set.empty
 where
   ofEntity : Set Term :=
     match compile x εnv with

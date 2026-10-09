@@ -275,6 +275,11 @@ theorem substitute_action_preserves_evaluation (expr : Expr) (request : Request)
       intro xᵢ _
       exact @substitute_action_preserves_evaluation xᵢ request entities
     exact @substitute_action_preserves_evaluation_call xfn xs request entities ih
+  | all x p =>
+    have ih₁ := substitute_action_preserves_evaluation x request entities
+    simp only [substituteAction] at ih₁
+    simp only [substituteAction, mapOnVars, evaluate]
+    rw [ih₁]
 
 theorem substitute_action_preserves_evaluates_to {expr : Expr} {request : Request} {entities : Entities} {v : Value}:
   EvaluatesTo (substituteAction request.action expr) request entities v ↔

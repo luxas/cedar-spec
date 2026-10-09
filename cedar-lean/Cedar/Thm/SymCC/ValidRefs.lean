@@ -568,6 +568,8 @@ theorem typeOf_preserves_valid_refs
     apply typeOf_preserves_valid_refs_set entities hty hrefs
     intros x hmem_x tx c c'
     apply typeOf_preserves_valid_refs
+  | all _ _ =>
+    simp [typeOf] at hty
   | call _ args =>
     apply typeOf_preserves_valid_refs_call entities hty hrefs
     intros arg hmem_arg tx c c'

@@ -20,6 +20,27 @@ import UnitTest.Run
 
 /-! This file defines unit tests for CedarProto functions. -/
 
+namespace Cedar.Spec.PredExpr
+open Cedar.Data
+/-- `Expr.mkWf` for set-quantifier predicates. -/
+partial def mkWf : Cedar.Spec.PredExpr → Cedar.Spec.PredExpr
+  | .item => .item
+  | .lit p => .lit p
+  | .var v => .var v
+  | .ite a b c => .ite a.mkWf b.mkWf c.mkWf
+  | .and a b => .and a.mkWf b.mkWf
+  | .or a b => .or a.mkWf b.mkWf
+  | .unaryApp op x => .unaryApp op x.mkWf
+  | .binaryApp op a b => .binaryApp op a.mkWf b.mkWf
+  | .getAttr x attr => .getAttr x.mkWf attr
+  | .hasAttr x attr => .hasAttr x.mkWf attr
+  | .extHasAttr x attr attrs => .extHasAttr x.mkWf attr attrs
+  | .record pairs =>
+    let m := Map.make (pairs.map λ (k, v) => (k, v.mkWf))
+    .record m.toList
+  | .call xfn xs => .call xfn (xs.map mkWf)
+end Cedar.Spec.PredExpr
+
 namespace Cedar.Spec.Expr
 open Cedar.Data
 /-- Ensures that records are sorted by key, including recursively -/
@@ -39,6 +60,7 @@ partial def mkWf : Cedar.Spec.Expr → Cedar.Spec.Expr
     let m := Map.make (pairs.map λ (k, v) => (k, v.mkWf))
     .record m.toList
   | .call xfn xs => .call xfn (xs.map mkWf)
+  | .all x p => .all x.mkWf p.mkWf
 end Cedar.Spec.Expr
 
 namespace Cedar.Spec.Policies

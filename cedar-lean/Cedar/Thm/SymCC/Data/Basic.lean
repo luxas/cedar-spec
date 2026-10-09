@@ -135,6 +135,50 @@ public def Prim.ValidRef (validRef : EntityUID → Prop) : Prim → Prop
   | .entityUID uid => validRef uid
   | _              => True
 
+public inductive PredExpr.ValidRefs (validRef : EntityUID → Prop) : PredExpr → Prop
+  | item_valid :
+    ValidRefs validRef .item
+  | lit_valid {p : Prim}
+    (h₁ : p.ValidRef validRef) :
+    ValidRefs validRef (.lit p)
+  | var_valid {v : Var} :
+    ValidRefs validRef (.var v)
+  | ite_valid {x₁ x₂ x₃ : PredExpr}
+    (h₁ : ValidRefs validRef x₁)
+    (h₂ : ValidRefs validRef x₂)
+    (h₃ : ValidRefs validRef x₃) :
+    ValidRefs validRef (.ite x₁ x₂ x₃)
+  | and_valid {x₁ x₂ : PredExpr}
+    (h₁ : ValidRefs validRef x₁)
+    (h₂ : ValidRefs validRef x₂) :
+    ValidRefs validRef (.and x₁ x₂)
+  | or_valid {x₁ x₂ : PredExpr}
+    (h₁ : ValidRefs validRef x₁)
+    (h₂ : ValidRefs validRef x₂) :
+    ValidRefs validRef (.or x₁ x₂)
+  | binaryApp_valid {op₂ : BinaryOp} {x₁ x₂ : PredExpr}
+    (h₁ : ValidRefs validRef x₁)
+    (h₂ : ValidRefs validRef x₂) :
+    ValidRefs validRef (.binaryApp op₂ x₁ x₂)
+  | unaryApp_valid {op₁ : UnaryOp} {x₁ : PredExpr}
+    (h₁ : ValidRefs validRef x₁) :
+    ValidRefs validRef (.unaryApp op₁ x₁)
+  | hasAttr_valid {x₁ : PredExpr} {a : Attr}
+    (h₁ : ValidRefs validRef x₁) :
+    ValidRefs validRef (.hasAttr x₁ a)
+  | extHasAttr_valid {x₁ : PredExpr} {a : Attr} {as : List Attr}
+    (h₁ : ValidRefs validRef x₁) :
+    ValidRefs validRef (.extHasAttr x₁ a as)
+  | getAttr_valid {x₁ : PredExpr} {a : Attr}
+    (h₁ : ValidRefs validRef x₁) :
+    ValidRefs validRef (.getAttr x₁ a)
+  | record_valid {axs : List (Attr × PredExpr)}
+    (h₁ : ∀ ax ∈ axs, ValidRefs validRef ax.snd) :
+    ValidRefs validRef (.record axs)
+  | call_valid {xfn : ExtFun} {xs : List PredExpr}
+    (h₁ : ∀ x ∈ xs, ValidRefs validRef x) :
+    ValidRefs validRef (.call xfn xs)
+
 public inductive Expr.ValidRefs (validRef : EntityUID → Prop) : Expr → Prop
   | lit_valid {p : Prim}
     (h₁ : p.ValidRef validRef) :
@@ -179,6 +223,10 @@ public inductive Expr.ValidRefs (validRef : EntityUID → Prop) : Expr → Prop
   | call_valid {xfn : ExtFun} {xs : List Expr}
     (h₁ : ∀ x ∈ xs, ValidRefs validRef x) :
     ValidRefs validRef (.call xfn xs)
+  | all_valid {x₁ : Expr} {p : PredExpr}
+    (h₁ : ValidRefs validRef x₁)
+    (h₂ : p.ValidRefs validRef) :
+    ValidRefs validRef (.all x₁ p)
 
 @[expose]
 public def Env.WellFormed (env : Env) : Prop :=

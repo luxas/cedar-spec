@@ -319,5 +319,8 @@ def compile (x : Expr) (εnv : SymEnv) : Result Term := do
   | .call xfn xs =>
     let ts ← xs.mapM₁ (λ ⟨x₁, _⟩ => compile x₁ εnv)
     compileCall xfn ts
+  -- Symbolic compilation of the `.all` set quantifier is Phase 5 of the
+  -- anyall feature; until then it is conservatively unsupported.
+  | .all _ _ => .error .unsupportedError
 
 namespace Cedar.SymCC

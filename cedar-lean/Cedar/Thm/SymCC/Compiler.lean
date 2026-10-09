@@ -101,6 +101,7 @@ theorem compile_evaluate {x : Expr} {env : Env} {εnv : SymEnv} {t : Term} :
       intro xᵢ _
       exact @compile_evaluate xᵢ
     exact compile_evaluate_call h₁ h₂ h₃ h₄ ih
+  | .all _ _           => simp [compile] at h₄
 
 /--
 The lemma shows that `interpret` and `compile` can be applied in any order to get
@@ -164,6 +165,7 @@ theorem compile_interpret {x : Expr} {εnv : SymEnv} {I : Interpretation} {t : T
       intro xᵢ _
       exact @compile_interpret xᵢ
     exact compile_interpret_call h₁ h₂ h₃ ih
+  | .all _ _           => simp [compile] at h₃
 
 theorem compile_bisimulation {x : Expr} {env : Env} {εnv : SymEnv} {t : Term} {I : Interpretation} :
   εnv.WellFormedFor x →

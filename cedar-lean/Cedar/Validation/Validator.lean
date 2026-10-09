@@ -114,6 +114,38 @@ undefined entity types that the Lean typechecker ignores due to short-circuiting
 We include this validation pass so that the validators behave exactly the same,
 but we don't need to prove anything about it for soundness.
 -/
+/-- `checkEntities` for the body of a `.all` set quantifier. -/
+public def checkPredEntities (schema : Schema) : PredExpr → Except TypeError Unit
+  | .lit (.entityUID uid) =>
+    if schema.ets.isValidEntityUID uid || schema.acts.contains uid
+    then .ok ()
+    else .error (.unknownEntity uid.ty)
+  | .unaryApp (.is ety) x₁ =>
+    if schema.ets.contains ety || schema.acts.actionType? ety
+    then checkPredEntities schema x₁
+    else .error (.unknownEntity ety)
+  | .item | .lit _ | .var _ => .ok ()
+  | .ite x₁ x₂ x₃ => do
+    checkPredEntities schema x₁
+    checkPredEntities schema x₂
+    checkPredEntities schema x₃
+  | .binaryApp _ x₁ x₂
+  | .and x₁ x₂
+  | .or x₁ x₂ => do
+    checkPredEntities schema x₁
+    checkPredEntities schema x₂
+  | .getAttr x₁ _
+  | .hasAttr x₁ _
+  | .extHasAttr x₁ _ _
+  | .unaryApp _ x₁ =>
+    checkPredEntities schema x₁
+  | .call _ xs =>
+    xs.attach.forM (λ x =>
+      have _ := List.sizeOf_lt_of_mem x.property
+      checkPredEntities schema x.val)
+  | .record axs =>
+    axs.attach₂.forM (checkPredEntities schema ·.val.snd)
+
 public def checkEntities (schema : Schema) : Expr → Except TypeError Unit
   | .lit (.entityUID uid) =>
     if schema.ets.isValidEntityUID uid || schema.acts.contains uid
@@ -145,6 +177,9 @@ public def checkEntities (schema : Schema) : Expr → Except TypeError Unit
       checkEntities schema x.val)
   | .record axs =>
     axs.attach₂.forM (checkEntities schema ·.val.snd)
+  | .all x₁ p => do
+    checkEntities schema x₁
+    checkPredEntities schema p
 
 public def mapOnVars (f : Var → Expr) : Expr → Expr
   | .lit l => .lit l
@@ -187,6 +222,12 @@ public def mapOnVars (f : Var → Expr) : Expr → Expr
   | .call xfn xs =>
     let xs := xs.map₁ (λ ⟨x, _⟩ => mapOnVars f x)
     .call xfn xs
+  -- The predicate is left unchanged: `f` produces an `Expr`, which cannot in
+  -- general be embedded in a set-free `PredExpr`. Only typing precision is
+  -- affected (e.g. `action` inside a predicate is not specialised).
+  | .all x₁ p =>
+    let x₁ := mapOnVars f x₁
+    .all x₁ p
 
 /- Substitute `action` variable for a literal EUID to improve typechecking precision. -/
 public def substituteAction (uid : EntityUID) (expr : Expr) : Expr :=

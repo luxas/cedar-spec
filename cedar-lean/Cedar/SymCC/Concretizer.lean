@@ -88,6 +88,21 @@ deriving Repr, DecidableEq
 def Env.entityUIDs (env : Env) : Set EntityUID :=
   env.request.entityUIDs ∪ env.entities.entityUIDs
 
+def PredExpr.entityUIDs : PredExpr → Set EntityUID
+  | .item              => Set.empty
+  | .lit p             => p.entityUIDs
+  | .var _             => Set.empty
+  | .ite x₁ x₂ x₃      => x₁.entityUIDs ∪ x₂.entityUIDs ∪ x₃.entityUIDs
+  | .and x₁ x₂
+  | .or x₁ x₂
+  | .binaryApp _ x₁ x₂ => x₁.entityUIDs ∪ x₂.entityUIDs
+  | .unaryApp _ x₁
+  | .getAttr x₁ _
+  | .hasAttr x₁ _      => x₁.entityUIDs
+  | .extHasAttr x₁ _ _ => x₁.entityUIDs
+  | .call _ xs         => xs.mapUnion₁ (λ ⟨x, _⟩ => x.entityUIDs)
+  | .record axs        => axs.mapUnion₂ (λ ⟨(_, x), _⟩ => x.entityUIDs)
+
 def Expr.entityUIDs : Expr → Set EntityUID
   | .lit p             => p.entityUIDs
   | .var _             => Set.empty
@@ -102,6 +117,7 @@ def Expr.entityUIDs : Expr → Set EntityUID
   | .set xs
   | .call _ xs         => xs.mapUnion₁ (λ ⟨x, _⟩ => x.entityUIDs)
   | .record axs        => axs.mapUnion₂ (λ ⟨(_, x), _⟩ => x.entityUIDs)
+  | .all x₁ p          => x₁.entityUIDs ∪ p.entityUIDs
 
 end Cedar.Spec
 

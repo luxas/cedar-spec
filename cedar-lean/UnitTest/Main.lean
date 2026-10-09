@@ -14,6 +14,7 @@
  limitations under the License.
 -/
 
+import UnitTest.AnyAll
 import UnitTest.BatchedEvaluator
 import UnitTest.CedarProto
 import UnitTest.Datetime
@@ -27,6 +28,7 @@ import UnitTest.Levels
 open UnitTest
 
 def tests :=
+  AnyAll.tests ++
   [BatchedEvaluator.tests] ++
   Datetime.tests ++
   Decimal.tests ++

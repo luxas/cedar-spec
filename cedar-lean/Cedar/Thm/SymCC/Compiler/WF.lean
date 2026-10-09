@@ -939,6 +939,7 @@ public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
       intro xᵢ _
       exact @compile_wf xᵢ
     exact compile_call_wf hwf hok ih
+  | .all _ _         => simp [compile] at hok
 
 public theorem compile_extHasAttr_typeOf {x₁ : Expr} {a : Attr} {l : List Attr} {εnv : SymEnv} {t : Term}
   (hwf : SymEnv.WellFormedFor εnv (Expr.extHasAttr x₁ a l))
@@ -1076,6 +1077,19 @@ private theorem evaluate_and_wf {x₁ x₂ : Expr} {env : Env} {v : Value}
   rw [evaluate.eq_def] at hok
   simp only [Bool.not_eq_true'] at hok
   exact evaluate_and_or_wf hok
+
+private theorem evaluate_all_wf {x₁ : Expr} {p : PredExpr} {env : Env} {v : Value}
+  (hok : evaluate (Expr.all x₁ p) env.request env.entities = Except.ok v) :
+  Value.WellFormed env.entities v
+:= by
+  rw [evaluate.eq_def] at hok
+  simp only at hok
+  cases h₁ : Result.as (Set Value) (evaluate x₁ env.request env.entities) <;>
+    simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  simp only [evalAll] at hok
+  split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+  subst hok
+  exact value_bool_wf
 
 private theorem evaluate_or_wf {x₁ x₂ : Expr} {env : Env} {v : Value}
   (hok : evaluate (Expr.or x₁ x₂) env.request env.entities = Except.ok v) :
@@ -1325,6 +1339,7 @@ public theorem evaluate_wf {x : Expr} {env : Env} {v : Value} :
       exact @evaluate_wf xᵢ
     exact evaluate_record_wf hwf hok ih
   | .call _ _         => exact evaluate_call_wf hok
+  | .all _ _          => exact evaluate_all_wf hok
 termination_by sizeOf x
 
 public theorem wf_value_uid_implies_exists_entity_data {es : Entities} {uid : EntityUID}
