@@ -989,6 +989,40 @@ private theorem compile_interpret_on_footprint_ihs {xs : List Expr} {ts : List T
   apply ih x hx (hwε x hx) hI₁ hI₂ hsm _ hok
   exact Set.subset_trans (List.mem_implies_subset_mapUnion (footprint · εnv) hx) hft
 
+/--
+D-70 option A, step (1): `SameOn` is preserved by `extInterp`. `extInterp` only
+redefines `I.vars` at the reserved `!anyall!it` entry, and every term `SameOn`
+inspects — entity `attrs`/`ancestors`/`tags` (unary functions reading only
+`I.funs`), the request terms (`NoAnyAllItVar`), and the footprint terms `t ∈ ft`
+(also `NoAnyAllItVar`) — never reads that entry. So two interpretations that agree
+on `ft` still agree after extending both with the same element binding.
+-/
+private theorem symEnv_sameOn_extInterp {εnv : SymEnv} {ft : Set Term} {I₁ I₂ : Interpretation} {vi : Term} {ety : TermType}
+  (hwε : εnv.WellFormed)
+  (hftv : ∀ t ∈ ft, t.NoAnyAllItVar = true ∧ t.NoSetAll = true)
+  (hsm : εnv.SameOn ft I₁ I₂) :
+  εnv.SameOn ft (extInterp I₁ vi ety) (extInterp I₂ vi ety)
+:= by
+  have ⟨hreq, hent⟩ := hsm
+  refine ⟨?_, ?_⟩
+  · -- request terms: NoAnyAllItVar ⇒ extInterp invariant on both sides
+    have h₁ := symEnv_interpret_extInterp (εnv := εnv) (I := I₁) (v := vi) (ety := ety) hwε
+    have h₂ := symEnv_interpret_extInterp (εnv := εnv) (I := I₂) (v := vi) (ety := ety) hwε
+    have e₁ : (εnv.interpret (extInterp I₁ vi ety)).request = (εnv.interpret I₁).request := by rw [h₁]
+    have e₂ : (εnv.interpret (extInterp I₂ vi ety)).request = (εnv.interpret I₂).request := by rw [h₂]
+    simp only [SymEnv.interpret] at e₁ e₂
+    rw [e₁, e₂]; exact hreq
+  · -- entities: attrs/ancestors/tags functions and ft terms don't read I.vars
+    intro ety' δ hfind
+    have ⟨ha, hanc, ht⟩ := hent ety' δ hfind
+    refine ⟨ha, ?_, ht⟩
+    intro ancTy ancF hancfind t htft uid hintp hety
+    -- t ∈ ft is NoAnyAllItVar: its interpretation is unchanged by extInterp
+    have htconv : t.interpret I₁ = .some (.entity uid) := by
+      have ⟨hnv, hns⟩ := hftv t htft
+      rwa [interpret_extInterp_eq_of_noAnyAllItVar t hnv hns] at hintp
+    -- app of the (unchanged) ancestor function
+    exact hanc ancTy ancF hancfind t htft uid htconv hety
 private theorem compile_interpret_set_on_footprint {xs : List Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor (.set xs))
   (hI₁ : I₁.WellFormed εnv.entities)
