@@ -2103,6 +2103,100 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
       omega
 
 /--
+D-72 step (3), `.unaryApp` arm (mirror of `compile_well_typed_unaryApp`). Driven by
+`typeOfUnaryApp`'s success (not an `op.WellTyped` cases, which the predicate relation
+does not carry): after unfolding `typeOfUnaryApp`, each `ok` branch pins `typ` to
+`.unaryApp op ty₁ resultTy` so `typ.typeOf` reduces to the per-op result type.
+-/
+theorem compilePred_well_typed_unaryApp
+    {op : UnaryOp} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr}
+    {c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    (hwε : (SymEnv.ofEnv Γ).WellFormed)
+    (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
+    (hitty : it.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
+    (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (htp : typeOfUnaryApp op ty₁ = .ok (typ, c')) :
+    ∃ t, compilePred (.unaryApp op x₁) it (SymEnv.ofEnv Γ) = .ok t ∧
+      t.typeOf = .option (TermType.ofType typ.typeOf) := by
+  have ⟨hwf_comp_x, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
+  have ⟨hwf_get_comp_x, hty_get_comp_x⟩ := wf_option_get hwf_comp_x hty₁
+  -- Pin `typ` from `typeOfUnaryApp`'s success (the run-37 opener), then reduce
+  -- `compilePred (.unaryApp ..)` to `ifSome t₁ (compileApp₁ op (option.get t₁))`.
+  unfold typeOfUnaryApp at htp
+  split at htp <;>
+    simp only [Function.comp_apply, Validation.ok, Except.ok.injEq, Prod.mk.injEq,
+      reduceCtorEq, false_and] at htp
+  case h_6 => simp only [Validation.err, reduceCtorEq] at htp
+  all_goals (first | (obtain ⟨htyp, -⟩ := htp; subst typ) | skip)
+  -- `.not`
+  case _ x hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [typeOf_term_some, TypedExpr.typeOf, TermType.ofType, TermType.option.injEq]
+    apply (wf_not (εs := (SymEnv.ofEnv Γ).entities) ?_ ?_).right
+    · exact hwf_get_comp_x
+    · simp [hty_get_comp_x, hty_expr, TermType.ofType]
+  -- `.neg`
+  case _ hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [TypedExpr.typeOf, TermType.ofType, Factory.ifFalse, Factory.noneOf, Factory.someOf]
+    have ⟨hwf_bvnego_get_expr, hty_bvnego_get_expr⟩ := wf_bvnego hwf_get_comp_x hty_get_comp_x
+    have ⟨hwf_bvneg_get_expr, hty_bvneg_get_expr⟩ := wf_bvneg hwf_get_comp_x hty_get_comp_x
+    apply wf_typeOf_ite
+    any_goals assumption
+    any_goals simp only [typeOf_term_some, typeOf_term_none, TermType.option.injEq]
+    · constructor
+      simp [*]
+      constructor
+    · constructor; assumption
+    · simp [*]
+    · simp [*]
+  -- `.isEmpty`
+  case _ elem_ty hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [Factory.set.isEmpty, Term.typeOf, TypedExpr.typeOf, TermType.ofType,
+      TermType.option.injEq]
+    split
+    · simp [typeOf_bool]
+    · simp only [hty_get_comp_x]
+      apply (wf_eq ?_ ?_ ?_).right
+      any_goals assumption
+      · constructor
+        · intros; contradiction
+        · intros; contradiction
+        · have h : TermType.WellFormed (SymEnv.ofEnv Γ).entities (.set (TermType.ofType elem_ty)) := by
+            simp only [← hty_get_comp_x]
+            apply typeOf_wf_term_is_wf
+            assumption
+          cases h; assumption
+        · constructor
+      · simp only [hty_get_comp_x, Term.typeOf]
+  -- `.like`
+  case _ _ hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [Term.typeOf, TypedExpr.typeOf, TermType.ofType, TermType.option.injEq]
+    exact (wf_string_like (εs := (SymEnv.ofEnv Γ).entities) hwf_get_comp_x hty_get_comp_x).right
+  -- `.is`
+  case _ ety₁ ety₂ hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp [TypedExpr.typeOf, TermType.ofType]
+
+/--
 D-72 step (3): a predicate that type-checks against element type `itTy` compiles
 (`compilePred`) to a well-typed term, given the reserved element variable `it` is a
 well-formed term of type `.option (TermType.ofType itTy)`. The predicate analogue of
