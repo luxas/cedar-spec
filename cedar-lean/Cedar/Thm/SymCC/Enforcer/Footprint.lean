@@ -270,6 +270,94 @@ decreasing_by
       | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
 
 /--
+D-70 option A, step (2) bridge: for an `it`-free predicate `q`, its `footprintPred`
+against any element term `it` equals the ordinary `footprint` of its `toExpr`. Both
+sides key on the same compiled terms (via `compilePred_toExpr_eq`), and the
+`q.mentionsIt` guard in `footprintPred.ofEntity` is discharged by `it`-freeness.
+-/
+theorem footprintPred_toExpr_eq {q : PredExpr} {it : Term} {εnv : SymEnv}
+    (hfree : q.mentionsIt = false) :
+    footprintPred q it εnv = footprint q.toExpr εnv := by
+  match q, hfree with
+  | .item, hfree => exact absurd hfree (by simp only [PredExpr.mentionsIt, Bool.true_eq_false, not_false_eq_true])
+  | .lit l, _ =>
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred.ofEntity, footprint.ofEntity,
+      compilePred_toExpr_eq (q := .lit l), PredExpr.mentionsIt, reduceIte, Bool.false_eq_true, if_false]
+  | .var v, _ =>
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred.ofEntity, footprint.ofEntity,
+      compilePred_toExpr_eq (q := .var v), PredExpr.mentionsIt, reduceIte, Bool.false_eq_true, if_false]
+  | .ite c t e, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred.ofBranch, footprint.ofBranch,
+      compilePred_toExpr_eq hfree.1.1,
+      footprintPred_toExpr_eq hfree.1.1, footprintPred_toExpr_eq hfree.1.2, footprintPred_toExpr_eq hfree.2]
+  | .and a b, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred.ofBranch, footprint.ofBranch,
+      compilePred_toExpr_eq hfree.1, footprintPred_toExpr_eq hfree.1, footprintPred_toExpr_eq hfree.2]
+  | .or a b, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred.ofBranch, footprint.ofBranch,
+      compilePred_toExpr_eq hfree.1, footprintPred_toExpr_eq hfree.1, footprintPred_toExpr_eq hfree.2]
+  | .unaryApp o e, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred_toExpr_eq hfree]
+  | .hasAttr e a, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred_toExpr_eq hfree]
+  | .extHasAttr e a l, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred_toExpr_eq hfree]
+  | .binaryApp o a b, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred.ofEntity, footprint.ofEntity,
+      compilePred_toExpr_eq (q := .binaryApp o a b), PredExpr.mentionsIt, hfree.1, hfree.2, Bool.or_self,
+      reduceIte, Bool.false_eq_true, if_false, footprintPred_toExpr_eq hfree.1, footprintPred_toExpr_eq hfree.2]
+  | .getAttr e a, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr, footprintPred.ofEntity, footprint.ofEntity,
+      compilePred_toExpr_eq (q := .getAttr e a), PredExpr.mentionsIt, hfree, reduceIte, Bool.false_eq_true, if_false,
+      footprintPred_toExpr_eq hfree]
+  | .record axs, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr]
+    rw [List.map₂_eq_map (λ p : Attr × PredExpr => (p.fst, p.snd.toExpr))]
+    rw [List.mapUnion₂_eq_mapUnion λ y : Attr × PredExpr => footprintPred y.snd it εnv,
+        List.mapUnion₂_eq_mapUnion λ y : Attr × Expr => footprint y.snd εnv, List.mapUnion_map]
+    apply List.mapUnion_congr
+    intro x hx
+    have hxfree : x.snd.mentionsIt = false := by
+      have hall : (axs.attach₂.all (fun y => !y.val.snd.mentionsIt)) = true := by
+        rw [← List.not_any_eq_all_not]; simp only [hfree, Bool.not_false]
+      rw [show (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) => !y.val.snd.mentionsIt)
+            = (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) =>
+                (fun (p : Attr × PredExpr) => !p.snd.mentionsIt) y.val) from rfl,
+          List.all_attach₂ (f := fun (p : Attr × PredExpr) => !p.snd.mentionsIt), List.all_eq_true] at hall
+      have := hall x hx; simp only [Bool.not_eq_true'] at this; exact this
+    simp only [Function.comp, footprintPred_toExpr_eq hxfree]
+  | .call f xs, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [footprintPred, footprint, PredExpr.toExpr]
+    rw [List.map₁_eq_map (λ e : PredExpr => e.toExpr)]
+    rw [List.mapUnion₁_eq_mapUnion (λ x => footprintPred x it εnv),
+        List.mapUnion₁_eq_mapUnion (λ x => footprint x εnv), List.mapUnion_map]
+    apply List.mapUnion_congr
+    intro x hx
+    have hxfree : x.mentionsIt = false := by
+      rw [List.any_eq_false] at hfree
+      have := hfree ⟨x, hx⟩ (List.mem_attach xs ⟨x, hx⟩)
+      simp only [Bool.not_eq_true] at this; exact this
+    simp only [Function.comp, footprintPred_toExpr_eq hxfree]
+termination_by sizeOf q
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_snd_lt_sizeOf_list h; omega)
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
+
+/--
 `toExpr` preserves entity-reference validity: a predicate whose refs are all valid
 maps to an expression whose refs are all valid (`.item ↦ .var .principal` is
 `var_valid`). Needed so the D-70 option-A `.all` footprint witnesses `q.toExpr`
