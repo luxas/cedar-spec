@@ -179,6 +179,101 @@ theorem all_fold_reconcile {εs : SymEntities} {pairs : List (Term × Spec.Resul
 
 
 
+/-- Membership characterization of the compiler's `.all` fold over `pairs` (first projection = the
+compiled per-element predicate terms; second = the concrete `.as Bool` results). It is `noneOf .bool`
+exactly when some pair's result errors, else `someOf (.bool (decide (∀ pairs ok-true)))`. -/
+theorem all_fold_mem_char {εs : SymEntities} {pairs : List (Term × Spec.Result Bool)}
+    (hwf : ∀ pr ∈ pairs, (pr.1).WellFormedLiteral εs ∧ (pr.1).typeOf = .option .bool)
+    (hsame : ∀ pr ∈ pairs, SameResults (pr.2.map (Value.prim ∘ Prim.bool)) pr.1) :
+    (∃ pr ∈ pairs, ∀ b, pr.2 ≠ .ok b) ∧
+      Factory.ite
+        (pairs.foldr (fun pr acc => Factory.or (Factory.not (Factory.isSome pr.1)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pairs.foldr (fun pr acc => Factory.and (Factory.option.get pr.1) acc) (true : Term)))
+        = Factory.noneOf .bool
+    ∨ (∀ pr ∈ pairs, ∃ b, pr.2 = .ok b) ∧
+      Factory.ite
+        (pairs.foldr (fun pr acc => Factory.or (Factory.not (Factory.isSome pr.1)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pairs.foldr (fun pr acc => Factory.and (Factory.option.get pr.1) acc) (true : Term)))
+        = Factory.someOf (.prim (.bool (decide (∀ pr ∈ pairs, pr.2 = .ok true)))) := by
+  induction pairs with
+  | nil =>
+    right
+    refine ⟨by simp, ?_⟩
+    simp only [List.foldr_nil, pe_ite_false, Factory.someOf, List.not_mem_nil, false_implies,
+      implies_true, decide_true]
+  | cons pr rest ih =>
+    have hwfhd := hwf pr (by simp only [List.mem_cons, true_or])
+    have hshd := hsame pr (by simp only [List.mem_cons, true_or])
+    obtain ⟨ger, hger⟩ := foldr_anyErr_lit (fun p hp => hwf p (List.mem_cons_of_mem _ hp))
+    simp only [List.foldr_cons]
+    cases hrb : pr.2 with
+    | error e =>
+      -- head errors ⇒ pr.1 = .none ⇒ anyErr head true ⇒ ite = noneOf
+      rw [hrb] at hshd
+      simp only [Except.map, SameResults] at hshd
+      obtain ⟨ty, hnoneq⟩ : ∃ ty, pr.1 = Term.none ty := by
+        cases hpt : pr.1 <;> simp only [hpt, SameResults] at hshd
+        exact ⟨_, rfl⟩
+      left
+      refine ⟨⟨pr, by simp only [List.mem_cons, true_or], ?_⟩, ?_⟩
+      · intro b hb; rw [hrb] at hb; simp only [reduceCtorEq] at hb
+      · simp only [hnoneq, pe_isSome_none, pe_not_false, pe_or_true_left, pe_ite_true, Factory.noneOf]
+    | ok b =>
+      rw [hrb] at hshd
+      have hbt : (Except.ok (Value.prim (.bool b)) : Spec.Result Value) ∼ pr.1 := by
+        simp only [Except.map, Function.comp] at hshd; exact hshd
+      have ht : pr.1 = Term.some (.prim (.bool b)) := same_ok_bool_implies hbt
+      have ihr := ih (fun p hp => hwf p (List.mem_cons_of_mem _ hp))
+                     (fun p hp => hsame p (List.mem_cons_of_mem _ hp))
+      simp only [ht, pe_isSome_some, pe_not_true, pe_or_false_left, pe_option_get_some]
+      rcases ihr with ⟨⟨pr', hpr'mem, hpr'err⟩, hite⟩ | ⟨hallok, hite⟩
+      · -- some tail pair errors ⇒ anyErr tail true (foldr_anyErr_lit says it is a bool literal; and the
+        -- ite collapses to noneOf regardless of the head's conj contribution)
+        left
+        refine ⟨⟨pr', by simp only [List.mem_cons, hpr'mem, or_true], hpr'err⟩, ?_⟩
+        -- the tail ite is noneOf; same guard here ⇒ noneOf
+        obtain ⟨ge, hge⟩ := foldr_anyErr_lit (fun p hp => hwf p (List.mem_cons_of_mem _ hp))
+        rw [hge] at hite ⊢
+        cases ge with
+        | «true» => simp only [pe_ite_true, Factory.noneOf]
+        | «false» => simp only [pe_ite_false, Factory.someOf, Factory.noneOf, reduceCtorEq] at hite
+      · -- all tail ok
+        obtain ⟨ge, hge⟩ := foldr_anyErr_lit (fun p hp => hwf p (List.mem_cons_of_mem _ hp))
+        rw [hge] at hite ⊢
+        cases ge with
+        | «true» => simp only [pe_ite_true, Factory.someOf, Factory.noneOf, reduceCtorEq] at hite
+        | «false» =>
+          right
+          refine ⟨?_, ?_⟩
+          · intro q hq
+            rcases List.mem_cons.mp hq with rfl | hqt
+            · exact ⟨b, hrb⟩
+            · exact hallok q hqt
+          · simp only [pe_ite_false, Factory.someOf] at hite ⊢
+            simp only [Term.some.injEq] at hite ⊢
+            -- conj = and (bool b) tailConj ; tailConj = someOf-inner from hite = bool (decide ∀ tail ok-true)
+            rw [hite]
+            cases b with
+            | «true» =>
+              simp only [pe_and_true_left]
+              congr 1; congr 1
+              simp only [eq_iff_iff, decide_eq_decide, Bool.true_eq, List.mem_cons]
+              constructor
+              · intro h q hq; rcases hq with rfl | hqt
+                · exact hrb
+                · exact h q hqt
+              · intro h; exact fun q hqt => h q (Or.inr hqt)
+            | «false» =>
+              simp only [pe_and_false_left]
+              have hnot : ¬ (∀ q ∈ (pr :: rest), q.2 = Except.ok true) := by
+                intro hall
+                have h := hall pr (List.mem_cons_self ..)
+                rw [hrb] at h
+                simp only [Except.ok.injEq, Bool.false_eq_true] at h
+              rw [decide_eq_false hnot]
+
 /-- Membership characterization of `evalAll`: it errors (to `quantifierError`) exactly when some
 element's `.as Bool` errors; otherwise it is `.ok (.bool b)` where `b` is true iff every element's
 `.as Bool` is `.ok true`. -/
