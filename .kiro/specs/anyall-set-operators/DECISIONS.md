@@ -140,3 +140,23 @@ the Levels/slicing proofs.
 **Choice: 1 (Full)**, chosen by the user on 2026-10-08 when Phase 5 showed
 SymCC cannot be non-vacuous without it (D-33). Option 3 was the interim
 choice through Phase 4. Implemented as part A of `phase5-anyall-symcc` (D-37).
+
+## M5 prep (2026-10-09) — axioms, e2e tests, mutation checks
+
+**Axioms.** `#print axioms` on the Phase 5B theorems: `compile_interpret_all`,
+`compilePred_interpret`, `evaluatePred_wf`, and `type_of_all_is_sound` depend ONLY on the baseline
+`propext` / `Classical.choice` / `Quot.sound`. `compile_evaluate_all` and `compilePred_evaluate`
+additionally depend on the datetime `native_decide` axioms (`Int64.toInt_*`, `msPerDay_*`,
+`toDate_eq_smod`, `toInt_div_msPerDay`) — these are PRE-EXISTING (the Expr dispatcher `compile_evaluate`
+carries the identical set) and enter via the datetime extension lemmas, not from the `.all` work. No new
+axiom is introduced by Phase 5B.
+
+**End-to-end cvc5 tests.** `SymTest/AnyAll.e2e` (8 tests) drives symbolic `.all` through
+`compile` + the encoder + cvc5 on the unoptimized path (integer, record-attr, entity-`in`, entity
+has-attr, free-variable, implies, self-equivalence, and an erroring-vs-guarded sentinel) — 8/8 pass;
+whole SymTest suite 2422/2422. The optimized SymCCOpt path still rejects `.all` (M4, blocked on D-70).
+
+**Mutation checks (all caught, reverted).** (a) `evalAll` empty-set ⇒ `false` → `type_of_all_is_sound`
+(All.lean:59) fails; (b) drop the encoder `set.all` quantifierError filter → `AnyAll.e2e` model
+validation fails; (c) compiler fold `and`→`or` → `compile_all_fold_result_wf` (WF.lean:1258) fails.
+Details in `members/default/phase5b/m5-prep-2026-10-09.md`.
