@@ -135,4 +135,19 @@ theorem compilePred_interpret_someOf_lit {p : PredExpr} {εnv : SymEnv} {I : Int
       symEnv_interpret_extInterp (I := I) (v := vi) (ety := elemTy) hwε] at hci
   exact hci
 
+/-- `ifSome` only inspects its guard's `isNone` and its value's option element type:
+when the guard is a well-formed literal of option type and the two values share a
+type, they agree under `ifSome` as long as they agree whenever the guard is `.some`
+(the `.none` guard collapses both to `noneOf`). -/
+theorem ifSome_guard_congr {εs : SymEntities} {g t₂ t₃ : Term} {ty ety : TermType}
+    (hg : g.WellFormedLiteral εs) (hgty : g.typeOf = .option ty)
+    (ht₂ : t₂.typeOf = .option ety) (ht₃ : t₃.typeOf = .option ety)
+    (hsome : ∀ w, g = .some w → t₂ = t₃) :
+    Factory.ifSome g t₂ = Factory.ifSome g t₃ := by
+  rcases wfl_of_type_option_is_option hg hgty with hn | ⟨w, hw, _⟩
+  · subst hn
+    simp only [Factory.ifSome, ht₂, ht₃, pe_isNone_none, pe_ite_true]
+  · subst hw
+    rw [hsome w rfl]
+
 end Cedar.Thm
