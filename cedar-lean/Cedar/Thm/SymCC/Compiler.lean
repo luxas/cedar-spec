@@ -26,6 +26,7 @@ import Cedar.Thm.SymCC.Compiler.Record
 import Cedar.Thm.SymCC.Compiler.Set
 import Cedar.Thm.SymCC.Compiler.Unary
 import Cedar.Thm.SymCC.Compiler.AllInterpret
+import Cedar.Thm.SymCC.Compiler.AllEvaluate
 
 /-!
 This file proves two key auxiliary lemmas used to show the soundness
@@ -102,7 +103,9 @@ theorem compile_evaluate {x : Expr} {env : Env} {εnv : SymEnv} {t : Term} :
       intro xᵢ _
       exact @compile_evaluate xᵢ
     exact compile_evaluate_call h₁ h₂ h₃ h₄ ih
-  | .all _ _           => simp [compile] at h₄
+  | .all x₁ _          =>
+    have ih₁ := @compile_evaluate x₁
+    exact compile_evaluate_all h₁ h₂ h₃ h₄ ih₁
 
 /--
 The lemma shows that `interpret` and `compile` can be applied in any order to get
