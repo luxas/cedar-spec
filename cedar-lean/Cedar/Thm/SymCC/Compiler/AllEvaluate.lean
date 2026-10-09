@@ -178,3 +178,43 @@ theorem all_fold_reconcile {εs : SymEntities} {pairs : List (Term × Spec.Resul
             exact same_ok_bool
 
 
+
+/-- Membership characterization of `evalAll`: it errors (to `quantifierError`) exactly when some
+element's `.as Bool` errors; otherwise it is `.ok (.bool b)` where `b` is true iff every element's
+`.as Bool` is `.ok true`. -/
+theorem evalAll_mem_char {s : Cedar.Data.Set Value} {f : Value → Spec.Result Value} :
+    (∃ v ∈ s, ∀ b, (f v).as Bool ≠ .ok b) ∧ evalAll s f = .error .quantifierError
+    ∨ (∀ v ∈ s, ∃ b, (f v).as Bool = .ok b) ∧
+        evalAll s f = .ok (.prim (.bool (decide (∀ v ∈ s, (f v).as Bool = .ok true)))) := by
+  simp only [evalAll, Cedar.Data.Set.toList]
+  cases hm : s.elts.mapM (fun v => (f v).as Bool) with
+  | error e =>
+    left
+    have ⟨v, hv, hve⟩ := List.mapM_error_implies_exists_error hm
+    refine ⟨⟨v, (Cedar.Data.Set.mem_elts_iff_mem_set v s).mp hv, ?_⟩, ?_⟩
+    · intro b hb; rw [hb] at hve; simp only [reduceCtorEq] at hve
+    · simp only [Cedar.Data.Set.toList, hm]
+  | ok bs =>
+    right
+    refine ⟨?_, ?_⟩
+    · intro v hv
+      have ⟨b, _, hb⟩ := List.mapM_ok_implies_all_ok hm v ((Cedar.Data.Set.mem_elts_iff_mem_set v s).mpr hv)
+      exact ⟨b, hb⟩
+    · simp only [Cedar.Data.Set.toList, hm, Except.ok.injEq, Value.prim.injEq, Prim.bool.injEq]
+      have hiff : (bs.all id = true) ↔ (∀ v ∈ s, (f v).as Bool = Except.ok true) := by
+        simp only [List.all_eq_true, id]
+        constructor
+        · intro hall v hv
+          have ⟨b, hbmem, hb⟩ := List.mapM_ok_implies_all_ok hm v ((Cedar.Data.Set.mem_elts_iff_mem_set v s).mpr hv)
+          have := hall b hbmem
+          subst this; exact hb
+        · intro hall b hbmem
+          have ⟨v, hv, hvb⟩ := List.mapM_ok_implies_all_from_ok hm b hbmem
+          have := hall v ((Cedar.Data.Set.mem_elts_iff_mem_set v s).mp hv)
+          rw [hvb] at this; simp only [Except.ok.injEq] at this; subst this; rfl
+      by_cases hd : (∀ v ∈ s, (f v).as Bool = Except.ok true)
+      · rw [decide_eq_true hd]; exact hiff.mpr hd
+      · rw [decide_eq_false hd]
+        cases hb : bs.all id with
+        | «true» => exact absurd (hiff.mp hb) hd
+        | «false» => rfl
