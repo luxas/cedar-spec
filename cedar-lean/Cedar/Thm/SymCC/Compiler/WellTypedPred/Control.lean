@@ -125,11 +125,10 @@ theorem compileIf_bool_ok {εs : SymEntities} {t₁ t₂ t₃ : Term}
 operands are `.bool`-typed (`ty₁.typeOf = .bool _`, `ty₂.typeOf = .bool _`). -/
 theorem compilePred_well_typed_and
     {x₁ x₂ : Cedar.Spec.PredExpr} {ty₁ ty₂ typ : TypedExpr} {b₁ b₂ : BoolType}
-    {c₁ c₂ c' : Capabilities} {Γ : TypeEnv} {it t₁ t₂ : Term}
+    {elemTy : TermType} {c₁ c₂ c' : Capabilities} {Γ : TypeEnv} {it t₁ t₂ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
-    (hit₁ : it.typeOf = .option (TermType.ofType ty₁.typeOf))
-    (hit₂ : it.typeOf = .option (TermType.ofType ty₂.typeOf))
+    (hitty : it.typeOf = .option elemTy)
     (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
     (hok₂ : compilePred x₂ it (SymEnv.ofEnv Γ) = .ok t₂)
@@ -138,8 +137,8 @@ theorem compilePred_well_typed_and
     (htp : typeOfAnd (ty₁, c₁) (.ok (ty₂, c₂)) = .ok (typ, c')) :
     ∃ t, compilePred (.and x₁ x₂) it (SymEnv.ofEnv Γ) = .ok t ∧
       t.typeOf = .option (TermType.ofType typ.typeOf) := by
-  have ⟨hwf₁, _, _⟩ := compilePred_wf hwε hitw hit₁ hok₁
-  have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hit₂ hok₂
+  have ⟨hwf₁, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
+  have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hitty hok₂
   rw [hb₁, TermType.ofType] at hty₁
   rw [hb₂, TermType.ofType] at hty₂
   have ⟨t, hca, hcty⟩ := compileAnd_bool_ok hwf₁ hwf₂ hty₁ hty₂
@@ -150,11 +149,10 @@ theorem compilePred_well_typed_and
 /-- `.or` arm of `compilePred_well_typed`, under the `Normal` bool-operand premise. -/
 theorem compilePred_well_typed_or
     {x₁ x₂ : Cedar.Spec.PredExpr} {ty₁ ty₂ typ : TypedExpr} {b₁ b₂ : BoolType}
-    {c₁ c₂ c' : Capabilities} {Γ : TypeEnv} {it t₁ t₂ : Term}
+    {elemTy : TermType} {c₁ c₂ c' : Capabilities} {Γ : TypeEnv} {it t₁ t₂ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
-    (hit₁ : it.typeOf = .option (TermType.ofType ty₁.typeOf))
-    (hit₂ : it.typeOf = .option (TermType.ofType ty₂.typeOf))
+    (hitty : it.typeOf = .option elemTy)
     (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
     (hok₂ : compilePred x₂ it (SymEnv.ofEnv Γ) = .ok t₂)
@@ -163,8 +161,8 @@ theorem compilePred_well_typed_or
     (htp : typeOfOr (ty₁, c₁) (.ok (ty₂, c₂)) = .ok (typ, c')) :
     ∃ t, compilePred (.or x₁ x₂) it (SymEnv.ofEnv Γ) = .ok t ∧
       t.typeOf = .option (TermType.ofType typ.typeOf) := by
-  have ⟨hwf₁, _, _⟩ := compilePred_wf hwε hitw hit₁ hok₁
-  have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hit₂ hok₂
+  have ⟨hwf₁, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
+  have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hitty hok₂
   rw [hb₁, TermType.ofType] at hty₁
   rw [hb₂, TermType.ofType] at hty₂
   have ⟨t, hco, hcty⟩ := compileOr_bool_ok hwf₁ hwf₂ hty₁ hty₂
@@ -177,12 +175,10 @@ are the duplicated live branch (both `.bool`-typed and equal), and the condition
 `.bool`-typed, so `compileIf` succeeds with `.option .bool`. -/
 theorem compilePred_well_typed_ite
     {x₁ x₂ x₃ : Cedar.Spec.PredExpr} {tyc ty₂ ty₃ typ : TypedExpr} {bc b₂ b₃ : BoolType}
-    {cc c₂ c₃ c' : Capabilities} {Γ : TypeEnv} {it tc t₂ t₃ : Term}
+    {elemTy : TermType} {cc c₂ c₃ c' : Capabilities} {Γ : TypeEnv} {it tc t₂ t₃ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
-    (hitc : it.typeOf = .option (TermType.ofType tyc.typeOf))
-    (hit₂ : it.typeOf = .option (TermType.ofType ty₂.typeOf))
-    (hit₃ : it.typeOf = .option (TermType.ofType ty₃.typeOf))
+    (hitty : it.typeOf = .option elemTy)
     (hokc : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok tc)
     (htyc : tc.typeOf = .option (TermType.ofType tyc.typeOf))
     (hok₂ : compilePred x₂ it (SymEnv.ofEnv Γ) = .ok t₂)
@@ -193,9 +189,9 @@ theorem compilePred_well_typed_ite
     (htp : typeOfIf (tyc, cc) (.ok (ty₂, c₂)) (.ok (ty₃, c₃)) = .ok (typ, c')) :
     ∃ t, compilePred (.ite x₁ x₂ x₃) it (SymEnv.ofEnv Γ) = .ok t ∧
       t.typeOf = .option (TermType.ofType typ.typeOf) := by
-  have ⟨hwfc, _, _⟩ := compilePred_wf hwε hitw hitc hokc
-  have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hit₂ hok₂
-  have ⟨hwf₃, _, _⟩ := compilePred_wf hwε hitw hit₃ hok₃
+  have ⟨hwfc, _, _⟩ := compilePred_wf hwε hitw hitty hokc
+  have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hitty hok₂
+  have ⟨hwf₃, _, _⟩ := compilePred_wf hwε hitw hitty hok₃
   rw [hbc, TermType.ofType] at htyc
   rw [hb₂, TermType.ofType] at hty₂
   rw [hb₃, TermType.ofType] at hty₃
