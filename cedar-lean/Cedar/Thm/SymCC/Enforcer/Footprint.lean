@@ -107,8 +107,22 @@ theorem footprintAllPred_symbolic_eq {p : PredExpr} {x₁ : Expr} {εnv : SymEnv
   (hgetty : (Factory.option.get t₁).typeOf = .set elemTy)
   (hnotlit : ∀ vs ety, Factory.option.get t₁ = .set (Data.Set.mk vs) ety → vs.all (·.isLiteral) = false) :
   footprintAllPred p x₁ εnv = footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv := by
-  -- WIP (red, no placeholder): the .none/inner match reduction; see footprintAllPred_litfold_eq for the shape.
-  simp only [footprintAllPred, hr₁]
+  unfold footprintAllPred
+  rw [hr₁]
+  cases t₁ with
+  | none ty => exact absurd rfl (hnotnone ty)
+  | _ =>
+    simp only [hgetty]
+    generalize hg : Factory.option.get _ = g
+    cases g with
+    | set s ty => cases s with | mk vs =>
+        have := hnotlit vs ty hg
+        simp only [this, Bool.false_eq_true, reduceIte]
+    | _ => rfl
+
+
+
+
 
 
 
