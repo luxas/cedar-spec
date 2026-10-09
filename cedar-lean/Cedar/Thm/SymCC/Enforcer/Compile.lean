@@ -1187,6 +1187,33 @@ private theorem compilePred_interpret_var_on_footprint {v : Var} {ft : Set Term}
   simp only [PredExpr.toExpr] at hok
   exact compile_interpret_var_on_footprint ⟨hwε, Expr.ValidRefs.var_valid⟩ hsm hok
 
+private theorem compilePred_interpret_unaryApp_on_footprint {op₁ : UnaryOp} {x₁ : PredExpr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.unaryApp op₁ x₁) it εnv ⊆ ft)
+  (hok : compilePred (.unaryApp op₁ x₁) it εnv = .ok pt)
+  (ih₁ : ∀ {t₁}, footprintPred x₁ it εnv ⊆ ft → compilePred x₁ it εnv = .ok t₁ → t₁.interpret I₁ = t₁.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  simp only [footprintPred] at hft
+  replace ⟨t₁, t₂, hok₁, hok, heq⟩ := compilePred_unaryApp_ok_implies hok
+  subst heq
+  have ⟨hwt₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo₁ := wf_option_get hwt₁ hty₁
+  have hih := ih₁ hft hok₁
+  have hwt₂ := compileApp₁_wf_types hwo₁.left hok
+  have ⟨_, hty₂⟩ : ∃ ty, t₂.typeOf = .option ty := by
+    split at hwt₂ <;> simp only [hwt₂, TermType.option.injEq, exists_eq']
+  replace hwt₂ := hwt₂.left
+  simp_ifSome_eq hI₁ hI₂ hwt₁ hty₁ hwt₂ hty₂ hih
+  rename_i ht₁ _
+  replace hih := interpret_option_get_eq hwt₁ hty₁ hih ht₁
+  have hr₁ := interpret_compileApp₁ hI₁ hwo₁.left hok
+  have hr₂ := interpret_compileApp₁ hI₂ hwo₁.left hok
+  simp only [hih, hr₂, Except.ok.injEq] at hr₁
+  simp only [hr₁]
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
