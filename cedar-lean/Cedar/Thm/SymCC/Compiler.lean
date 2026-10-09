@@ -25,6 +25,7 @@ import Cedar.Thm.SymCC.Compiler.LitVar
 import Cedar.Thm.SymCC.Compiler.Record
 import Cedar.Thm.SymCC.Compiler.Set
 import Cedar.Thm.SymCC.Compiler.Unary
+import Cedar.Thm.SymCC.Compiler.AllInterpret
 
 /-!
 This file proves two key auxiliary lemmas used to show the soundness
