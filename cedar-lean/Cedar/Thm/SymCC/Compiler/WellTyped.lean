@@ -2117,10 +2117,57 @@ theorem compilePred_well_typed {p : Cedar.Spec.PredExpr} {itTy : CedarType} {typ
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
     (hitty : it.typeOf = .option (TermType.ofType itTy)) :
     ∃ t, compilePred p it (SymEnv.ofEnv Γ) = .ok t ∧ t.typeOf = .option (TermType.ofType typ.typeOf) := by
-  -- WIP (red, no placeholder): 13-arm induction mirroring compile_well_typed_on_wf_expr.
-  -- item: compilePred .item = .ok it, typeOfPred .item = .var .principal itTy (typeOf = itTy) ⇒ hitty.
-  -- lit/var: compilePred = compilePrim/compileVar (= compile (.lit/.var).toExpr), reuse the scalar typing.
-  -- ite/and/or/unaryApp/hasAttr/getAttr/extHasAttr/binaryApp/record/call: mirror compile_well_typed_<arm>
-  --   with typeOfPred (not TypedExpr) supplying the sub-types; recurse via the ihs.
-  cases p
+  cases hwtp
+  case item =>
+    simp only [typeOfPred, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+    obtain ⟨htyp, _⟩ := htp
+    refine ⟨it, by simp only [compilePred], ?_⟩
+    subst htyp
+    simp only [TypedExpr.typeOf]
+    exact hitty
+  case lit_entity uid h₁ =>
+    have hcond : (Γ.ets.isValidEntityUID uid || Γ.acts.contains uid) = true := by
+      rcases h₁ with h | h <;> simp [h]
+    simp only [typeOfPred, typeOfLit, hcond, if_true, Function.comp_apply,
+      Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+    obtain ⟨htyp, _⟩ := htp
+    subst htyp
+    have hvalid : (SymEnv.ofEnv Γ).entities.isValidEntityUID uid = true :=
+      entity_uid_wf_implies_sym_entities_is_valid_entity_uid hwf h₁
+    refine ⟨⊙Term.prim (TermPrim.entity uid), ?_, ?_⟩
+    · simp only [compilePred, compilePrim, hvalid, if_true]
+    · simp [TypedExpr.typeOf, Factory.someOf, TermType.ofType]
+  case lit_other prim h₁ =>
+    cases prim with
+    | bool b =>
+      cases b <;>
+        (simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
+          Prod.mk.injEq] at htp
+         obtain ⟨htyp, _⟩ := htp; subst htyp
+         refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
+         simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType])
+    | int i =>
+      simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, _⟩ := htp; subst htyp
+      refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
+      simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType]
+    | string s =>
+      simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, _⟩ := htp; subst htyp
+      refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
+      simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType]
+    | entityUID uid => exact absurd rfl (h₁ uid)
+  case var v =>
+    cases v <;>
+      (simp only [typeOfPred, typeOfVar, Function.comp_apply, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+       obtain ⟨htyp, _⟩ := htp; subst htyp
+       exact ⟨_,
+         by simp only [compilePred, compileVar, SymEnv.ofEnv, SymRequest.ofRequestType,
+              Term.typeOf, TermType.ofType, TermType.isEntityType, TermType.isRecordType, if_true]; rfl,
+         by simp [compilePred, compileVar, SymEnv.ofEnv, SymRequest.ofRequestType,
+              Term.typeOf, TermType.ofType, TypedExpr.typeOf, Factory.someOf]⟩)
+  -- recursive arms (ite/and/or/unaryApp/binaryApp/hasAttr/getAttr/extHasAttr/record/call): WIP red
 end Cedar.Thm
