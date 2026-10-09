@@ -28,7 +28,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
 | 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
-| 6 | `phase6-anyall-drt-differential` | not started |
+| 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
 | 6.5 | `phase6_5-anyall-tpe` | not started |
 | 7 | `phase7-anyall-docs` | not started |
 | 8 | `phase8-anyall-benchmarks` | not started |
@@ -204,6 +204,13 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
   _Satisfies:_ 5.1 (verified), design Surface 2/SymCC.
 
 ## Phase 6 — DRT generator + differential wiring (LAST)
+
+> **Status: DONE — review-clean.** All W1–W8 landed; blind review rounds 1 and 2 converged
+> (findings F-1..F-7 all fixed). See `branches/phase6-anyall-drt-differential/OUTCOMES.md` for
+> per-item commits (nested cedar @ `d34291f8`; cedar-spec head = the OUTCOMES/tasks doc commit),
+> ~6% non-vacuity, ~183k fuzz executions (0 mismatch), the F-4 HO_ALL fix + cvc5 proof, the F-6
+> deterministic footprint tests, and the Phase 9 carry (D-70 option B, D-74 honest normalization,
+> D-78 logic-narrowing, solved-symbolic-`set.all` coverage metric). D-31 FIXED (W1).
 
 - **T6.1 Add the gated AST generator arm.**
   `cedar-policy-generators/src/expr.rs`: `#[cfg(feature = "anyall")]` arm generating

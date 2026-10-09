@@ -357,6 +357,9 @@ pub enum Op {
     SetSubset,
     #[serde(rename = "set.inter")]
     SetInter,
+    #[cfg(feature = "anyall")]
+    #[serde(rename = "set.all")]
+    SetAll,
     #[serde(rename = "option.get")]
     OptionGet,
     #[serde(rename = "record.get")]
@@ -795,6 +798,8 @@ impl TryFrom<Op> for cedar_policy_symcc::op::Op {
             Op::SetMember => Self::SetMember,
             Op::SetSubset => Self::SetSubset,
             Op::SetInter => Self::SetInter,
+            #[cfg(feature = "anyall")]
+            Op::SetAll => Self::SetAll,
             Op::OptionGet => Self::OptionGet,
             Op::RecordGet(a) => Self::RecordGet(a),
             Op::StringLike(pats) => Self::StringLike(
@@ -1122,6 +1127,10 @@ impl From<cedar_policy_symcc::op::Op> for Op {
                 Self::StringLike(pat.get_elems().iter().map(|p| (*p).into()).collect())
             }
             cedar_policy_symcc::op::Op::Ext(op) => Self::Ext(op.into()),
+            // `set.all` (feature `anyall`): the SymCC quantifier op. Serialized
+            // to Lean as `set.all` (serde rename), matching `Op.set.all`.
+            #[cfg(feature = "anyall")]
+            cedar_policy_symcc::op::Op::SetAll => Self::SetAll,
         }
     }
 }
@@ -1382,5 +1391,33 @@ mod decimal_conversion {
     #[test]
     fn zero() {
         let _: RestrictedExpression = Decimal(0).into();
+    }
+}
+
+// F-2 (mutation 3d): the FFI `Op::SetAll` bridge and its serde name are the
+// only link that carries the SymCC quantifier op to Lean. A wrong mapping
+// (e.g. `SetAll => SetMember`) or a wrong serde rename is otherwise caught only
+// by the end-to-end DRT differential; these deterministic unit tests catch it.
+#[cfg(all(test, feature = "anyall"))]
+mod anyall_op_bridge {
+    use crate::datatypes::Op as FfiOp;
+    use cedar_policy_symcc::op::Op as SymccOp;
+
+    #[test]
+    fn set_all_deserializes_from_set_all_string() {
+        // The FFI `Op` enum is Deserialize-only; Lean emits the op name
+        // "set.all", which must deserialize to `Op::SetAll` (serde rename).
+        let back: FfiOp = serde_json::from_str("\"set.all\"").expect("deserialize");
+        assert!(matches!(back, FfiOp::SetAll), "\"set.all\" must deserialize to Op::SetAll");
+    }
+
+    #[test]
+    fn set_all_round_trips_both_directions() {
+        // symcc Op -> FFI Op
+        let ffi: FfiOp = SymccOp::SetAll.into();
+        assert!(matches!(ffi, FfiOp::SetAll), "symcc Op::SetAll must map to FFI Op::SetAll");
+        // FFI Op -> symcc Op
+        let back: SymccOp = FfiOp::SetAll.try_into().expect("FFI Op::SetAll -> symcc Op");
+        assert!(matches!(back, SymccOp::SetAll), "FFI Op::SetAll must map back to symcc Op::SetAll");
     }
 }

@@ -43,6 +43,11 @@ impl<const TYPE_DIRECTED: bool> FuzzTargetInput<TYPE_DIRECTED> {
     pub const fn settings() -> ABACSettings {
         ABACSettings {
             enable_additional_attributes: true,
+            // Generate `.all`/`.any` only when built with `anyall` (req 3.3), so
+            // the Rust and Lean validators are compared on quantifier policies
+            // (verdict parity; the mechanism differs per D-41, so the
+            // differential compares accept/reject, not the error code).
+            enable_anyall: cfg!(feature = "anyall"),
             ..if TYPE_DIRECTED {
                 ABACSettings::type_directed()
             } else {

@@ -2396,4 +2396,111 @@ mod tests {
             Extensions::all_available(),
         )
     }
+
+    /// W5 (feature `anyall`): the generator produces `ExprKind::All` nodes
+    /// (and the lowered `.any` shape `!all(!p)`) when `enable_anyall` is on,
+    /// and NEVER when it is off (req 3.1/3.3). Non-vacuous: asserts count > 0.
+    ///
+    /// DETERMINISTIC (F-1): seeded with a fixed `StdRng` and run over 400
+    /// iterations of the `type_directed()` path (where the quantifier yield is
+    /// ~6%, well above the actionable floor), so `total_all > 0` /
+    /// `total_any > 0` hold with overwhelming probability on a fixed seed. Not
+    /// flaky: the seed is pinned, so this test is a constant, not a sample.
+    #[cfg(feature = "anyall")]
+    #[test]
+    #[allow(deprecated)]
+    fn generates_all_and_any_nodes() {
+        use cedar_policy_core::ast::{Expr, ExprKind, UnaryOp};
+        use rand::{rngs::StdRng, SeedableRng};
+
+        // Count `ExprKind::All` nodes and lowered-`.any` shapes (`!(…all…)`)
+        // over an expression and all its subexpressions (`subexpressions()`
+        // yields the node itself and every descendant).
+        fn counts(e: &Expr, all: &mut usize, any_lowered: &mut usize) {
+            for sub in e.subexpressions() {
+                match sub.expr_kind() {
+                    ExprKind::All { .. } => *all += 1,
+                    ExprKind::UnaryApp { op: UnaryOp::Not, arg }
+                        if matches!(arg.expr_kind(), ExprKind::All { .. }) =>
+                    {
+                        // `.any` lowers to `!all(!p)`: a Not directly over an All.
+                        *any_lowered += 1;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // `type_directed()` yields `.all`/`.any` more often than `undirected()`
+        // (the realistic eval/symcc fuzz path), so the non-vacuity assertions
+        // hold robustly over the fixed-seed run.
+        let settings = ABACSettings {
+            max_depth: 4,
+            max_width: 4,
+            enable_additional_attributes: false,
+            enable_like: true,
+            enable_arbitrary_func_call: false,
+            enable_anyall: true,
+            ..ABACSettings::type_directed()
+        };
+        let fragment = json_schema::Fragment::from_json_file(GITHUB_SCHEMA_STR.as_bytes())
+            .expect("schema str should be valid!");
+        // Fixed seed ⇒ deterministic: this run is a constant, not a sample.
+        let mut rng = StdRng::seed_from_u64(0x5EED_A11_0000_0001u64);
+
+        let mut total_all = 0usize;
+        let mut total_any = 0usize;
+        for _ in 0..400 {
+            let mut bytes = [0u8; 4096];
+            rng.fill_bytes(&mut bytes);
+            let mut u = Unstructured::new(&bytes);
+            let Ok(schema) = Schema::from_raw_schemafrag(fragment.clone(), settings.clone(), &mut u)
+            else {
+                continue;
+            };
+            let gen = schema.exprgenerator(None);
+            if let Ok(e) =
+                gen.generate_expr_for_type(&crate::abac::Type::bool(), 4, &mut u)
+            {
+                counts(&e, &mut total_all, &mut total_any);
+            }
+        }
+        assert!(
+            total_all > 0,
+            "generator with enable_anyall=true produced no `.all` nodes (vacuous)"
+        );
+        assert!(
+            total_any > 0,
+            "generator produced no lowered `.any` (`!all(!p)`) shape (req 2.3 not exercised)"
+        );
+
+        // enable_anyall = false ⇒ never any `.all` node (req 3.1).
+        let off = ABACSettings {
+            enable_anyall: false,
+            ..settings.clone()
+        };
+        let mut off_rng = StdRng::seed_from_u64(0xD15AB1Eu64);
+        let mut off_all = 0usize;
+        let mut off_any = 0usize;
+        for _ in 0..400 {
+            let mut bytes = [0u8; 4096];
+            off_rng.fill_bytes(&mut bytes);
+            let mut u = Unstructured::new(&bytes);
+            let Ok(schema) = Schema::from_raw_schemafrag(fragment.clone(), off.clone(), &mut u)
+            else {
+                continue;
+            };
+            let gen = schema.exprgenerator(None);
+            if let Ok(e) =
+                gen.generate_expr_for_type(&crate::abac::Type::bool(), 4, &mut u)
+            {
+                counts(&e, &mut off_all, &mut off_any);
+            }
+        }
+        assert_eq!(
+            off_all + off_any,
+            0,
+            "generator with enable_anyall=false must never produce a `.all`/`.any` node"
+        );
+    }
 }

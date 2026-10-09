@@ -52,6 +52,10 @@ pub struct FuzzTargetInput {
 const SETTINGS: ABACSettings = ABACSettings {
     max_depth: 3,
     max_width: 3,
+    // Generate `.all`/`.any` nodes only when built with `anyall` (req 3.3): the
+    // generator arm is the last surface turned on, so the Rust and Lean engines
+    // are compared on `.all`/`.any` exactly when both understand the node.
+    enable_anyall: cfg!(feature = "anyall"),
     ..ABACSettings::type_directed()
 };
 

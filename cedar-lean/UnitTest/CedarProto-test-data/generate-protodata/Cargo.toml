@@ -8,7 +8,7 @@ edition = "2024"
 repository = "https://github.com/cedar-policy/cedar-spec"
 
 [dependencies]
-cedar-policy = { path = "../../../../cedar/cedar-policy", version = "*", features = ["protobufs"] }
+cedar-policy = { path = "../../../../cedar/cedar-policy", version = "*", features = ["protobufs", "anyall"] }
 miette = { version = "7.1.0", features = ["fancy"] }
 
 [lints.rust]

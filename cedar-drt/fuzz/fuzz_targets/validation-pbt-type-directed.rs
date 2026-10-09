@@ -77,6 +77,13 @@ fuzz_target!(|input: FuzzTargetInput<true>| {
                                 | EvaluationError::FailedExtensionFunctionExecution(_)
                                 | EvaluationError::NonValue(_)
                                 | EvaluationError::RecursionLimit(_) => None,
+                                // `QuantifierError` (`.all`/`.any`, feature
+                                // `anyall`) is a deterministic runtime error the
+                                // validator does not prevent -- a well-typed
+                                // quantifier whose predicate errors on some
+                                // element still errors at eval time (cf. D-16).
+                                #[cfg(feature = "anyall")]
+                                EvaluationError::QuantifierError(_) => None,
                             }
                         }
                     })

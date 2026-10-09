@@ -91,6 +91,14 @@ pub struct ABACSettings {
     /// Maximum number of actions in the schema (of any kind, i.e., with or
     /// without `appliesTo`).
     pub max_actions: usize,
+
+    /// Flag to enable/disable generating the non-nested `.any`/`.all` set
+    /// quantifiers (spec: anyall-set-operators). When `false` (the default),
+    /// no `ExprKind::All` node is ever generated, so the default differential
+    /// run compares the Rust and Lean engines only on the pre-feature language
+    /// fragment (requirements 3.1/3.3). The DRT fuzz harnesses set this to
+    /// `true` only under `#[cfg(feature = "anyall")]`.
+    pub enable_anyall: bool,
 }
 
 impl ABACSettings {
@@ -108,6 +116,7 @@ impl ABACSettings {
             enable_action_in_constraints: true,
             total_action_request_env_limit: 1024,
             max_actions: 16,
+            enable_anyall: false,
         }
     }
 

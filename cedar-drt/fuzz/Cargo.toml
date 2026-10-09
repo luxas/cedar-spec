@@ -51,6 +51,7 @@ anyall = [
     "cedar-policy/anyall",
     "cedar-policy-core/anyall",
     "cedar-policy-generators/anyall",
+    "cedar-policy-symcc/anyall",
 ]
 
 [patch.crates-io]
