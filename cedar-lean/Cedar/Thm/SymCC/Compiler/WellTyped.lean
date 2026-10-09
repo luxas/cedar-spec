@@ -2385,7 +2385,57 @@ theorem compilePred_well_typed {p₀ : Cedar.Spec.PredExpr} {itTy : CedarType} {
     · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
     · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
   | .ite x₁ x₂ x₃ =>
-    skip
+    simp only [typeOfPred] at htp
+    cases hxc : typeOfPred x₁ itTy c Γ <;> rw [hxc] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i rc; obtain ⟨tyc, c₁⟩ := rc
+    cases hx₂ : typeOfPred x₂ itTy (c ∪ c₁) Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    cases hx₃ : typeOfPred x₃ itTy c Γ <;> rw [hx₃] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₃; obtain ⟨ty₃, c₃⟩ := r₃
+    have ⟨tc, hokc, htyc⟩ := compilePred_well_typed hwf hxc hitw hitty
+    have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+    have ⟨t₃, hok₃, hty₃⟩ := compilePred_well_typed hwf hx₃ hitw hitty
+    have ⟨hwfc, _, _⟩ := compilePred_wf hwε hitw hitty hokc
+    have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hitty hok₂
+    have ⟨hwf₃, _, _⟩ := compilePred_wf hwε hitw hitty hok₃
+    simp only [PredExpr.normalize, hxc]
+    match hbc : tyc.typeOf with
+    | .bool .tt =>
+      have htcb : tc.typeOf = .option .bool := by rw [htyc, hbc]; simp only [TermType.ofType]
+      simp only [typeOfIf, hbc, bind, Except.bind, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp
+      have ⟨t, hci, hcty⟩ := compileIf_ok hwfc hwf₂ hwf₂ htcb hty₂ hty₂
+      have htt : typ.typeOf = ty₂.typeOf := by rw [← htyp]; simp only [TypedExpr.typeOf]
+      exact ⟨t, by simp only [compilePred, hokc, hok₂, Except.bind_ok, hci], by rw [hcty, htt]⟩
+    | .bool .ff =>
+      have htcb : tc.typeOf = .option .bool := by rw [htyc, hbc]; simp only [TermType.ofType]
+      simp only [typeOfIf, hbc, bind, Except.bind, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp
+      have ⟨t, hci, hcty⟩ := compileIf_ok hwfc hwf₃ hwf₃ htcb hty₃ hty₃
+      have htt : typ.typeOf = ty₃.typeOf := by rw [← htyp]; simp only [TypedExpr.typeOf]
+      exact ⟨t, by simp only [compilePred, hokc, hok₃, Except.bind_ok, hci], by rw [hcty, htt]⟩
+    | .bool .anyBool =>
+      have htcb : tc.typeOf = .option .bool := by rw [htyc, hbc]; simp only [TermType.ofType]
+      simp only [typeOfIf, hbc, bind, Except.bind, Validation.ok] at htp
+      split at htp
+      case _ τ hlub =>
+        simp only [Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+        obtain ⟨htyp, -⟩ := htp
+        have hofeq : TermType.ofType ty₂.typeOf = TermType.ofType ty₃.typeOf := lub_implies_ofType_eq hlub
+        rw [hofeq] at hty₂
+        have ⟨t, hci, hcty⟩ := compileIf_ok hwfc hwf₂ hwf₃ htcb hty₂ hty₃
+        have htt : typ.typeOf = τ := by rw [← htyp]; simp only [TypedExpr.typeOf]
+        refine ⟨t, by simp only [compilePred, hokc, hok₂, hok₃, Except.bind_ok, hci], ?_⟩
+        rw [hcty, htt, lub_result_ofType_eq hlub, hofeq]
+      case _ hlub =>
+        simp only [Validation.err, reduceCtorEq] at htp
+    | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+      exfalso; simp only [typeOfIf, hbc, Validation.err, reduceCtorEq] at htp
   | .and x₁ x₂ =>
     simp only [typeOfPred] at htp
     cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>

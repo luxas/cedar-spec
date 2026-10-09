@@ -18,6 +18,7 @@ import Cedar.Thm.SymCC.Compiler.WF
 import Cedar.Thm.SymCC.Env.ofEnv
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Term.ofType
+import Cedar.Thm.WellTyped.Expr.TypeLifting
 
 /-!
 D-73 option B, step (2): the `.and`/`.or`/`.ite` arms of `compilePred_well_typed`, as
@@ -199,5 +200,75 @@ theorem compilePred_well_typed_ite
   obtain ⟨b, htyp⟩ := typeOfIf_bool_result hbc hb₂ hb₃ htp
   refine ⟨t, by simp only [compilePred, hokc, hok₂, hok₃, Except.bind_ok, hci], ?_⟩
   rw [hcty, htyp, TermType.ofType]
+
+/- `ofType` ignores Bool-annotation lifting (twins of the private lemmas in WellTyped.lean). -/
+mutual
+  private theorem ofQualifiedType_eq_ofQualifiedType_liftBool'' {qty : QualifiedType} :
+      TermType.ofQualifiedType qty = TermType.ofQualifiedType qty.liftBoolTypes := by
+    cases qty
+    all_goals
+      simp only [TermType.ofQualifiedType, QualifiedType.liftBoolTypes, TermType.option.injEq]
+      apply ofType_eq_ofType_liftBool''
+  private theorem ofRecordType_eq_ofRecordType_liftBool'' (recs : List (Attr × QualifiedType)) :
+      TermType.ofRecordType recs =
+      TermType.ofRecordType (recs.map (λ (k, v) => (k, QualifiedType.liftBoolTypes v))) := by
+    cases recs with
+    | nil => simp [TermType.ofRecordType]
+    | cons hd tail =>
+      simp only [List.map, TermType.ofRecordType, List.cons.injEq]
+      constructor
+      · simp only [Prod.mk.injEq, true_and]
+        apply ofQualifiedType_eq_ofQualifiedType_liftBool''
+      · apply ofRecordType_eq_ofRecordType_liftBool'' tail
+  private theorem ofType_eq_ofType_liftBool'' (ty : CedarType) :
+      TermType.ofType ty = TermType.ofType ty.liftBoolTypes := by
+    cases ty with
+    | bool _ => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | int => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | string => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | entity ety => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | ext xty => simp [TermType.ofType, CedarType.liftBoolTypes]
+    | set ty =>
+      simp [TermType.ofType, CedarType.liftBoolTypes]
+      apply ofType_eq_ofType_liftBool'' ty
+    | record rty =>
+      simp only [TermType.ofType, CedarType.liftBoolTypes, RecordType.liftBoolTypes,
+        Data.Map.mapOnValues₂_eq_mapOnValues, Data.Map.mapOnValues,
+        TermType.record.injEq, Data.Map.mk.injEq]
+      exact ofRecordType_eq_ofRecordType_liftBool'' rty.toList
+end
+
+/-- If two Cedar types have a LUB, their `TermType.ofType` images are equal (lub only unifies
+Bool annotations / sets+records with identical keys, which `ofType` collapses). -/
+theorem lub_implies_ofType_eq {ty₁ ty₂ ty : CedarType} (h : (ty₁ ⊔ ty₂) = .some ty) :
+    TermType.ofType ty₁ = TermType.ofType ty₂ := by
+  have hlift := lifted_type_lub h
+  rw [ofType_eq_ofType_liftBool'' ty₁, ofType_eq_ofType_liftBool'' ty₂, hlift]
+
+/-- The LUB's `ofType` equals the left operand's `ofType`. -/
+theorem lub_result_ofType_eq {ty₁ ty₂ ty : CedarType} (h : (ty₁ ⊔ ty₂) = .some ty) :
+    TermType.ofType ty = TermType.ofType ty₁ := by
+  have hsub := lub_left_subty h
+  have hlift := lifted_type_is_top hsub
+  rw [ofType_eq_ofType_liftBool'' ty, ofType_eq_ofType_liftBool'' ty₁, hlift]
+
+/-- `compileIf` with a WF `.option .bool` condition and two WF branches of the SAME `.option τ`
+type succeeds with a `.option τ` term. (Generalizes `compileIf_bool_ok`: non-bool `ite` inside a
+predicate is legal; `compileIf` only requires the two branches share a type.) -/
+theorem compileIf_ok {εs : SymEntities} {t₁ t₂ t₃ : Term} {τ : TermType}
+    (hw₁ : t₁.WellFormed εs) (hw₂ : t₂.WellFormed εs) (hw₃ : t₃.WellFormed εs)
+    (hty₁ : t₁.typeOf = .option .bool) (hty₂ : t₂.typeOf = .option τ)
+    (hty₃ : t₃.typeOf = .option τ) :
+    ∃ t, compileIf t₁ (.ok t₂) (.ok t₃) = .ok t ∧ t.typeOf = .option τ := by
+  simp only [compileIf, bind, Except.bind]
+  split
+  · exact ⟨_, rfl, hty₂⟩
+  · exact ⟨_, rfl, hty₃⟩
+  · simp only [hty₂, hty₃, if_true, Except.ok.injEq, exists_eq_left']
+    have hwo₁ := wf_option_get hw₁ hty₁
+    have hwi := wf_ite hwo₁.left hw₂ hw₃ hwo₁.right (by simp only [hty₂, hty₃])
+    rw [hty₂] at hwi
+    exact (wf_ifSome_option hw₁ hwi.left hwi.right).right
+  · rename_i hne; exact absurd hty₁ (by simp_all)
 
 end Cedar.Thm
