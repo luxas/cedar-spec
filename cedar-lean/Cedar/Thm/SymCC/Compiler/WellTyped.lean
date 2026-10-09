@@ -2197,6 +2197,64 @@ theorem compilePred_well_typed_unaryApp
     simp [TypedExpr.typeOf, TermType.ofType]
 
 /--
+D-72 step (3), `.hasAttr` arm (fork-independent — `typeOfHasAttr` does not short-circuit
+on constant types). `typeOfHasAttr` always yields a `.bool`-typed result and
+`compileHasAttr` always yields a `.option .bool` term, so from the sub-result type we
+get entity/record-ness, `compileHasAttr_always_ok` gives success, and `compileHasAttr_wf`
+gives the `.option .bool` type. No per-op casing needed.
+-/
+theorem compilePred_well_typed_hasAttr
+    {a : Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr}
+    {c c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    (hwε : (SymEnv.ofEnv Γ).WellFormed)
+    (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
+    (hitty : it.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
+    (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (htp : typeOfHasAttr ty₁ x₁.toExpr a c Γ = .ok (typ, c')) :
+    ∃ t, compilePred (.hasAttr x₁ a) it (SymEnv.ofEnv Γ) = .ok t ∧
+      t.typeOf = .option (TermType.ofType typ.typeOf) := by
+  have ⟨hwf_comp_x, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
+  have ⟨hwf_get_comp_x, hty_get_comp_x⟩ := wf_option_get hwf_comp_x hty₁
+  -- From `typeOfHasAttr` success: `ty₁.typeOf` is record or entity, and `typ.typeOf = .bool _`.
+  have hbool_rec :
+      (∃ ety, ty₁.typeOf = .entity ety) ∨ (∃ rty, ty₁.typeOf = .record rty) := by
+    unfold typeOfHasAttr at htp
+    split at htp
+    · rename_i rty h; exact Or.inr ⟨rty, h⟩
+    · rename_i ety h; exact Or.inl ⟨ety, h⟩
+    · simp only [Validation.err, reduceCtorEq] at htp
+  have htyp_bool : ∃ b, typ.typeOf = .bool b := by
+    have hb : ∃ tb, typ = TypedExpr.hasAttr ty₁ a tb ∧ ∃ b, tb = .bool b := by
+      simp only [typeOfHasAttr, hasAttrInRecord, Validation.ok, Validation.err] at htp
+      repeat' split at htp
+      all_goals simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq,
+        and_false, false_and, and_true, true_and]
+      all_goals (
+        first
+          | (obtain ⟨rfl, -⟩ := htp; exact ⟨_, rfl, _, rfl⟩)
+          | (subst htp; exact ⟨_, rfl, _, rfl⟩)
+          | exact ⟨_, htp.symm, _, rfl⟩
+          | exact ⟨_, htp, _, rfl⟩)
+    obtain ⟨tb, htypeq, b, htbeq⟩ := hb
+    exact ⟨b, by rw [htypeq, TypedExpr.typeOf, htbeq]⟩
+  -- Receiver is entity/record-typed, so compileHasAttr succeeds and is `.option .bool`.
+  have hgt_rec : (∃ ety, (Factory.option.get t₁).typeOf = .entity ety) ∨
+      (∃ rty, (Factory.option.get t₁).typeOf = .record rty) := by
+    rcases hbool_rec with ⟨ety, h⟩ | ⟨rty, h⟩
+    · exact Or.inl ⟨ety, by simp only [hty_get_comp_x, h, TermType.ofType]⟩
+    · cases rty with | mk rl =>
+      exact Or.inr ⟨Data.Map.mk (TermType.ofRecordType rl),
+        by simp only [hty_get_comp_x, h, TermType.ofType]⟩
+  have ⟨tha, hha⟩ := compileHasAttr_always_ok (a := a) hwε.right hwf_get_comp_x hgt_rec
+  have ⟨hwf_tha, hty_tha⟩ := compileHasAttr_wf hwε.right hwf_get_comp_x hha
+  obtain ⟨b, htyp_bool⟩ := htyp_bool
+  refine ⟨_, by simp only [compilePred, hok₁, Except.bind_ok, hha]; rfl, ?_⟩
+  apply typeOf_ifSome_option
+  rw [hty_tha, htyp_bool]
+  simp only [TermType.ofType]
+
+/--
 D-72 step (3): a predicate that type-checks against element type `itTy` compiles
 (`compilePred`) to a well-typed term, given the reserved element variable `it` is a
 well-formed term of type `.option (TermType.ofType itTy)`. The predicate analogue of
