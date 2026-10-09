@@ -1825,6 +1825,110 @@ private theorem compile_interpret_all_symbolic_on_footprint
       rw [hsome, pe_option_get'_some]
   rw [hfoldk I₁ (fun vi _ => rfl) (fun vi hmem => extInterp_wf hI₁ ⟨hvw₁ vi hmem, hlit₁ vi hmem⟩ (hvty₁ vi hmem)),
       hfoldk I₂ (fun vi hmem => (hptI vi hmem).symm) (fun vi hmem => extInterp_wf hI₂ ⟨hvw₁ vi hmem, hlit₁ vi hmem⟩ (hvty₁ vi hmem))]
+
+/--
+D-70/D-71 step (4), LITERAL-FOLD path: a literal-set-of-literals receiver compiles
+the predicate PER ELEMENT (`it := someOf vi`); the resulting `ite anyErr (noneOf .bool)
+(someOf conj)` interprets equally under `I₁`/`I₂`. Each element `vi` is a literal, so
+`someOf vi` is a closed term with `(someOf vi).interpret I₁ = (someOf vi).interpret I₂`
+trivially, and step (3) at plain `I` (no `extInterp`) gives each per-element compiled
+predicate equal interpretations; `fold_ite_val_congr` closes the two folds.
+-/
+private theorem compile_interpret_all_litfold_on_footprint
+  {p : PredExpr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {vs : List Term} {pts : List Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hnoit : p.NoItDependentIn = true)
+  (hpvr : p.ValidRefs (εnv.entities.isValidEntityUID ·))
+  (hvw : ∀ vi ∈ vs, vi.WellFormed εnv.entities) (hvlit : ∀ vi ∈ vs, vi.isLiteral = true) (hvty : ∀ vi ∈ vs, vi.typeOf = elemTy)
+  (hpe : ∀ vi ∈ vs, compilePred p (Factory.someOf vi) εnv = .ok ((compilePred p (Factory.someOf vi) εnv).toOption.getD vi)
+          ∧ (Factory.option.get ((compilePred p (Factory.someOf vi) εnv).toOption.getD vi)).typeOf = .bool)
+  (hpftv : ∀ vi ∈ vs, footprintPred p (Factory.someOf vi) εnv ⊆ ft)
+  (hpts : pts = vs.map (fun vi => (compilePred p (Factory.someOf vi) εnv).toOption.getD vi)) :
+  (Factory.ite (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+      (Factory.noneOf .bool)
+      (Factory.someOf (pts.foldr (fun pti acc => Factory.and (Factory.option.get pti) acc) (true : Term)))).interpret I₁
+    = (Factory.ite (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+      (Factory.noneOf .bool)
+      (Factory.someOf (pts.foldr (fun pti acc => Factory.and (Factory.option.get pti) acc) (true : Term)))).interpret I₂
+:= by
+  subst hpts
+  let fval : Term → Term := fun vi => (compilePred p (Factory.someOf vi) εnv).toOption.getD vi
+  -- fval vi is WF of type .option .bool (from hpe + compilePred_wf)
+  have hfvalw : ∀ vi ∈ vs, (fval vi).WellFormed εnv.entities ∧ (fval vi).typeOf = .option .bool := by
+    intro vi hmem
+    have ⟨hcpok, hbool⟩ := hpe vi hmem
+    have hitw : (Factory.someOf vi).WellFormed εnv.entities := Term.WellFormed.some_wf (hvw vi hmem)
+    have hitty : (Factory.someOf vi).typeOf = .option elemTy := by
+      simp only [Factory.someOf, typeOf_term_some]; rw [hvty vi hmem]
+    have ⟨hcpw, cty, hcpty⟩ := compilePred_wf hwε hitw hitty hcpok
+    have hg := wf_option_get hcpw hcpty
+    have hctybool : cty = .bool := hg.right.symm.trans hbool
+    exact ⟨hcpw, by rw [hcpty, hctybool]⟩
+  -- per-element: fval vi interprets equally under I₁/I₂ via step (3) at it := someOf vi (plain I)
+  have hitI : ∀ vi ∈ vs, (Factory.someOf vi).interpret I₁ = (Factory.someOf vi).interpret I₂ := by
+    intro vi hmem
+    have hwl : (Factory.someOf vi).WellFormedLiteral εnv.entities :=
+      ⟨Term.WellFormed.some_wf (hvw vi hmem), by simp only [Factory.someOf, isLiteral_some]; exact hvlit vi hmem⟩
+    rw [interpret_term_lit_id I₁ hwl, interpret_term_lit_id I₂ hwl]
+  have hfvalI : ∀ vi ∈ vs, (fval vi).interpret I₁ = (fval vi).interpret I₂ := by
+    intro vi hmem
+    have hitw : (Factory.someOf vi).WellFormed εnv.entities := Term.WellFormed.some_wf (hvw vi hmem)
+    have hitty : (Factory.someOf vi).typeOf = .option elemTy := by
+      simp only [Factory.someOf, typeOf_term_some]; rw [hvty vi hmem]
+    have hcpeq := compilePred_interpret_on_footprint (I₁ := I₁) (I₂ := I₂)
+      hI₁ hI₂ hwε hitw hitty (hitI vi hmem) hsm (hpftv vi hmem) hnoit hpvr (hpe vi hmem).1
+    exact hcpeq
+  -- interpreted per-element value function
+  let fvalI : Term → Term := fun vi => (fval vi).interpret I₁
+  have hfvalIwfl : ∀ vi ∈ vs, (fvalI vi).WellFormedLiteral εnv.entities ∧ (fvalI vi).typeOf = .option .bool := by
+    intro vi hmem
+    have hwfl := interpret_term_wfl hI₁ (hfvalw vi hmem).left
+    rw [(hfvalw vi hmem).right] at hwfl
+    exact ⟨hwfl.left, hwfl.right⟩
+  -- each interpretation's fold = GOAL fold over fvalI, via interpret_foldr + fold_ite_val_congr
+  have hfoldk : ∀ (Iₖ : Interpretation), Iₖ.WellFormed εnv.entities →
+      (∀ vi ∈ vs, (fval vi).interpret Iₖ = fvalI vi) →
+      (Factory.ite ((vs.map fval).foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+          (Factory.noneOf .bool)
+          (Factory.someOf ((vs.map fval).foldr (fun pti acc => Factory.and (Factory.option.get pti) acc) (true : Term)))).interpret Iₖ
+        = Factory.ite (vs.foldr (fun vi acc => Factory.or (Factory.not (Factory.isSome (fvalI vi))) acc) (false : Term))
+          (Factory.noneOf .bool)
+          (Factory.someOf (vs.foldr (fun vi acc => Factory.and (Factory.option.get (fvalI vi)) acc) (true : Term))) := by
+    intro Iₖ hIk hval
+    rw [List.foldr_map, List.foldr_map]
+    have hwErr : ∀ vi ∈ vs, (Factory.not (Factory.isSome (fval vi))).WellFormed εnv.entities ∧ (Factory.not (Factory.isSome (fval vi))).typeOf = .bool := by
+      intro vi hmem
+      have hns := wf_isSome (hfvalw vi hmem).left
+      have := wf_not hns.left hns.right
+      exact ⟨this.left, this.right⟩
+    have hwVal : ∀ vi ∈ vs, (Factory.option.get (fval vi)).WellFormed εnv.entities ∧ (Factory.option.get (fval vi)).typeOf = .bool := by
+      intro vi hmem
+      have hg := wf_option_get (hfvalw vi hmem).left (hfvalw vi hmem).right
+      exact ⟨hg.left, hg.right⟩
+    have hErrW := foldr_or_wf (εs := εnv.entities) (g := fun vi => Factory.not (Factory.isSome (fval vi))) vs hwErr
+    have hValW := foldr_and_wf (εs := εnv.entities) (g := fun vi => Factory.option.get (fval vi)) vs hwVal
+    have hnoneW : (Factory.noneOf (.bool)).WellFormed εnv.entities := Term.WellFormed.none_wf TermType.WellFormed.bool_wf
+    have hsomeW : (Factory.someOf (vs.foldr (fun vi acc => Factory.and (Factory.option.get (fval vi)) acc) (true : Term))).WellFormed εnv.entities :=
+      Term.WellFormed.some_wf hValW.left
+    rw [interpret_ite hIk hErrW.left hnoneW hsomeW hErrW.right
+        (by simp only [Factory.noneOf, typeOf_term_none, Factory.someOf, typeOf_term_some, hValW.right])]
+    simp only [interpret_foldr_or hIk hwErr, interpret_foldr_and hIk hwVal,
+        Factory.noneOf, interpret_term_none, Factory.someOf, interpret_term_some]
+    -- bodies: interpret Iₖ (not (isSome (fval vi))) and interpret Iₖ (option.get (fval vi)) in terms of fvalI
+    refine (fold_ite_val_congr (εs := εnv.entities) (fval := fvalI)
+      (B := fun vi => Term.interpret Iₖ (Factory.option.get (fval vi)))
+      (BE := fun vi => Term.interpret Iₖ (Factory.not (Factory.isSome (fval vi))))
+      hfvalIwfl ?_ ?_).symm
+    · intro vi hmem
+      show Term.interpret Iₖ (Factory.not (Factory.isSome (fval vi))) = Factory.not (Factory.isSome (fvalI vi))
+      rw [interpret_not hIk (wf_isSome (hfvalw vi hmem).left).left, interpret_isSome hIk (hfvalw vi hmem).left, hval vi hmem]
+    · intro vi hmem w' hsome
+      show Term.interpret Iₖ (Factory.option.get (fval vi)) = w'
+      rw [interpret_option_get Iₖ (hfvalw vi hmem).left (hfvalw vi hmem).right, hval vi hmem]
+      show Factory.option.get' Iₖ (fvalI vi) = w'
+      rw [hsome, pe_option_get'_some]
+  rw [hfoldk I₁ hI₁ (fun vi _ => rfl), hfoldk I₂ hI₂ (fun vi hmem => (hfvalI vi hmem).symm)]
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
