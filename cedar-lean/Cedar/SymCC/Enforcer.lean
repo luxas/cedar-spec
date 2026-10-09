@@ -89,8 +89,21 @@ multiply `footprint.induct`'s `.all` case.
 def footprintAllPred (p : PredExpr) (x₁ : Expr) (εnv : SymEnv) : Set Term :=
   match compile x₁ εnv with
   | .ok t =>
+    match t with
+    | .none _ => Set.empty    -- D-69: a `.none` receiver compiles no predicate
+    | _ =>
     match (Factory.option.get t).typeOf with
-    | .set elemTy => footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
+    | .set elemTy =>
+      -- D-71: MIRROR compile's `.all` arm. A literal set of literal elements compiles
+      -- the predicate PER ELEMENT (`it := someOf vi`); otherwise it binds the reserved
+      -- element variable. The footprint follows the same split so each compiled term is
+      -- covered exactly (ofBranch already mirrors compileIf's laziness this way).
+      match Factory.option.get t with
+      | .set (Data.Set.mk vs) _ =>
+        if vs.all (·.isLiteral)
+        then vs.mapUnion (fun vi => footprintPred p (Factory.someOf vi) εnv)
+        else footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
+      | _ => footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
     | _           => Set.empty
   | .error _ => Set.empty
 

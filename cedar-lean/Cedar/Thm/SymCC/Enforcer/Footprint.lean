@@ -75,8 +75,14 @@ theorem footprintAllPred_wf (p : PredExpr) (x₁ : Expr) (εnv : SymEnv) :
   simp only [footprintAllPred]
   split
   · split
-    · exact footprintPred_wf _ _ _
     · exact Set.empty_wf
+    · split
+      · split
+        · split
+          · exact List.mapUnion_wf
+          · exact footprintPred_wf _ _ _
+        · exact footprintPred_wf _ _ _
+      · exact Set.empty_wf
   · exact Set.empty_wf
 
 theorem footprint_wf (x : Expr) (εnv : SymEnv) :
@@ -474,11 +480,18 @@ theorem mem_footprintAllPred_option_entity {p : PredExpr} {x₁ : Expr} {εnv : 
 := by
   intro hin
   simp only [footprintAllPred] at hin
-
   split at hin
   · split at hin
-    · exact mem_footprintPred_option_entity hin
     · simp only [Set.not_mem_empty] at hin
+    · split at hin
+      · split at hin
+        · split at hin
+          · simp only [List.mem_mapUnion_iff_mem_exists] at hin
+            replace ⟨vi, _, hin⟩ := hin
+            exact mem_footprintPred_option_entity hin
+          · exact mem_footprintPred_option_entity hin
+        · exact mem_footprintPred_option_entity hin
+      · simp only [Set.not_mem_empty] at hin
   · simp only [Set.not_mem_empty] at hin
 
 /--
@@ -700,10 +713,22 @@ private theorem mem_footprint_exists_wf_prop {p : Expr → Prop} {x : Expr} {t�
       simp only [footprintAllPred] at hin
       split at hin
       · split at hin
-        · have ⟨q, hfree, himp, hok⟩ := mem_footprintPred_exists hin
-          have ⟨hwεq, hpq⟩ := hallp hp hwε hfree himp
-          exact ⟨q.toExpr, hwεq, hpq, hok⟩
         · simp only [Set.not_mem_empty] at hin
+        · split at hin
+          · split at hin
+            · split at hin
+              · simp only [List.mem_mapUnion_iff_mem_exists] at hin
+                replace ⟨vi, _, hin⟩ := hin
+                have ⟨q, hfree, himp, hok⟩ := mem_footprintPred_exists hin
+                have ⟨hwεq, hpq⟩ := hallp hp hwε hfree himp
+                exact ⟨q.toExpr, hwεq, hpq, hok⟩
+              · have ⟨q, hfree, himp, hok⟩ := mem_footprintPred_exists hin
+                have ⟨hwεq, hpq⟩ := hallp hp hwε hfree himp
+                exact ⟨q.toExpr, hwεq, hpq, hok⟩
+            · have ⟨q, hfree, himp, hok⟩ := mem_footprintPred_exists hin
+              have ⟨hwεq, hpq⟩ := hallp hp hwε hfree himp
+              exact ⟨q.toExpr, hwεq, hpq, hok⟩
+          · simp only [Set.not_mem_empty] at hin
       · simp only [Set.not_mem_empty] at hin
 
 theorem mem_footprint_exists_wf {x : Expr} {tₑ : Term} {env : Env} {εnv : SymEnv} :
