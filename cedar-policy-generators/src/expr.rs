@@ -317,6 +317,17 @@ impl ExprGenerator<'_> {
                     if max_depth == 0 || u.len() < 10 {
                         self.generate_expr_for_type_structurally_recursive(target_type, u)
                     } else {
+                        // `.all` / `.any` set quantifiers (feature `anyall`,
+                        // spec req 3.3). Gated on `enable_anyall` so the default
+                        // differential run never generates them; when enabled,
+                        // produce one with a modest probability (1 in 12) so the
+                        // rest of the Bool fragment stays well-covered (risk
+                        // R-3). The generator arm is the LAST surface turned on,
+                        // after both engines understand the node.
+                        #[cfg(feature = "anyall")]
+                        if self.settings.enable_anyall && u.ratio(1, 12)? {
+                            return self.generate_all_expr(max_depth, u);
+                        }
                         gen!(u,
                         // bool literal
                         2 => Ok(ast::Expr::val(u.arbitrary::<bool>()?)),
@@ -798,6 +809,138 @@ impl ExprGenerator<'_> {
                     }
                 }
             }
+        }
+    }
+
+    /// Generate a `.all` / `.any` set-quantifier expression (feature `anyall`,
+    /// spec req 1.1/2.3/3.3). Produces `ExprKind::All { expr, pred }` where
+    /// `expr` is a Set-typed generated expression and `pred` is a freshly
+    /// generated **set-free, non-nested** predicate referencing the current
+    /// element `it`. `it` is injected as the reserved sentinel unknown
+    /// (`ast::IT_SENTINEL`) typed at the element type, so the standard typed
+    /// generator machinery and the construction-time `PredExpr::try_from_expr`
+    /// validation (nesting / set-term rejection) are reused unchanged.
+    ///
+    /// The element type is varied over primitives, entities, and records (B1:
+    /// elements are `Value`s, not just literals). The arm sometimes emits the
+    /// lowered `.any` shape (`!all(!p)`, req 2.3) and, at low weight, an
+    /// `it`-dependent left operand of `in` (the SymCC-unsupported shape, D-76)
+    /// so the rejection path is fuzzed.
+    #[cfg(feature = "anyall")]
+    fn generate_all_expr(
+        &self,
+        max_depth: usize,
+        u: &mut Unstructured<'_>,
+    ) -> Result<ast::Expr> {
+        // Pick an element type for the quantified set.
+        let elem_ty: Type = gen!(u,
+            4 => Type::long(),
+            3 => Type::string(),
+            2 => Type::bool(),
+            3 => Type::Entity(self.schema.arbitrary_entity_type(u)?),
+            2 => self.as_type_gen().generate_record_type(max_depth, u)?
+        );
+
+        // `it` as the reserved sentinel unknown, typed at the element type when
+        // possible (an untyped unknown otherwise, e.g. an empty record type).
+        let it_expr: ast::Expr = match ast::Type::try_from(elem_ty.clone()).ok() {
+            Some(ty) => ast::Expr::unknown(ast::Unknown::new_with_type(ast::IT_SENTINEL, ty)),
+            None => ast::Expr::unknown(ast::Unknown::new_untyped(ast::IT_SENTINEL)),
+        };
+
+        // Build a set-free, non-nested Bool predicate body over `it`.
+        let body: ast::Expr = self.generate_pred_body(&elem_ty, &it_expr, max_depth, u)?;
+
+        // Convert the Bool `Expr` (with the sentinel standing for `it`) into a
+        // `PredExpr`. This enforces set-freeness / non-nesting structurally; a
+        // body that violates it is rejected here (treated as a generation dead
+        // end via `Error::EmptyChoose`-style fallthrough).
+        let pred = ast::PredExpr::try_from_expr(&body, &ast::is_it_sentinel)
+            .map_err(|_| Error::TooDeep)?;
+
+        // Receiver: a Set-typed expression of the element type.
+        let receiver = self.generate_expr_for_type(
+            &Type::set_of(elem_ty),
+            max_depth.saturating_sub(1),
+            u,
+        )?;
+
+        // Sometimes emit the lowered `.any` shape (`!all(!p)`, req 2.3); the
+        // builder's `Expr::any` performs the lowering.
+        if u.ratio(1, 3)? {
+            Ok(ast::Expr::any(receiver, pred))
+        } else {
+            Ok(ast::Expr::all(receiver, pred))
+        }
+    }
+
+    /// Build a set-free, non-nested Bool predicate body over `it` (the sentinel
+    /// expression `it_expr`), varied by the element type. Never recurses into a
+    /// quantifier (so nesting is structurally impossible) and never emits a set
+    /// term. At low weight it emits an `it`-dependent left operand of `in` (the
+    /// SymCC-unsupported shape, D-76) for entity elements.
+    #[cfg(feature = "anyall")]
+    fn generate_pred_body(
+        &self,
+        elem_ty: &Type,
+        it_expr: &ast::Expr,
+        max_depth: usize,
+        u: &mut Unstructured<'_>,
+    ) -> Result<ast::Expr> {
+        let it = || it_expr.clone();
+        match elem_ty {
+            Type::Long => Ok(gen!(u,
+                3 => ast::Expr::greater(it(), self.generate_expr_for_type(&Type::long(), max_depth.saturating_sub(1), u)?),
+                3 => ast::Expr::is_eq(it(), self.generate_expr_for_type(&Type::long(), max_depth.saturating_sub(1), u)?),
+                2 => ast::Expr::lesseq(it(), self.generate_expr_for_type(&Type::long(), max_depth.saturating_sub(1), u)?)
+            )),
+            Type::String => Ok(gen!(u,
+                3 => ast::Expr::is_eq(it(), self.generate_expr_for_type(&Type::string(), max_depth.saturating_sub(1), u)?),
+                2 => {
+                    if self.settings.enable_like {
+                        ast::Expr::like(it(), self.constant_pool.arbitrary_pattern_literal(u)?)
+                    } else {
+                        ast::Expr::is_eq(it(), self.generate_expr_for_type(&Type::string(), max_depth.saturating_sub(1), u)?)
+                    }
+                }
+            )),
+            Type::Bool => Ok(gen!(u,
+                2 => it(),
+                2 => ast::Expr::not(it()),
+                2 => ast::Expr::is_eq(it(), ast::Expr::val(u.arbitrary::<bool>()?))
+            )),
+            Type::Entity(ety) => Ok(gen!(u,
+                3 => ast::Expr::is_entity_type(it(), self.schema.arbitrary_entity_type(u)?),
+                3 => ast::Expr::is_eq(it(), self.generate_expr_for_type(&Type::Entity(ety.clone()), max_depth.saturating_sub(1), u)?),
+                // D-76: low-weight `it`-dependent left operand of `in` -- the
+                // SymCC-unsupported shape (D-70 option A). SymCC rejects it with
+                // `unsupportedError` on both engines; this exercises that path.
+                1 => ast::Expr::is_in(it(), self.generate_expr_for_type(&Type::Entity(self.schema.arbitrary_entity_type(u)?), max_depth.saturating_sub(1), u)?)
+            )),
+            Type::Record(rty) => {
+                // Read an attribute of `it` and compare it, exercising
+                // record-valued elements (B1). Fall back to `it has attr` if the
+                // record type is empty.
+                if let Some((attr, qty)) = rty.iter().next() {
+                    let attr_ty = qty.ty.clone();
+                    Ok(ast::Expr::is_eq(
+                        ast::Expr::get_attr(it(), attr.clone()),
+                        self.generate_expr_for_type(&attr_ty, max_depth.saturating_sub(1), u)?,
+                    ))
+                } else {
+                    Ok(ast::Expr::has_attr(
+                        it(),
+                        self.constant_pool.arbitrary_string_constant(u)?,
+                    ))
+                }
+            }
+            // Other element types (extensions, nested sets) -- keep it simple:
+            // an existence-independent Bool that still references `it` through
+            // an equality against a generated value of the same type.
+            other => Ok(ast::Expr::is_eq(
+                it(),
+                self.generate_expr_for_type(other, max_depth.saturating_sub(1), u)?,
+            )),
         }
     }
 
