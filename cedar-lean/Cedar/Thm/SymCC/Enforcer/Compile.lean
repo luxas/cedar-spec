@@ -1997,21 +1997,28 @@ private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv
   simp_do_let (compile x₁ εnv) at hok
   rename_i t₁ hr₁
   refine ⟨t₁, (by first | exact hr₁ | rfl), ?_⟩
-  cases t₁ with
-  | none ty =>
-    simp only [] at hok
+  have hnn : (∃ ty, t₁ = Term.none ty) ∨ (∀ ty, t₁ ≠ Term.none ty) := by
+    cases t₁ <;> first | exact Or.inl ⟨_, rfl⟩ | exact Or.inr (fun _ h => nomatch h)
+  rcases hnn with ⟨ty, rfl⟩ | hnotnone'
+  · simp only [] at hok
     split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
-    exact Or.inl ⟨ty, rfl, hok.symm⟩
-  | _ =>
-    have hnotnone' : ∀ ty, _ ≠ Term.none ty := by intro ty; simp only [reduceCtorEq, not_false_eq_true]
-    simp only [] at hok
+    -- `split` on `match ty` substituted `ty := .set _`, so the witness must be inferred.
+    exact Or.inl ⟨_, rfl, hok.symm⟩
+  · -- eliminate the outer `match t₁` using `hnotnone'`
+    split at hok
+    · first
+        | exact absurd rfl (hnotnone' _)
+        | exact absurd ‹_ = Term.none _› (hnotnone' _)
+        | (rename_i heq; exact absurd heq (hnotnone' _))
+    try simp only [] at hok
     split at hok
     · rename_i elemTy helemq
       split at hok
       · rename_i vs ety' hvseq
         have htyeq : ety' = elemTy := by
-          rw [hvseq] at helemq; simp only [Term.typeOf, TermType.set.injEq] at helemq; exact helemq.symm
-        subst htyeq
+          rw [hvseq] at helemq; simp only [Term.typeOf, TermType.set.injEq] at helemq
+          first | exact helemq | exact helemq.symm
+        subst ety'
         split at hok
         · rename_i hlit
           simp_do_let (vs.mapM (fun vi => do
@@ -2028,7 +2035,7 @@ private theorem compile_all_ok_cases {x₁ : Expr} {p : PredExpr} {εnv : SymEnv
           exact Or.inr (Or.inr ⟨elemTy, pt, hnotnone', helemq, (by
             intro vs' ety' heq; rw [hvseq] at heq
             simp only [Term.set.injEq, Data.Set.mk.injEq] at heq
-            obtain ⟨rfl, _⟩ := heq; exact hlit), hpt, hpbool, rfl⟩)
+            obtain ⟨rfl, _⟩ := heq; exact Bool.eq_false_iff.mpr hlit), hpt, hpbool, rfl⟩)
       · rename_i hnotset
         simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
         rename_i pt hpt
@@ -2055,6 +2062,128 @@ private theorem compile_interpret_all_symbolic_leaf
     = (Factory.set.all (Factory.option.get t₁) (Factory.option.get pt) (Factory.not (Factory.isSome pt))).interpret I₂
 := compile_interpret_all_symbolic_on_footprint hI₁ hI₂ hwε hsm hnoit hpvr hwt₁ hty₁ hpt hpbool
     (interpret_option_get_eq hwt₁ hty₁ hih₁ hsome) hpft
+
+/-- The `.all` case of `compile_interpret_on_footprint` (D-70 option A): decompose the compiled
+`.all` term along the compiler's three paths (`compile_all_ok_cases`) and dispatch each to its
+path lemma, with footprint coverage from the matching `footprintAllPred_*_eq` slot (D-71). -/
+private theorem compile_interpret_all_on_footprint {x₁ : Expr} {p : PredExpr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
+  (hwε : εnv.WellFormedFor (.all x₁ p))
+  (hI₁ : I₁.WellFormed εnv.entities)
+  (hI₂ : I₂.WellFormed εnv.entities)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprint (.all x₁ p) εnv ⊆ ft)
+  (hok : compile (.all x₁ p) εnv = .ok t)
+  (ih₁ : CompileInterpretOnFootprint x₁ ft εnv I₁ I₂) :
+  t.interpret I₁ = t.interpret I₂
+:= by
+  have hwφ₁ : εnv.WellFormedFor x₁ := by
+    refine ⟨hwε.left, ?_⟩
+    have hv := hwε.right
+    cases hv with | all_valid hvx _ => exact hvx
+  have hpvr : p.ValidRefs (εnv.entities.isValidEntityUID ·) := by
+    have hv := hwε.right
+    cases hv with | all_valid _ hp => exact hp
+  have hwe : εnv.WellFormed := hwε.left
+  simp only [footprint, Set.union_subset] at hft
+  obtain ⟨hnoit, t₁, hr₁, hc⟩ := compile_all_ok_cases hok
+  have ⟨hwt₁, ty₁, hty₁⟩ := compile_wf hwφ₁ hr₁
+  have hih₁ : t₁.interpret I₁ = t₁.interpret I₂ := ih₁ hwφ₁ hI₁ hI₂ hsm hft.left hr₁
+  have hgt := wf_option_get hwt₁ hty₁
+  rcases hc with ⟨ty, hteq, rfl⟩ | ⟨elemTy, vs, pts, hnn, helemq, hget, hlit, hpts, rfl⟩ | ⟨elemTy, pt, hnn, helemq, hnotlit, hpt, hpbool, rfl⟩
+  · exact compile_interpret_all_none_on_footprint
+  · -- literal-fold path (D-68)
+    have hty₁' : t₁.typeOf = .option (.set elemTy) := by rw [hty₁, ← hgt.right, helemq]
+    -- the receiver is syntactically `.some u` (option.get of a non-`.some` option-typed term is an app)
+    have hsome : ∃ u, t₁ = .some u := by
+      cases t₁ <;> first
+        | exact ⟨_, rfl⟩
+        | (simp only [Factory.option.get, hty₁', reduceCtorEq] at hget)
+    -- footprint slot ⇒ per-element predicate footprints are covered
+    have hslot := footprintAllPred_litfold_eq (p := p) hr₁ hsome hget hlit
+    rw [hslot] at hft
+    have hpftv : ∀ vi ∈ vs, footprintPred p (Factory.someOf vi) εnv ⊆ ft := by
+      intro vi hmem
+      exact Set.subset_trans (List.mem_implies_subset_mapUnion (fun vi => footprintPred p (Factory.someOf vi) εnv) hmem) hft.right
+    -- element facts from set-WF of (option.get t₁)
+    have hsetw := hgt.left
+    rw [hget] at hsetw
+    have helts : ∀ vi ∈ vs, vi.WellFormed εnv.entities ∧ vi.typeOf = elemTy := by
+      cases hsetw with | set_wf h₁ h₂ _ _ =>
+      intro vi hmem; exact ⟨h₁ vi hmem, by rw [h₂ vi hmem]⟩
+    have hvlit : ∀ vi ∈ vs, vi.isLiteral = true := by
+      simp only [List.all_eq_true] at hlit; exact hlit
+    -- pts = vs.map fval and per-element compile facts (as in compile_interpret_all)
+    let fval : Term → Term := fun vi => (compilePred p (Factory.someOf vi) εnv).toOption.getD vi
+    have hfe : ∀ vi, fval vi = (compilePred p (Factory.someOf vi) εnv).toOption.getD vi := fun _ => rfl
+    have hrel : ∀ {vi pti}, (do
+        let pti' ← compilePred p (Factory.someOf vi) εnv
+        if (Factory.option.get pti').typeOf = TermType.bool then Except.ok pti' else Except.error SymCC.Error.typeError) = Except.ok pti →
+        pti = fval vi := by
+      intro vi pti hpti
+      cases hcp : compilePred p (Factory.someOf vi) εnv <;>
+        simp only [hcp, Except.bind_err, Except.bind_ok, reduceCtorEq] at hpti
+      rename_i cpt
+      split at hpti <;> simp only [Except.ok.injEq, reduceCtorEq] at hpti
+      rw [← hpti, hfe, hcp]; rfl
+    have hpe : ∀ vi ∈ vs, compilePred p (Factory.someOf vi) εnv = .ok (fval vi)
+        ∧ (Factory.option.get (fval vi)).typeOf = .bool := by
+      intro vi hmem
+      obtain ⟨pti, _, hpti⟩ := List.forall₂_implies_all_left hpts vi hmem
+      show compilePred p (Factory.someOf vi) εnv = .ok ((compilePred p (Factory.someOf vi) εnv).toOption.getD vi)
+        ∧ (Factory.option.get ((compilePred p (Factory.someOf vi) εnv).toOption.getD vi)).typeOf = .bool
+      cases hcp : compilePred p (Factory.someOf vi) εnv <;>
+        simp only [hcp, Except.bind_err, Except.bind_ok, reduceCtorEq] at hpti ⊢
+      rename_i cpt
+      split at hpti <;> simp only [Except.ok.injEq, reduceCtorEq] at hpti
+      rename_i hbool
+      exact ⟨rfl, hbool⟩
+    have hptsmap : pts = vs.map fval := by
+      have hgen : ∀ (vs pts : List Term), List.Forall₂ (λ vi pti => (do
+          let p' ← compilePred p (Factory.someOf vi) εnv
+          if (Factory.option.get p').typeOf = TermType.bool then Except.ok p' else Except.error SymCC.Error.typeError) = Except.ok pti) vs pts →
+          pts = vs.map fval := by
+        intro vs pts h
+        induction h with
+        | nil => rfl
+        | cons hr _htl ih =>
+          simp only [List.map_cons]
+          rw [hrel hr, ih]
+      exact hgen vs pts hpts
+    -- WF of the inner fold term, for interpret_ifSome
+    have hptsw : ∀ pti ∈ pts, pti.WellFormed εnv.entities ∧ pti.typeOf = .option .bool := by
+      intro pti hmem
+      rw [hptsmap, List.mem_map] at hmem
+      obtain ⟨vi, hvi, rfl⟩ := hmem
+      have ⟨hcpok, hbool⟩ := hpe vi hvi
+      have ⟨hcpw, cty, hcpty⟩ := compilePred_wf hwe
+        (Term.WellFormed.some_wf (helts vi hvi).left)
+        (by simp only [Factory.someOf, typeOf_term_some]; rw [(helts vi hvi).right]) hcpok
+      have hg := wf_option_get hcpw hcpty
+      refine ⟨hcpw, ?_⟩
+      rw [hcpty]; rw [hg.right] at hbool; rw [hbool]
+    have hinner := compile_all_fold_inner_wf (εs := εnv.entities) hptsw
+    rw [interpret_ifSome hI₁ hwt₁ hinner.left, interpret_ifSome hI₂ hwt₁ hinner.left, hih₁]
+    congr 1
+    exact compile_interpret_all_litfold_on_footprint hI₁ hI₂ hwe hsm hnoit hpvr
+      (fun vi h => (helts vi h).left) hvlit (fun vi h => (helts vi h).right) hpe hpftv hptsmap
+  · -- symbolic path (D-52 encoding)
+    have hty₁' : t₁.typeOf = .option (.set elemTy) := by rw [hty₁, ← hgt.right, helemq]
+    have hslot := footprintAllPred_symbolic_eq (p := p) hr₁ hnn helemq hnotlit
+    rw [hslot] at hft
+    have hinner := compile_all_symbolic_inner_wf hwe hwt₁ hty₁' hpt hpbool
+    rw [interpret_ifSome hI₁ hwt₁ hinner.left, interpret_ifSome hI₂ hwt₁ hinner.left, hih₁]
+    -- the receiver interprets to a literal option: `.none` makes both sides `none`; `.some w` uses the leaf
+    have hwl₂ := interpret_term_wfl hI₂ hwt₁
+    rw [hty₁'] at hwl₂
+    rcases wfl_of_type_option_is_option hwl₂.left hwl₂.right with hnone | ⟨w, hsomew, _⟩
+    · have hwt₁₂ := interpret_term_wf hI₁ hinner.left
+      have hwt₂₂ := interpret_term_wf hI₂ hinner.left
+      rw [hinner.right] at hwt₁₂ hwt₂₂
+      rw [hnone]
+      simp only [pe_ifSome_none hwt₁₂.right, pe_ifSome_none hwt₂₂.right]
+    · rw [hsomew]
+      congr 1
+      exact compile_interpret_all_symbolic_leaf hI₁ hI₂ hwe hsm hnoit hpvr hwt₁ hty₁' hpt hpbool hih₁ hft.right w hsomew
 
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
@@ -2096,12 +2225,8 @@ theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv
     -- guard-error: ¬ NoItDependentIn p ⇒ compile .all = .error, contradicts hok
     rename_i x₁ p hc
     rw [compile.eq_def] at hok
-    simp only [hc, if_true, reduceCtorEq, reduceIte] at hok
+    simp only [hc, not_false_eq_true, ite_true, reduceCtorEq, reduceIte] at hok
   case case15 ih =>
-    -- .all body (WIP): dispatch to compile_interpret_all_{none,litfold,symbolic}_on_footprint.
-    -- Decomposition + dispatch wiring is the remaining work (no placeholder).
-    rename_i x₁ p hc
-    rw [Bool.not_not] at hc
-    skip
+    exact compile_interpret_all_on_footprint hwε hI₁ hI₂ hsm hft hok (λ hwε _ _ _ => ih hwε)
 
 end Cedar.Thm

@@ -1104,23 +1104,18 @@ decreasing_by
       | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
       | (have := List.sizeOf_lt_of_mem hpx; omega)
 
-/-- D-68: WF of the literal-fold result produced by the compiler's `.all` arm.
-Each `pti ∈ pts` is a compiled per-element predicate whose `option.get` is
-Bool-typed (the D-65 guard in the `mapM`); the fold builds a conjunction and an
-error-disjunction, wrapped by `ite`/`ifSome`. -/
-private theorem compile_all_fold_result_wf {εs : SymEntities} {t : Term} {ety : TermType} {pts : List Term}
-  (htw : t.WellFormed εs) (htty : t.typeOf = .option (.set ety))
+/-- Inner term of the compiler's literal-fold `.all` result (D-68): the `ite anyErr none (some conj)`
+fold over Bool-option-typed `pts` is well-formed of type `.option .bool`. -/
+public theorem compile_all_fold_inner_wf {εs : SymEntities} {pts : List Term}
   (hpts : ∀ pti ∈ pts, pti.WellFormed εs ∧ pti.typeOf = .option .bool) :
-  (Factory.ifSome t
-      (Factory.ite
+  (Factory.ite
         (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
         (Factory.noneOf .bool)
-        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).WellFormed εs ∧
-  (Factory.ifSome t
-      (Factory.ite
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term)))).WellFormed εs ∧
+  (Factory.ite
         (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
         (Factory.noneOf .bool)
-        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).typeOf = .option .bool := by
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term)))).typeOf = .option .bool := by
   -- conjunction (fold of `option.get pti`) is WF + bool
   have hconj := foldr_and_wf (εs := εs) (g := fun pti => option.get pti) pts (by
     intro pti hmem
@@ -1142,8 +1137,63 @@ private theorem compile_all_fold_result_wf {εs : SymEntities} {t : Term} {ety :
   -- the inner ite
   have hite := wf_ite hanyErr.left hnonew hsomew hanyErr.right (by rw [hnonety, hsomety])
   rw [hnonety] at hite
-  -- wrap with ifSome
+  exact hite
+
+/-- D-68: WF of the literal-fold result produced by the compiler's `.all` arm.
+Each `pti ∈ pts` is a compiled per-element predicate whose `option.get` is
+Bool-typed (the D-65 guard in the `mapM`); the fold builds a conjunction and an
+error-disjunction, wrapped by `ite`/`ifSome`. -/
+public theorem compile_all_fold_result_wf {εs : SymEntities} {t : Term} {ety : TermType} {pts : List Term}
+  (htw : t.WellFormed εs) (htty : t.typeOf = .option (.set ety))
+  (hpts : ∀ pti ∈ pts, pti.WellFormed εs ∧ pti.typeOf = .option .bool) :
+  (Factory.ifSome t
+      (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).WellFormed εs ∧
+  (Factory.ifSome t
+      (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).typeOf = .option .bool := by
+  have hite := compile_all_fold_inner_wf hpts
   exact wf_ifSome_option htw hite.left hite.right
+
+/-- Public twin of `compile_all_wf`'s symbolic sub-proof: the symbolic `.all` result term
+(`ifSome t₁ (set.all (option.get t₁) (option.get pt) (not (isSome pt)))`) is well-formed of type
+`.option .bool`, given a well-formed set-typed receiver and a Bool-typed compiled predicate. -/
+public theorem compile_all_symbolic_inner_wf {p : PredExpr} {εnv : SymEnv} {t₁ pt : Term} {elemTy : TermType}
+  (hwε : εnv.WellFormed)
+  (hwt₁ : t₁.WellFormed εnv.entities) (hty₁ : t₁.typeOf = .option (.set elemTy))
+  (hpt : compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv = Except.ok pt)
+  (hpbool : (option.get pt).typeOf = .bool) :
+  (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt))).WellFormed εnv.entities ∧
+  (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt))).typeOf = .option .bool := by
+  have hgt := wf_option_get hwt₁ hty₁
+  have hel : TermType.WellFormed εnv.entities elemTy := by
+    have hw := typeOf_wf_term_is_wf hgt.left
+    rw [hgt.right] at hw
+    cases hw with | set_wf h => exact h
+  have hvarw : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).WellFormed εnv.entities :=
+    Term.WellFormed.some_wf (Term.WellFormed.var_wf hel)
+  have hvarty : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).typeOf = .option elemTy := by
+    simp only [Factory.someOf, typeOf_term_some, typeOf_term_var, Factory.anyAllItVar]
+  have hvarn : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).NoSetAll = true := by
+    simp only [Factory.someOf, Term.NoSetAll]
+  have hvara : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).anyAllItTyped elemTy = true := by
+    simp [Factory.someOf, Term.anyAllItTyped, Factory.anyAllItVar]
+  have ⟨hptw, pty, hptty⟩ := compilePred_wf hwε hvarw hvarty hpt
+  have hptn := compilePred_noSetAll hwε hvarn hpt
+  have hpta := compilePred_anyAllItTyped (elemTy := elemTy) hwε hvara hpt
+  have hgp := wf_option_get hptw hptty
+  rw [hpbool] at hgp
+  have hgpn : (option.get pt).NoSetAll = true := noSetAll_option_get hptn
+  have hgpa : (option.get pt).anyAllItTyped elemTy = true := anyAllItTyped_option_get hpta
+  have hns := wf_isSome hptw
+  have hnotw := wf_not hns.left hns.right
+  have hnotn : (Factory.not (isSome pt)).NoSetAll = true := noSetAll_not (noSetAll_isSome hptn)
+  have hnota : (Factory.not (isSome pt)).anyAllItTyped elemTy = true := anyAllItTyped_not (anyAllItTyped_isSome hpta)
+  exact wf_set_all hgt.left hgt.right hgp.left hpbool hnotw.left hnotw.right hgpn hnotn hgpa hnota
 
 private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
   (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
