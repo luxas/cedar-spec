@@ -181,12 +181,12 @@ Soundness-lane theorems stay unguarded. **Full tree is GREEN** (782 jobs; Cedar,
 SymTest, UnitTest, DiffTest, Protobuf, CedarProto), 0 sorry; the DRT FFI static-lib target
 (`lake build Cedar:static Protobuf:static CedarProto:static Cedar.SymCC:static CedarFFI:static
 Batteries:static`) builds and archives `libCedar_CedarFFI.a` (1079 jobs). Guarded top-level
-verifier theorems' axioms = `[propext, Classical.choice, Quot.sound]` (no sorryAx). The only
-thing that does not complete in-sandbox is LINKING the `CedarSymTests` *executable* (missing
-`libc++`/`libc++abi`/`libuv` static libs — an environment/toolchain gap, not a proof/code
-issue; the SymTest proof library builds green, and the DRT consumes the static FFI archive,
-not this exe). `.all` COMPLETENESS of `compile_well_typed` remains the only narrowed piece,
-behind the D-74-interim, pending D-74 (option A or C').
+verifier theorems' axioms = `[propext, Classical.choice, Quot.sound]` (no sorryAx). The
+`CedarSymTests` executable **links and runs** here with the documented env
+`LIBRARY_PATH=$HOME/.elan/toolchains/leanprover--lean4---v4.34.1/lib:$HOME/.elan/toolchains/leanprover--lean4---v4.34.1/lib/lean`
+and `CVC5` set (D-13 host quirk): **1216/1216 success, 0 failure** (AnyAll.e2e 12/12, incl. the
+F4 overflow error-path and `.any`-lowering cases). `.all` COMPLETENESS of `compile_well_typed`
+remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A or C').
 
 - **T5.1 SymCC compiler arm for `all` (gated).**
   `Cedar/SymCC/Compiler.lean` (+ `SymCCOpt/`): compile `all` to a bounded conjunction over the
