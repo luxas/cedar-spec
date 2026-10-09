@@ -779,6 +779,53 @@ public def extInterp (I : Interpretation) (v : Term) (ety : TermType) : Interpre
   { I with vars := fun w => if w.id = "!anyall!it" ∧ w.ty = ety then v else I.vars w }
 theorem op_interpret_extInterp {I : Interpretation} {v : Term} {ety : TermType} {op : Op} {ts : List Term} {ty : TermType} :
     Op.interpret (extInterp I v ety) op ts ty = Op.interpret I op ts ty := by rfl
+/-- A term typed `anyAllItTyped` at two DISTINCT element types has no reserved
+`!anyall!it` variable at all: the only arm that constrains the variable is `.var`,
+which would force its type to equal both `ty₁` and `ty₂`. Lets us conclude
+`NoAnyAllItVar` for an `it`-free compiled subterm (compile it against two different
+element types via `compilePred_anyAllItTyped`). -/
+public theorem noAnyAllItVar_of_anyAllItTyped_ne {ty₁ ty₂ : TermType} (hne : ty₁ ≠ ty₂) :
+    ∀ t : Term, t.anyAllItTyped ty₁ = true → t.anyAllItTyped ty₂ = true → t.NoAnyAllItVar = true
+  | .prim _, _, _ => by simp only [Term.NoAnyAllItVar]
+  | .var w, h₁, h₂ => by
+    simp only [Term.anyAllItTyped] at h₁ h₂
+    simp only [Term.NoAnyAllItVar, ne_eq, decide_not, Bool.not_eq_true', decide_eq_false_iff_not]
+    intro hid
+    rw [if_pos hid] at h₁ h₂
+    simp only [decide_eq_true_eq] at h₁ h₂
+    exact hne (h₁.symm.trans h₂)
+  | .none _, _, _ => by simp only [Term.NoAnyAllItVar]
+  | .some t, h₁, h₂ => by
+    simp only [Term.anyAllItTyped] at h₁ h₂
+    simp only [Term.NoAnyAllItVar]
+    exact noAnyAllItVar_of_anyAllItTyped_ne hne t h₁ h₂
+  | .set ts ty, h₁, h₂ => by
+    simp only [Term.anyAllItTyped, Set.all₁_eq_all, Set.all_eq_true] at h₁ h₂
+    simp only [Term.NoAnyAllItVar, Set.all₁_eq_all, Set.all_eq_true]
+    intro x hx
+    exact noAnyAllItVar_of_anyAllItTyped_ne hne x (h₁ x hx) (h₂ x hx)
+  | .record ats, h₁, h₂ => by
+    simp only [Term.anyAllItTyped, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at h₁ h₂
+    simp only [Term.NoAnyAllItVar, List.all_attach₂_snd, List.all_eq_true, Prod.forall]
+    intro a t hmem
+    exact noAnyAllItVar_of_anyAllItTyped_ne hne t (h₁ a t hmem) (h₂ a t hmem)
+  | .app op ts ty, h₁, h₂ => by
+    simp only [Term.anyAllItTyped, List.all_eq_true] at h₁ h₂
+    simp only [Term.NoAnyAllItVar, List.all_eq_true]
+    intro x hx
+    have hxts : x.val ∈ ts := x.property
+    exact noAnyAllItVar_of_anyAllItTyped_ne hne x.val (h₁ x hx) (h₂ x hx)
+termination_by t => sizeOf t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (rename_i ts _ _ _ _; have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (rename_i ats _ _ _ _; have h1 := List.sizeOf_lt_of_mem ‹(_,_) ∈ Map.toList ats›; have h2 := Map.sizeOf_lt_of_toList ats; simp only [Prod.mk.sizeOf_spec] at h1; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ _›; omega)
+
 public theorem interpretWith_some_eq_interpret_ext {I : Interpretation} {v : Term} {ety : TermType} :
     ∀ t : Term, t.NoSetAll = true → t.anyAllItTyped ety = true →
       Term.interpretWith (some v) I t = Term.interpret (extInterp I v ety) t
