@@ -184,6 +184,36 @@ theorem foldr_or_congr {α} {g₁ g₂ : α → Term} {ws : List α}
   | cons hd tl ih =>
     simp only [List.foldr_cons, h hd (by simp), ih (fun w hw => h w (by simp [hw]))]
 
+/-- Interpretation commutes with a right fold of `Factory.and` over Bool-WF bodies. -/
+theorem interpret_foldr_and {εs : SymEntities} {I : Interpretation} {g : Term → Term} {ws : List Term}
+    (hwI : I.WellFormed εs)
+    (hg : ∀ w ∈ ws, (g w).WellFormed εs ∧ (g w).typeOf = .bool) :
+    Term.interpret I (ws.foldr (fun w acc => Factory.and (g w) acc) (true : Term))
+      = ws.foldr (fun w acc => Factory.and (Term.interpret I (g w)) acc) (true : Term) := by
+  induction ws with
+  | nil => simp only [List.foldr_nil, interpret_term_prim]
+  | cons hd tl ih =>
+    have hhd := hg hd (by simp)
+    have hacc := foldr_and_wf (εs := εs) (g := g) tl (fun w hw => hg w (by simp [hw]))
+    simp only [List.foldr_cons]
+    rw [interpret_and hwI hhd.left hacc.left hhd.right hacc.right,
+      ih (fun w hw => hg w (by simp [hw]))]
+
+/-- Interpretation commutes with a right fold of `Factory.or` over Bool-WF bodies. -/
+theorem interpret_foldr_or {εs : SymEntities} {I : Interpretation} {g : Term → Term} {ws : List Term}
+    (hwI : I.WellFormed εs)
+    (hg : ∀ w ∈ ws, (g w).WellFormed εs ∧ (g w).typeOf = .bool) :
+    Term.interpret I (ws.foldr (fun w acc => Factory.or (g w) acc) (false : Term))
+      = ws.foldr (fun w acc => Factory.or (Term.interpret I (g w)) acc) (false : Term) := by
+  induction ws with
+  | nil => simp only [List.foldr_nil, interpret_term_prim]
+  | cons hd tl ih =>
+    have hhd := hg hd (by simp)
+    have hacc := foldr_or_wf (εs := εs) (g := g) tl (fun w hw => hg w (by simp [hw]))
+    simp only [List.foldr_cons]
+    rw [interpret_or hwI hhd.left hacc.left hhd.right hacc.right,
+      ih (fun w hw => hg w (by simp [hw]))]
+
 /-- The compiler's per-element `.all` mapM over a list `vs'` evaluates to `.ok (vs'.map fval)`
 when each element compiles to `fval vi'` with a Bool-typed `option.get`. -/
 theorem mapM_someOf_eq_map {p : PredExpr} {εnv : SymEnv} {fval : Term → Term} {vs' : List Term}

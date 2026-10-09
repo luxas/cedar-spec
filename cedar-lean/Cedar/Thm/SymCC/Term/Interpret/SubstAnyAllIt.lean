@@ -696,7 +696,7 @@ decreasing_by
          omega)
 
 /-- WF of a right fold of `Factory.and` over bool-WF terms. -/
-theorem foldr_and_wf {εs : SymEntities} {α} {g : α → Term} :
+public theorem foldr_and_wf {εs : SymEntities} {α} {g : α → Term} :
   ∀ (vs : List α), (∀ x ∈ vs, (g x).WellFormed εs ∧ (g x).typeOf = .bool) →
     (vs.foldr (fun x acc => Factory.and (g x) acc) (true : Term)).WellFormed εs ∧
     (vs.foldr (fun x acc => Factory.and (g x) acc) (true : Term)).typeOf = .bool
@@ -710,7 +710,7 @@ theorem foldr_and_wf {εs : SymEntities} {α} {g : α → Term} :
     exact wf_and hhd.left htl.left hhd.right htl.right
 
 /-- WF of a right fold of `Factory.or` over bool-WF terms. -/
-theorem foldr_or_wf {εs : SymEntities} {α} {g : α → Term} :
+public theorem foldr_or_wf {εs : SymEntities} {α} {g : α → Term} :
   ∀ (vs : List α), (∀ x ∈ vs, (g x).WellFormed εs ∧ (g x).typeOf = .bool) →
     (vs.foldr (fun x acc => Factory.or (g x) acc) (false : Term)).WellFormed εs ∧
     (vs.foldr (fun x acc => Factory.or (g x) acc) (false : Term)).typeOf = .bool
