@@ -212,4 +212,30 @@ public def TypedExpr.NoQuantifier : TypedExpr → Bool
   | .call _ args _ => args.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.NoQuantifier)
   | .all _ _ _ => false
 
+/--
+True iff a typed expression is in the fragment SymCC's `compile` can analyze under
+D-70 option A: quantifier-free subexpressions are always supported, and an `.all`
+node is supported iff its receiver is supported and its predicate has no `it`-dependent
+left operand of `in` (`PredExpr.NoItDependentIn`) — exactly the D-70 compile
+precondition (the element UIDs of a symbolic receiver cannot be named by finitely many
+footprint terms, so an `it`-dependent `in` is rejected; the full fix is option B at
+Phase 9). This is a SymCC-analysis precondition, NOT a Cedar language/type restriction:
+it is discharged trivially (`true`) for every `.all`-free policy.
+-/
+public def TypedExpr.SymCCSupported : TypedExpr → Bool
+  | .lit _ _ => true
+  | .var _ _ => true
+  | .ite c t e _ => c.SymCCSupported && t.SymCCSupported && e.SymCCSupported
+  | .and a b _ => a.SymCCSupported && b.SymCCSupported
+  | .or a b _ => a.SymCCSupported && b.SymCCSupported
+  | .unaryApp _ e _ => e.SymCCSupported
+  | .binaryApp _ a b _ => a.SymCCSupported && b.SymCCSupported
+  | .getAttr e _ _ => e.SymCCSupported
+  | .hasAttr e _ _ => e.SymCCSupported
+  | .extHasAttr e _ _ _ => e.SymCCSupported
+  | .set ls _ => ls.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.SymCCSupported)
+  | .record m _ => m.attach₂.all (fun x => x.val.snd.SymCCSupported)
+  | .call _ args _ => args.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.SymCCSupported)
+  | .all x₁ p _ => x₁.SymCCSupported && p.NoItDependentIn
+
 end Cedar.Validation

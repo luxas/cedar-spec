@@ -1804,12 +1804,14 @@ theorem typechecked_is_well_typed_after_lifting
           rw [hpred] at h
           simp only [Except.bind_ok] at h
           split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+          rename_i hbool
           rcases h with ⟨h, _⟩
           subst h
           simp only [TypedExpr.liftBoolTypes, CedarType.liftBoolTypes, BoolType.lift]
           exact TypedExpr.WellTyped.all (hᵢ hᵢr)
             (by rw [type_of_after_lifted_is_lifted, hset, CedarType.liftBoolTypes])
             (typeOfPred_implies_wellTyped hpred)
+            ⟨_, xcap, typc.2, typc.1, hpred, _, hbool⟩
       · simp only [err, reduceCtorEq] at h
 
 end Cedar.Thm

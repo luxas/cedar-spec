@@ -17,6 +17,7 @@
 module
 
 public import Cedar.Validation.TypedExpr
+public import Cedar.Validation.Typechecker
 public import Cedar.Spec.Ext
 
 /-!
@@ -415,7 +416,8 @@ public inductive TypedExpr.WellTyped (env : TypeEnv) : TypedExpr → Prop
 | all {x₁ : TypedExpr} {p : Cedar.Spec.PredExpr} {τ : CedarType}
   (h₁ : WellTyped env x₁)
   (h₂ : x₁.typeOf = .set τ)
-  (h₃ : PredExpr.WellTyped env p) :
+  (h₃ : PredExpr.WellTyped env p)
+  (h₄ : ∃ itTy c c' typ, Cedar.Validation.typeOfPred p itTy c env = .ok (typ, c') ∧ ∃ b, typ.typeOf = .bool b) :
   WellTyped env (.all x₁ p (.bool .anyBool))
 
 end Cedar.Thm
