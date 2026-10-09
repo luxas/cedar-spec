@@ -141,7 +141,7 @@ theorem compile_or_ok_implies {x₁ x₂ : Expr} {εnv : SymEnv} {t : Term}
       simp only [h₆, h₁, and_self]
   case h_3 => simp only [reduceCtorEq] at h₁
 
-theorem compileAttrsOf_ok_implies {t t₁ : Term} {εs : SymEntities}
+public theorem compileAttrsOf_ok_implies {t t₁ : Term} {εs : SymEntities}
   (h₁ : compileAttrsOf t₁ εs = .ok t) :
   (∃ rty, t₁.typeOf = .record rty ∧ t = t₁) ∨
   (∃ ety fₐ, t₁.typeOf = .entity ety ∧ εs.attrs ety = .some fₐ ∧ t = app fₐ t₁)
@@ -168,7 +168,7 @@ def RecordHasAttr (t t₁ : Term) (rty : Map Attr TermType) (a : Attr) : Prop :=
   | .some _           => t = .some (.prim (.bool true))
   | .none             => t = .some (.prim (.bool false))
 
-theorem compileHasAttr_ok_implies {t t₁ : Term} {a : Attr} {εs : SymEntities}
+public theorem compileHasAttr_ok_implies {t t₁ : Term} {a : Attr} {εs : SymEntities}
   (h₁ : compileHasAttr t₁ a εs = .ok t) :
   ∃ t₂ rty,
     compileAttrsOf t₁ εs = .ok t₂ ∧
@@ -209,7 +209,7 @@ def RecordGetAttr (t t₁ : Term) (rty : Map Attr TermType) (a : Attr) : Prop :=
     | .option _ => t = (record.get t₁ a)
     | _         => t = .some (record.get t₁ a)
 
-theorem compileGetAttr_ok_implies {t t₁ : Term} {a : Attr} {εs : SymEntities}
+public theorem compileGetAttr_ok_implies {t t₁ : Term} {a : Attr} {εs : SymEntities}
   (h₁ : compileGetAttr t₁ a εs = .ok t) :
   ∃ t₂ rty,
     compileAttrsOf t₁ εs = .ok t₂ ∧

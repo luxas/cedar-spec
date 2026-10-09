@@ -176,4 +176,133 @@ theorem compilePred_evaluate_binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr}
       have hwf₁ := evaluatePred_wf hwfenv hvwf hr₁refs hv₁
       exact compileApp₂_implies_apply₂ heq.right hwf₁ (wf_term_some_implies hwφ₁) (wf_term_some_implies hwφ₂) ih₁' ih₂' hok
 
+/-- Extraction for the `.hasAttr` predicate arm (mirrors `compile_hasAttr_ok_implies`). -/
+theorem compilePred_hasAttr_ok_implies {a : Attr} {x₁ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
+    (h₁ : compilePred (.hasAttr x₁ a) it εnv = .ok t) :
+    ∃ t₁ t₂,
+      (compilePred x₁ it εnv) = .ok t₁ ∧
+      (compileHasAttr (option.get t₁) a εnv.entities) = .ok t₂ ∧
+      t = ifSome t₁ t₂ := by
+  rw [compilePred.eq_def] at h₁
+  simp_do_let (compilePred x₁ it εnv) at h₁
+  rename_i t₂ h₂
+  simp_do_let (compileHasAttr (option.get t₂) a εnv.entities) at h₁
+  rename_i t₃ h₃
+  simp only [Except.ok.injEq] at h₁
+  exists t₂, t₃
+  simp only [h₃, h₁, and_self]
+
+/-- `.hasAttr` arm (mirrors `compile_evaluate_hasAttr`). -/
+theorem compilePred_evaluate_hasAttr {x₁ : PredExpr} {a : Attr} {env : Env} {εnv : SymEnv}
+    {it pt : Term} {v : Value} {elemTy : TermType}
+    (heq : env ∼ εnv) (hwfenv : env.WellFormed) (hwε : εnv.WellFormed)
+    (hvwf : v.WellFormed env.entities)
+    (hitv : (Except.ok v : Spec.Result Value) ∼ it)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hr₁refs : PredExpr.ValidRefs (λ uid => env.entities.contains uid) x₁)
+    (hok : compilePred (.hasAttr x₁ a) it εnv = .ok pt)
+    (ih : CompilePredEvaluate x₁) :
+    evaluatePred (.hasAttr x₁ a) v env.request env.entities ∼ pt := by
+  replace ⟨t₁, t₂, hok₁, hr, ht⟩ := compilePred_hasAttr_ok_implies hok
+  subst ht
+  have ⟨hwφ₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo := wf_option_get hwφ₁ hty₁
+  have hwφ₂ := compileHasAttr_wf hwε.right hwo.left hr
+  replace ⟨t₃, rty, hr, ha⟩ := compileHasAttr_ok_implies hr
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hok₁
+  simp only [evaluatePred]
+  simp_do_let (evaluatePred x₁ v env.request env.entities)
+  case error e he => rw [he] at ih; exact same_error_implies_ifSome_error ih hwφ₂.right
+  case ok v₁ hv₁ =>
+    rw [hv₁] at ih
+    replace hr := compileAttrsOf_ok_implies hr
+    rcases hr with ⟨rty', htyₒ, ht₃⟩ | ⟨ety, fₐ, htyₒ, hf, ht₃⟩ <;>
+      subst ht₃ <;> simp only [hwo.right] at htyₒ <;> subst htyₒ
+    case inl => exact compile_evaluate_hasAttr_record hwφ₁ hty₁ hwo hwφ₂ ha ih
+    case inr =>
+      have hwf₁ := evaluatePred_wf hwfenv hvwf hr₁refs hv₁
+      exact compile_evaluate_hasAttr_entity heq.right hwε.right hwf₁ hwφ₁ hty₁ hwo hwφ₂ hf ha ih
+
+/-- Extraction for the `.getAttr` predicate arm (mirrors `compile_getAttr_ok_implies`). -/
+theorem compilePred_getAttr_ok_implies {a : Attr} {x₁ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
+    (h₁ : compilePred (.getAttr x₁ a) it εnv = .ok t) :
+    ∃ t₁ t₂,
+      (compilePred x₁ it εnv) = .ok t₁ ∧
+      (compileGetAttr (option.get t₁) a εnv.entities) = .ok t₂ ∧
+      t = ifSome t₁ t₂ := by
+  rw [compilePred.eq_def] at h₁
+  simp_do_let (compilePred x₁ it εnv) at h₁
+  rename_i t₂ h₂
+  simp_do_let (compileGetAttr (option.get t₂) a εnv.entities) at h₁
+  rename_i t₃ h₃
+  simp only [Except.ok.injEq] at h₁
+  exists t₂, t₃
+  simp only [h₃, h₁, and_self]
+
+/-- `.getAttr` arm (mirrors `compile_evaluate_getAttr`). -/
+theorem compilePred_evaluate_getAttr {x₁ : PredExpr} {a : Attr} {env : Env} {εnv : SymEnv}
+    {it pt : Term} {v : Value} {elemTy : TermType}
+    (heq : env ∼ εnv) (hwfenv : env.WellFormed) (hwε : εnv.WellFormed)
+    (hvwf : v.WellFormed env.entities)
+    (hitv : (Except.ok v : Spec.Result Value) ∼ it)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hr₁refs : PredExpr.ValidRefs (λ uid => env.entities.contains uid) x₁)
+    (hok : compilePred (.getAttr x₁ a) it εnv = .ok pt)
+    (ih : CompilePredEvaluate x₁) :
+    evaluatePred (.getAttr x₁ a) v env.request env.entities ∼ pt := by
+  replace ⟨t₁, t₂, hok₁, hr, ht⟩ := compilePred_getAttr_ok_implies hok
+  subst ht
+  have ⟨hwφ₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo := wf_option_get hwφ₁ hty₁
+  have ⟨hwφ₂, tyₐ, htyₐ⟩ := compileGetAttr_wf hwε.right hwo.left hr
+  replace ⟨t₃, rty, hr, ha⟩ := compileGetAttr_ok_implies hr
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hok₁
+  simp only [evaluatePred]
+  simp_do_let (evaluatePred x₁ v env.request env.entities)
+  case error e he => rw [he] at ih; exact same_error_implies_ifSome_error ih htyₐ
+  case ok v₁ hv₁ =>
+    rw [hv₁] at ih
+    replace hr := compileAttrsOf_ok_implies hr
+    rcases hr with ⟨rty', htyₒ, ht₃⟩ | ⟨ety, fₐ, htyₒ, hf, ht₃⟩ <;>
+      subst ht₃ <;> simp only [hwo.right] at htyₒ <;> subst htyₒ
+    case inl => exact compile_evaluate_getAttr_record hwφ₁ hty₁ hwo hwφ₂ htyₐ ha ih
+    case inr =>
+      have hwf₁ := evaluatePred_wf hwfenv hvwf hr₁refs hv₁
+      exact compile_evaluate_getAttr_entity heq.right hwε.right hwf₁ hwφ₁ hty₁ hwo hwφ₂ htyₐ hf ha ih
+
+/-- `.extHasAttr` arm (mirrors `compile_evaluate_extHasAttr`). -/
+theorem compilePred_evaluate_extHasAttr {x₁ : PredExpr} {a : Attr} {l : List Attr} {env : Env} {εnv : SymEnv}
+    {it pt : Term} {v : Value} {elemTy : TermType}
+    (heq : env ∼ εnv) (hwfenv : env.WellFormed) (hwε : εnv.WellFormed)
+    (hvwf : v.WellFormed env.entities)
+    (hitv : (Except.ok v : Spec.Result Value) ∼ it)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hr₁refs : PredExpr.ValidRefs (λ uid => env.entities.contains uid) x₁)
+    (hok : compilePred (.extHasAttr x₁ a l) it εnv = .ok pt)
+    (ih : CompilePredEvaluate x₁) :
+    evaluatePred (.extHasAttr x₁ a l) v env.request env.entities ∼ pt := by
+  rw [compilePred.eq_def] at hok
+  simp only at hok
+  simp_do_let (compilePred x₁ it εnv) at hok
+  rename_i t₁ hok₁
+  rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
+  have ⟨hwt₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hce := compileExtHasAttrRec_wf hwε.right hwt₁ ⟨ty₁, hty₁⟩ hok
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hok₁
+  simp only [evaluatePred]
+  simp_do_let (evaluatePred x₁ v env.request env.entities)
+  case error e he =>
+    rw [he] at ih
+    have ⟨hne, ty', ht₁⟩ := same_error_implies ih
+    subst ht₁
+    have ht : pt = .none .bool := compileExtHasAttrRec_none_eq hwε.right hwt₁ hok
+    subst ht
+    exact same_error_implied_by hne
+  case ok v₁ hv₁ =>
+    rw [hv₁] at ih
+    have ⟨t₁', ht₁, ih'⟩ := same_ok_implies ih
+    subst ht₁
+    exact compile_evaluate_extHasAttr_loop heq.right hwε.right hwfenv.right
+      (evaluatePred_wf hwfenv hvwf hr₁refs hv₁) (wf_term_some_implies hwt₁) hok ih'
+
 end Cedar.Thm

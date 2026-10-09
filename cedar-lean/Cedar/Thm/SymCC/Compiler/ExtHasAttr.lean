@@ -20,7 +20,7 @@ namespace Cedar.Thm
 
 open Batteries Data Spec SymCC Factory
 
-private theorem compileExtHasAttrRec_none_eq {ty : TermType} {a : Attr} {rest : List Attr} {εs : SymEntities} {t : Term}
+public theorem compileExtHasAttrRec_none_eq {ty : TermType} {a : Attr} {rest : List Attr} {εs : SymEntities} {t : Term}
   (hwε : εs.WellFormed)
   (hwt : (Term.none ty).WellFormed εs)
   (hok : compileExtHasAttrRec (.none ty) (a :: rest) εs = .ok t) :
@@ -289,7 +289,7 @@ private theorem compileHasAttr_eq_false_of_compileGetAttr_error
   simp only [compileGetAttr, hattrs, Except.bind_ok, hrecord.left] at hga
   split at hga <;> simp_all [someOf]
 
-private theorem compile_evaluate_extHasAttr_loop
+public theorem compile_evaluate_extHasAttr_loop
   {v₁ : Value} {t₁' : Term} {a : Attr} {l : List Attr}
   {es : Entities} {εs : SymEntities} {t : Term}
   (heq : SameEntities es εs)
