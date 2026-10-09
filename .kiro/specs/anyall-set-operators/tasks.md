@@ -281,6 +281,25 @@ times cvc5 on each verb.
   default path.
   _Satisfies:_ 5.4 (documents the practical analyzability envelope).
 
+
+## Phase 9 — Enforcer set-footprint extension (D-70 option B) — PLANNED-LATER (not in current stack)
+
+Follow-up to D-70 (RESOLVED 2026-10-09: option A shipped in Phase 5B; option B deferred to here).
+The user placed this at **Phase 9**, the very end of the stack, AFTER Phase 8 benchmarks. This is now
+the concrete meaning of "Phase 9" — superseding the historical "phase 9 = end of the branch stack"
+reading in D-01 (there is no separate abstract Phase 9; this is it).
+
+Phase 5B option A keeps the quantifier footprint `it`-free by having `compile` reject `.all`
+predicates that apply `in` (the ancestors UF) to an `it`-dependent left operand. Phase 9 lifts that
+restriction by extending the Enforcer with SET-TYPED footprint entries (the receiver set itself),
+grounding the hierarchy assumptions via `set.filter` instead of only over finitely-many named entity
+Terms, and extending `SameOn` to grant ancestor agreement over the filtered set. Scope: acyclicity for
+a set entry is one `set.filter`; element-vs-footprint-term transitivity is one `set.filter`;
+element-vs-element transitivity is a `set.filter` NESTED over the same set — whose SMT decidability
+(does cvc5's `ALL`/`set.filter` fragment stay decidable under the nested quantifier?) is the open
+question this phase must settle before committing to the encoding. Status: PLANNED-LATER.
+_See:_ `branches/phase9-anyall-set-footprint/PLAN.md`, DECISIONS.md D-70.
+
 ---
 
 1. Flags first and inert (Phase 0) → default build never changes (3.1/3.2).
