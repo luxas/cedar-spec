@@ -1622,6 +1622,94 @@ private theorem compilePred_interpret_record_on_footprint {axs : List (Attr × P
   · simp only [pe_ifAllSome_none hn hwo₁.right, pe_ifAllSome_none hn hwo₂.right]
   · simp only [hs, interpret_term_some, interpret_recordOf, List.map_map,
       prod_map_id_comp_eq, map_interpret_snd_option_get_eq hwts ihc hs]
+
+private theorem compilePred_interpret_on_footprint {p : PredExpr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hitI : it.interpret I₁ = it.interpret I₂)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred p it εnv ⊆ ft)
+  (hnoit : p.NoItDependentIn = true)
+  (hpvr : p.ValidRefs (εnv.entities.isValidEntityUID ·))
+  (hok : compilePred p it εnv = .ok pt) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  match p, hnoit, hpvr, hft, hok with
+  | .item, _, _, _, hok => exact compilePred_interpret_item_on_footprint hitI hok
+  | .lit l, _, _, _, hok => exact compilePred_interpret_lit_on_footprint hok
+  | .var v, _, _, _, hok => exact compilePred_interpret_var_on_footprint hwε hsm hok
+  | .unaryApp op x₁, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn] at hnoit
+    cases hpvr with | unaryApp_valid hv₁ =>
+    exact compilePred_interpret_unaryApp_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit hv₁ h)
+  | .hasAttr x₁ a, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn] at hnoit
+    cases hpvr with | hasAttr_valid hv₁ =>
+    exact compilePred_interpret_hasAttr_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit hv₁ h)
+  | .getAttr x₁ a, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn] at hnoit
+    cases hpvr with | getAttr_valid hv₁ =>
+    exact compilePred_interpret_getAttr_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit hv₁ h)
+  | .extHasAttr x₁ a ats, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn] at hnoit
+    cases hpvr with | extHasAttr_valid hv₁ =>
+    exact compilePred_interpret_extHasAttr_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit hv₁ h)
+  | .ite x₁ x₂ x₃, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn, Bool.and_eq_true] at hnoit
+    cases hpvr with | ite_valid hv₁ hv₂ hv₃ =>
+    exact compilePred_interpret_ite_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit.1.1 hv₁ h)
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit.1.2 hv₂ h)
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit.2 hv₃ h)
+  | .and x₁ x₂, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn, Bool.and_eq_true] at hnoit
+    cases hpvr with | and_valid hv₁ hv₂ =>
+    exact compilePred_interpret_and_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit.1 hv₁ h)
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit.2 hv₂ h)
+  | .or x₁ x₂, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn, Bool.and_eq_true] at hnoit
+    cases hpvr with | or_valid hv₁ hv₂ =>
+    exact compilePred_interpret_or_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit.1 hv₁ h)
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs hnoit.2 hv₂ h)
+  | .binaryApp op x₁ x₂, hnoit, hpvr, hft, hok =>
+    have hnoit' := hnoit
+    cases hpvr with | binaryApp_valid hv₁ hv₂ =>
+    refine compilePred_interpret_binaryApp_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hft hnoit'
+      (PredExpr.ValidRefs.binaryApp_valid hv₁ hv₂) hok
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs ?_ hv₁ h)
+      (fun hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs ?_ hv₂ h)
+    · cases op <;> simp_all only [PredExpr.NoItDependentIn, Bool.and_eq_true]
+    · cases op <;> simp_all only [PredExpr.NoItDependentIn, Bool.and_eq_true]
+  | .call f xs, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn, List.all_eq_true] at hnoit
+    cases hpvr with | call_valid hv =>
+    exact compilePred_interpret_call_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun x hx {t} hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs
+        (by have := hnoit ⟨x, hx⟩ (List.mem_attach xs ⟨x, hx⟩); simpa using this)
+        (hv x hx) h)
+  | .record axs, hnoit, hpvr, hft, hok =>
+    simp only [PredExpr.NoItDependentIn] at hnoit
+    rw [List.all_attach₂_snd, List.all_eq_true] at hnoit
+    cases hpvr with | record_valid hv =>
+    exact compilePred_interpret_record_on_footprint hI₁ hI₂ hwε hitw hitty hsm hft hok
+      (fun a x hx {t} hs h => compilePred_interpret_on_footprint hI₁ hI₂ hwε hitw hitty hitI hsm hs
+        (by have := hnoit (a, x) hx; simpa using this)
+        (hv (a, x) hx) h)
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_snd_lt_sizeOf_list h; omega)
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
