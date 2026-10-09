@@ -2517,7 +2517,50 @@ theorem compilePred_well_typed {p₀ : Cedar.Spec.PredExpr} {itTy : CedarType} {
     | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
       exfalso; simp only [typeOfOr, hb₁, Validation.err, reduceCtorEq] at htp
   | .record axs =>
-    skip
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hm : axs.mapM₂ (fun x => (typeOfPred x.1.2 itTy c Γ).map (fun r => (x.1.1, r.1)))
+      <;> rw [hm] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i atys
+    -- `htp : .ok (.record atys M) = .ok (typ, c')`; pin `typ`.
+    have htyp : typ = .record atys
+        (.record (Map.make (atys.map (λ (a, ty) => (a, Qualified.required ty.typeOf))))) := by
+      simp only [Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+      exact htp.left.symm
+    -- Decompose the `mapM₂` into a per-field `Forall₂` over the SOURCE fields.
+    rw [List.mapM₂_eq_mapM (fun x => (typeOfPred x.2 itTy c Γ).map (fun r => (x.1, r.1)))] at hm
+    have hsrc := List.mapM_ok_iff_forall₂.mp hm
+    -- Build the record-arm IH over the NORMALIZED fields `axs.map g`.
+    have ih :
+      List.Forall₂ (λ (ax : Attr × Cedar.Spec.PredExpr) (aty : Attr × TypedExpr) => ax.fst = aty.fst ∧
+        ∃ t, compilePred ax.snd it (SymEnv.ofEnv Γ) = .ok t ∧
+          t.typeOf = .option (TermType.ofType aty.snd.typeOf) ∧
+          t.WellFormed (SymEnv.ofEnv Γ).entities)
+        (axs.map (λ x => (x.1, PredExpr.normalize x.2 itTy c Γ))) atys := by
+      apply List.forall₂_map_left_of_mem
+        (λ (x : Attr × Cedar.Spec.PredExpr) => (x.1, PredExpr.normalize x.2 itTy c Γ))
+        ?_ hsrc
+      intro ax hax aty hR
+      -- From `hR : (typeOfPred ax.2 …).map (fun r => (ax.1, r.1)) = .ok aty`, pin the field.
+      cases hpf : typeOfPred ax.2 itTy c Γ <;> rw [hpf] at hR <;>
+        simp only [Except.map, Except.ok.injEq, reduceCtorEq] at hR
+      rename_i rpf
+      obtain ⟨typf, cpf⟩ := rpf
+      -- `hR : (ax.1, typf) = aty`; recover `aty = (ax.1, typf)`.
+      subst hR
+      -- Recurse on the sub-field `ax.2` (membership gives termination).
+      have ⟨t, hok, hty⟩ := compilePred_well_typed hwf hpf hitw hitty
+      have ⟨hwft, _, _⟩ := compilePred_wf hwε hitw hitty hok
+      exact ⟨rfl, t, hok, hty, hwft⟩
+    -- The record arm's normalized-field list matches `axs.map g` (via `map₂_eq_map_snd`).
+    have hnorm_eq :
+      (axs.map₂ (λ x : {x : (Attr × Cedar.Spec.PredExpr) // sizeOf x.snd < 1 + sizeOf axs} =>
+        match x with | ⟨(a, x), _⟩ => (a, PredExpr.normalize x itTy c Γ)))
+      = axs.map (λ x => (x.1, PredExpr.normalize x.2 itTy c Γ)) := by
+      rw [List.map₂_eq_map_snd (λ x => PredExpr.normalize x itTy c Γ)]
+    rw [hnorm_eq]
+    exact compilePred_well_typed_record ih htyp
   | .call xfn xs =>
     skip
 termination_by sizeOf p₀
@@ -2525,9 +2568,12 @@ decreasing_by
   all_goals simp_wf
   all_goals (try omega)
   all_goals
-    (rename_i h
-     first
-       | (replace h := List.sizeOf_lt_of_mem h; omega)
-       | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
-       | omega)
+    (first
+       | (rename_i h
+          first
+            | (replace h := List.sizeOf_lt_of_mem h; omega)
+            | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+            | omega)
+       | (have h := List.sizeOf_snd_lt_sizeOf_list hax; omega)
+       | (have h := List.sizeOf_lt_of_mem hax; omega))
 end Cedar.Thm

@@ -198,6 +198,63 @@ private theorem call_ts_two {Γ : TypeEnv}
     exact ⟨t₁, t₂, rfl, h₁.left, h₁.right, h₂.left, h₂.right⟩
 
 /--
+`typeOfCall` success depends on the argument-expr list only through the
+`[.lit (.string s)]` test in its `.decimal/.ip/.datetime/.duration` constructor arms;
+every other arm matches on `tys.map typeOf` alone (its `_ => err` branch reads the args
+only in the error payload, which the `.ok` hypothesis never reaches). So two argument
+lists that agree on that test give the same `typeOfCall` result on the `.ok` side. Here
+the two lists are `L` (source) and `L'` (per-argument normalized), related elementwise by
+`.lit` agreement (`normalize` is the identity on `.lit`).
+-/
+theorem typeOfCall_arg_lit_agree_ok
+    {xfn : ExtFun} {tys : List TypedExpr} {L L' : List Cedar.Spec.Expr}
+    {typ : TypedExpr} {c' : Capabilities}
+    (hagree : List.Forall₂ (λ e e' => ∀ p, e = .lit p ↔ e' = .lit p) L L')
+    (htp : typeOfCall xfn tys L = .ok (typ, c')) :
+    typeOfCall xfn tys L' = .ok (typ, c') := by
+  -- On the `.ok` side, `typeOfConstructor` reads the args only via `[.lit (.string s)]`,
+  -- on which the two lists agree, so a success carries from `L` to `L'`.
+  have hconstr : ∀ {α : Type} (mk : String → Option α) (ty : CedarType) (r : CedarType × Capabilities),
+      typeOfConstructor mk L ty = .ok r → typeOfConstructor mk L' ty = .ok r := by
+    intro α mk ty r hok
+    -- `typeOfConstructor` succeeds only on `[.lit (.string s)]`.
+    have hLshape : ∃ s, L = [.lit (.string s)] := by
+      unfold typeOfConstructor at hok
+      split at hok <;>
+        first
+          | (rename_i s _; exact ⟨s, rfl⟩)
+          | (rename_i s; exact ⟨s, rfl⟩)
+          | simp only [Validation.err, Validation.ok, reduceCtorEq] at hok
+    obtain ⟨s, hLeq⟩ := hLshape
+    -- Agreement then forces `L' = [.lit (.string s)]`.
+    subst hLeq
+    cases hagree with
+    | cons h0 htl =>
+      rename_i e' Ltl'
+      cases htl with
+      | nil =>
+        have he' : e' = .lit (.string s) := (h0 (.string s)).mp rfl
+        subst he'
+        exact hok
+  unfold typeOfCall at htp ⊢
+  -- The `L`/`L'` dependence sits inside `typeOfConstructor` (the four constructor arms)
+  -- or the dead `_ => err` payload (every other arm). Reverting the hypothesis places both
+  -- `typeOfCall` occurrences under one goal; `split` on the shared `(xfn, tys.map typeOf)`
+  -- discriminant reduces them together into aligned arms. Constructor arms are bridged by
+  -- `hconstr`; type-only arms become `… = ok → … = ok` (identical); `err` arms are
+  -- impossible against the `.ok` hypothesis.
+  revert htp
+  split <;> intro htp <;>
+    first
+      | exact htp
+      | (simp only [bind, Except.bind] at htp ⊢
+         split at htp <;> rename_i heqc <;>
+           first
+             | (rw [hconstr _ _ _ heqc]; exact htp)
+             | (simp only [reduceCtorEq] at htp))
+      | nomatch htp
+
+/--
 induction hypothesis is a `Forall₂` between the argument predicates `xs` and the
 typed arguments `tys` that `typeOfPred (.call xfn xs)` produced. `typeOfCall`'s
 success pins the operand types (via the matched `tys.map TypedExpr.typeOf` pattern)
