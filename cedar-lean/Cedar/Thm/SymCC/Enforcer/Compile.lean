@@ -1214,6 +1214,41 @@ private theorem compilePred_interpret_unaryApp_on_footprint {op₁ : UnaryOp} {x
   simp only [hih, hr₂, Except.ok.injEq] at hr₁
   simp only [hr₁]
 
+private theorem compilePred_interpret_hasAttr_on_footprint {x₁ : PredExpr} {a₁ : Attr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.hasAttr x₁ a₁) it εnv ⊆ ft)
+  (hok : compilePred (.hasAttr x₁ a₁) it εnv = .ok pt)
+  (ih₁ : ∀ {t₁}, footprintPred x₁ it εnv ⊆ ft → compilePred x₁ it εnv = .ok t₁ → t₁.interpret I₁ = t₁.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  simp only [footprintPred] at hft
+  replace ⟨t₁, t₂, hok₁, hok, heq⟩ := compilePred_hasAttr_ok_implies hok
+  subst heq
+  have ⟨hwt₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo₁ := wf_option_get hwt₁ hty₁
+  have hih := ih₁ hft hok₁
+  replace ⟨t₃, rty, hok, hr⟩ := compileHasAttr_ok_implies hok
+  replace ⟨hty₃, hr⟩ := hr
+  split at hr <;> subst hr
+  case h_1 tyₐ htyₐ =>
+    have hwt₃ := (compileAttrsOf_wf hwε.right hwo₁.left hok).left
+    have hwr := wf_record_get hwt₃ hty₃ htyₐ
+    have ⟨hws, hwsty⟩ := wf_isSome hwr.left
+    replace ⟨hws, hwsty⟩ := wf_term_some hws hwsty
+    simp_ifSome_eq hI₁ hI₂ hwt₁ hty₁ hws hwsty hih
+    rename_i ht₁ _
+    simp only [interpret_term_some, interpret_isSome hI₁ hwr.left,
+      interpret_isSome hI₂ hwr.left,
+      compileAttrsOf_interpret_record_get_eq
+        hwε.right hI₁ hI₂ hsm.right hwo₁.left hok hwt₃ hty₃ htyₐ
+        (interpret_option_get_eq hwt₁ hty₁ hih ht₁)]
+  case h_2 | h_3 =>
+    simp only [interpret_ifSome hI₁ hwt₁ (Term.WellFormed.some_wf wf_bool),
+      interpret_ifSome hI₂ hwt₁ (Term.WellFormed.some_wf wf_bool),
+      hih, interpret_term_some, interpret_term_prim]
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
