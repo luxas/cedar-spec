@@ -1251,7 +1251,7 @@ private theorem compileApp₂_getTag_implies_apply₂ {t₁ t₂ t₃ : Term} {v
     replace heq := heq.right.right tag val ht
     simp only [Same.same, SameResults, heq.left, pe_ifTrue_true, heq.right]
 
-private theorem compileApp₂_implies_apply₂ {op₂ : BinaryOp} {t₁ t₂ t₃ : Term} {v₁ v₂ : Value} {es : Entities} {εs : SymEntities}
+public theorem compileApp₂_implies_apply₂ {op₂ : BinaryOp} {t₁ t₂ t₃ : Term} {v₁ v₂ : Value} {es : Entities} {εs : SymEntities}
   (heq  : es ∼ εs)
   (hwf₁ : Value.WellFormed es v₁)
   (hwφ₁ : Term.WellFormed εs t₁)

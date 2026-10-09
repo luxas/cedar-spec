@@ -13,8 +13,12 @@
 import Cedar.SymCC
 import Cedar.Thm.SymCC.Compiler.LitVar
 import Cedar.Thm.SymCC.Compiler.Unary
+import Cedar.Thm.SymCC.Compiler.Binary
+import Cedar.Thm.SymCC.Compiler.Attr
+import Cedar.Thm.SymCC.Compiler.ExtHasAttr
 import Cedar.Thm.SymCC.Compiler.WF
 import Cedar.Thm.SymCC.Compiler.CompilePredInterpret
+import Cedar.Thm.SymCC.Compiler.EvaluatePredWF
 import Cedar.Thm.SymCC.Term.Same
 import Cedar.Thm.Tactics
 
@@ -30,6 +34,7 @@ def CompilePredEvaluate (p : PredExpr) : Prop :=
     env ∼ εnv →
     env.WellFormed →
     εnv.WellFormed →
+    v.WellFormed env.entities →
     ((Except.ok v : Spec.Result Value) ∼ it) →
     it.WellFormed εnv.entities →
     it.typeOf = .option elemTy →
@@ -88,6 +93,7 @@ theorem compilePred_unaryApp_ok_implies {op₁ : UnaryOp} {x₁ : PredExpr} {it 
 theorem compilePred_evaluate_unaryApp {op₁ : UnaryOp} {x₁ : PredExpr} {env : Env} {εnv : SymEnv}
     {it pt : Term} {v : Value} {elemTy : TermType}
     (heq : env ∼ εnv) (hwfenv : env.WellFormed) (hwε : εnv.WellFormed)
+    (hvwf : v.WellFormed env.entities)
     (hitv : (Except.ok v : Spec.Result Value) ∼ it)
     (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
     (hok : compilePred (.unaryApp op₁ x₁) it εnv = .ok pt)
@@ -98,7 +104,7 @@ theorem compilePred_evaluate_unaryApp {op₁ : UnaryOp} {x₁ : PredExpr} {env :
   have ⟨hwφ₁, _, hty₁⟩ := compilePred_wf hwε hitw hitty hr
   have hwo := wf_option_get hwφ₁ hty₁
   have ⟨_, ty₂, hty₂⟩ := compileApp₁_wf hwo.left ha
-  replace ih := ih heq hwfenv hwε hitv hitw hitty hr
+  replace ih := ih heq hwfenv hwε hvwf hitv hitw hitty hr
   simp only [evaluatePred]
   simp_do_let (evaluatePred x₁ v env.request env.entities)
   case error e he =>
@@ -111,5 +117,63 @@ theorem compilePred_evaluate_unaryApp {op₁ : UnaryOp} {x₁ : PredExpr} {env :
     simp only [pe_ifSome_some hty₂]
     simp only [pe_option_get_some] at ha
     exact compileApp₁_implies_apply₁ (wf_term_some_implies hwφ₁) ih ha
+
+/-- Extraction for the `.binaryApp` predicate arm (mirrors `compile_binaryApp_ok_implies`). -/
+theorem compilePred_binaryApp_ok_implies {op₂ : BinaryOp} {x₁ x₂ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
+    (hok : compilePred (.binaryApp op₂ x₁ x₂) it εnv = .ok t) :
+    ∃ t₁ t₂ t₃,
+      (compilePred x₁ it εnv) = .ok t₁ ∧
+      (compilePred x₂ it εnv) = .ok t₂ ∧
+      (compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities) = .ok t₃ ∧
+      t = ifSome t₁ (ifSome t₂ t₃) := by
+  rw [compilePred.eq_def] at hok
+  simp_do_let (compilePred x₁ it εnv) at hok
+  simp_do_let (compilePred x₂ it εnv) at hok
+  rename_i t₁ h₁ t₂ h₂
+  simp_do_let (compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities) at hok
+  rename_i t₃ h₃
+  simp only [Except.ok.injEq] at h₃ hok
+  exists t₁, t₂, t₃
+  simp only [h₃, hok, and_self]
+
+/-- `.binaryApp` arm (mirrors `compile_evaluate_binaryApp`). -/
+theorem compilePred_evaluate_binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr} {env : Env} {εnv : SymEnv}
+    {it pt : Term} {v : Value} {elemTy : TermType}
+    (heq : env ∼ εnv) (hwfenv : env.WellFormed) (hwε : εnv.WellFormed)
+    (hvwf : v.WellFormed env.entities)
+    (hitv : (Except.ok v : Spec.Result Value) ∼ it)
+    (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+    (hr₁refs : PredExpr.ValidRefs (λ uid => env.entities.contains uid) x₁)
+    (hok : compilePred (.binaryApp op₂ x₁ x₂) it εnv = .ok pt)
+    (ih₁ : CompilePredEvaluate x₁) (ih₂ : CompilePredEvaluate x₂) :
+    evaluatePred (.binaryApp op₂ x₁ x₂) v env.request env.entities ∼ pt := by
+  replace ⟨t₁, t₂, t₃, hok₁, hok₂, hok, ht⟩ := compilePred_binaryApp_ok_implies hok
+  subst ht
+  have ⟨hwφ₁, _, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  have hwo₁ := wf_option_get hwφ₁ hty₁
+  have ⟨hwφ₂, _, hty₂⟩ := compilePred_wf hwε hitw hitty hok₂
+  have hwo₂ := wf_option_get hwφ₂ hty₂
+  have ⟨hwφ₃, ty₃, hty₃⟩ := compileApp₂_wf hwε.right hwo₁.left hwo₂.left hok
+  have hty := (wf_ifSome_option hwφ₂ hwφ₃ hty₃).right
+  replace ih₁ := ih₁ heq hwfenv hwε hvwf hitv hitw hitty hok₁
+  replace ih₂ := ih₂ heq hwfenv hwε hvwf hitv hitw hitty hok₂
+  simp only [evaluatePred]
+  simp_do_let (evaluatePred x₁ v env.request env.entities)
+  case error e he => rw [he] at ih₁; exact same_error_implies_ifSome_error ih₁ hty
+  case ok v₁ hv₁ =>
+    rw [hv₁] at ih₁
+    replace ⟨t₁', ht₁, ih₁'⟩ := same_ok_implies ih₁
+    subst ht₁
+    simp only [pe_ifSome_some hty]
+    simp_do_let (evaluatePred x₂ v env.request env.entities)
+    case error e he => rw [he] at ih₂; exact same_error_implies_ifSome_error ih₂ hty₃
+    case ok v₂ hv₂ =>
+      rw [hv₂] at ih₂
+      replace ⟨t₂', ht₂, ih₂'⟩ := same_ok_implies ih₂
+      subst ht₂
+      simp only [pe_ifSome_some hty₃]
+      simp only [pe_option_get_some] at hok
+      have hwf₁ := evaluatePred_wf hwfenv hvwf hr₁refs hv₁
+      exact compileApp₂_implies_apply₂ heq.right hwf₁ (wf_term_some_implies hwφ₁) (wf_term_some_implies hwφ₂) ih₁' ih₂' hok
 
 end Cedar.Thm
