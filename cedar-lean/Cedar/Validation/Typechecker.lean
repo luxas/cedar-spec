@@ -453,6 +453,105 @@ public def typeOfAll (tyr : TypedExpr) (p : PredExpr) (c : Capabilities) (env : 
     | _       => err (.unexpectedType typ.typeOf)
   | ty => err (.unexpectedType ty)
 
+/--
+D-73 option B: normalize a predicate so no dead `.and`/`.or`/`.ite` branch survives that
+`typeOfPred` short-circuited past without constraining its type. Mirrors `typeOfPred`'s
+and/or/ite folding EXACTLY (D-73a): `and` with a `.bool .ff` left ⇒ keep the (decisive,
+first-evaluated) left; `or` with a `.bool .tt` left ⇒ keep the left; `ite` ⇒ KEEP the
+condition and duplicate the live branch into both arms (as `typeOfIf` does — dropping the
+condition is not evaluation-preserving since a `.tt`/`.ff` condition can still error).
+Capabilities are threaded exactly as `typeOfPred` threads them, so `typeOfPred` re-types the
+normalized predicate identically (`typeOfPred_normalize`). On a predicate `typeOfPred`
+rejects, `normalize` is a structural identity (the folds it would take never fire).
+-/
+public def PredExpr.normalize (p : PredExpr) (itTy : CedarType) (c : Capabilities) (env : TypeEnv) : PredExpr :=
+  match p with
+  | .item   => .item
+  | .lit l  => .lit l
+  | .var v  => .var v
+  | .ite cond t e =>
+    let cond' := PredExpr.normalize cond itTy c env
+    match typeOfPred cond itTy c env with
+    | .ok (tyc, c₁) =>
+      match tyc.typeOf with
+      | .bool .tt => .ite cond' (PredExpr.normalize t itTy (c ∪ c₁) env) (PredExpr.normalize t itTy (c ∪ c₁) env)
+      | .bool .ff => .ite cond' (PredExpr.normalize e itTy c env) (PredExpr.normalize e itTy c env)
+      | _         => .ite cond' (PredExpr.normalize t itTy (c ∪ c₁) env) (PredExpr.normalize e itTy c env)
+    | .error _ => .ite cond' (PredExpr.normalize t itTy c env) (PredExpr.normalize e itTy c env)
+  | .and a b =>
+    let a' := PredExpr.normalize a itTy c env
+    match typeOfPred a itTy c env with
+    | .ok (tya, c₁) =>
+      match tya.typeOf with
+      | .bool .ff => a'
+      | _         => .and a' (PredExpr.normalize b itTy (c ∪ c₁) env)
+    | .error _ => .and a' (PredExpr.normalize b itTy c env)
+  | .or a b =>
+    let a' := PredExpr.normalize a itTy c env
+    match typeOfPred a itTy c env with
+    | .ok (tya, _) =>
+      match tya.typeOf with
+      | .bool .tt => a'
+      | _         => .or a' (PredExpr.normalize b itTy c env)
+    | .error _ => .or a' (PredExpr.normalize b itTy c env)
+  | .unaryApp op x       => .unaryApp op (PredExpr.normalize x itTy c env)
+  | .binaryApp op a b    => .binaryApp op (PredExpr.normalize a itTy c env) (PredExpr.normalize b itTy c env)
+  | .getAttr x attr      => .getAttr (PredExpr.normalize x itTy c env) attr
+  | .hasAttr x attr      => .hasAttr (PredExpr.normalize x itTy c env) attr
+  | .extHasAttr x a as   => .extHasAttr (PredExpr.normalize x itTy c env) a as
+  | .record axs          => .record (axs.map₂ (λ ⟨(a, x), _⟩ => (a, PredExpr.normalize x itTy c env)))
+  | .call f xs           => .call f (xs.map₁ (λ ⟨x, _⟩ => PredExpr.normalize x itTy c env))
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals (try omega)
+  all_goals
+    (rename_i h
+     first
+       | (replace h := List.sizeOf_lt_of_mem h; omega)
+       | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+       | omega)
+
+/--
+D-73 option B: `Normal p itTy c env` holds iff every `.and`/`.or`/`.ite` node in `p` has
+BOTH operands `.bool`-typed under `typeOfPred` (no surviving short-circuit) — exactly the
+premise the `.and`/`.or`/`.ite` arms of `compilePred_well_typed` need. `PredExpr.normalize`
+produces a `Normal` predicate (`typeOfPred_normalize`).
+-/
+public def PredExpr.Normal (p : PredExpr) (itTy : CedarType) (c : Capabilities) (env : TypeEnv) : Prop :=
+  match p with
+  | .item | .lit _ | .var _ => True
+  | .ite cond t e =>
+    (∃ bc, (typeOfPred cond itTy c env).toOption.map (λ r => r.fst.typeOf) = some (.bool bc)) ∧
+    (∃ bt, (typeOfPred t itTy c env).toOption.map (λ r => r.fst.typeOf) = some (.bool bt)) ∧
+    (∃ be, (typeOfPred e itTy c env).toOption.map (λ r => r.fst.typeOf) = some (.bool be)) ∧
+    PredExpr.Normal cond itTy c env ∧ PredExpr.Normal t itTy c env ∧ PredExpr.Normal e itTy c env
+  | .and a b =>
+    (∃ ba, (typeOfPred a itTy c env).toOption.map (λ r => r.fst.typeOf) = some (.bool ba)) ∧
+    (∃ bb, (typeOfPred b itTy c env).toOption.map (λ r => r.fst.typeOf) = some (.bool bb)) ∧
+    PredExpr.Normal a itTy c env ∧ PredExpr.Normal b itTy c env
+  | .or a b =>
+    (∃ ba, (typeOfPred a itTy c env).toOption.map (λ r => r.fst.typeOf) = some (.bool ba)) ∧
+    (∃ bb, (typeOfPred b itTy c env).toOption.map (λ r => r.fst.typeOf) = some (.bool bb)) ∧
+    PredExpr.Normal a itTy c env ∧ PredExpr.Normal b itTy c env
+  | .unaryApp _ x        => PredExpr.Normal x itTy c env
+  | .binaryApp _ a b     => PredExpr.Normal a itTy c env ∧ PredExpr.Normal b itTy c env
+  | .getAttr x _         => PredExpr.Normal x itTy c env
+  | .hasAttr x _         => PredExpr.Normal x itTy c env
+  | .extHasAttr x _ _    => PredExpr.Normal x itTy c env
+  | .record axs          => ∀ ax ∈ axs, PredExpr.Normal ax.snd itTy c env
+  | .call _ xs           => ∀ x ∈ xs, PredExpr.Normal x itTy c env
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals (try omega)
+  all_goals
+    (rename_i h
+     first
+       | (replace h := List.sizeOf_lt_of_mem h; omega)
+       | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+       | omega)
+
 -- Note: if x types as .tt or .ff, it is okay to replace x with the literal
 -- expression true or false if x can never throw an extension error at runtime.
 -- This is true for the current version of Cedar.
