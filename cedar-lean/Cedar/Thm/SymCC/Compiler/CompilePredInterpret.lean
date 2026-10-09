@@ -210,7 +210,7 @@ theorem compilePred_interpret_binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr
     rw [← (interpret_term_wf hI hwφ₃).right] at hty₃
     exact pe_ifSome_ok_get_eq_get'₂ I (compileApp₂ op₂ · · (SymEntities.interpret I εnv.entities)) hwφ₁' hwφ₂' hty₃ hty₄ hi heq
 
-theorem compilePred_and_ok_implies {x₁ x₂ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
+public theorem compilePred_and_ok_implies {x₁ x₂ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
   (h₁ : compilePred (.and x₁ x₂) it εnv = .ok t) :
   ∃ t₁,
     (compilePred x₁ it εnv) = .ok t₁ ∧
@@ -238,7 +238,7 @@ theorem compilePred_and_ok_implies {x₁ x₂ : PredExpr} {it : Term} {εnv : Sy
       simp [*, someOf]
   case h_3 => simp only [reduceCtorEq] at h₁
 
-theorem compilePred_or_ok_implies {x₁ x₂ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
+public theorem compilePred_or_ok_implies {x₁ x₂ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
   (h₁ : compilePred (.or x₁ x₂) it εnv = .ok t) :
   ∃ t₁,
     (compilePred x₁ it εnv) = .ok t₁ ∧
@@ -267,7 +267,7 @@ theorem compilePred_or_ok_implies {x₁ x₂ : PredExpr} {it : Term} {εnv : Sym
       simp only [h₆, h₁, and_self]
   case h_3 => simp only [reduceCtorEq] at h₁
 
-theorem compilePred_ite_ok_implies {x₁ x₂ x₃ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
+public theorem compilePred_ite_ok_implies {x₁ x₂ x₃ : PredExpr} {it : Term} {εnv : SymEnv} {t : Term}
   (h₁ : compilePred (.ite x₁ x₂ x₃) it εnv = .ok t) :
   ∃ t₁,
     (compilePred x₁ it εnv) = .ok t₁ ∧
