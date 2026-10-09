@@ -29,7 +29,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
 | 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
-| 6.5 | `phase6.5-anyall-tpe` | IMPLEMENTED — review round 2 pending. W1–W4 (cedar `71c6912`) + review-round-1 fixes F1 `004c032` / F2 `821313c` / F3 _(this batch)_: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), 4 mutations caught; full feature matrix green; non-anyall byte-unchanged. D-80 (corrected)/D-81/D-82. T6.5.2 Lean refinement intentionally skipped (D-81). |
+| 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
 | 7 | `phase7-anyall-docs` | not started |
 | 8 | `phase8-anyall-benchmarks` | not started |
 
@@ -237,15 +237,19 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
 
 ## Phase 6.5 — Typed partial evaluation (late commit)
 
-> **Status: IN-PROGRESS — W1–W4 IMPLEMENTED (cedar `71c6912`), awaiting blind review.** Plan:
+> **Status: DONE — review converged (2 rounds).** Plan:
 > `branches/phase6.5-anyall-tpe/PLAN.md`; outcomes: `branches/phase6.5-anyall-tpe/OUTCOMES.md`.
+> Commits: W1–W4 cedar `71c6912`; R1 fixes `004c032`/`821313c`/`4b365ea` + cedar-spec `23edc0d`;
+> R2 hardening cedar `9dc62e8`. R1 = 3 findings fixed (coverage/wording; production code was
+> already correct); R2 = NO ACTIONABLE FINDINGS + one LOW nit addressed as hardening (D-83).
 > Branches cut off `phase6-anyall-drt-differential` (cedar-spec `d923c63`, cedar `826cc339`) —
-> rebase onto Phase 6's final tip before merge. Forks RESOLVED by the owner: **F1 → D-80**
-> option A (delegate to the verified Phase-3 concrete fold; residual per-element predicate ⇒
-> conservative residual `All`; full per-element-residual refinement deferred to Phase 9); **F2 →
-> D-81** Lean TPE stays conservative (parity = "re-authorized residual agrees", not shape-equal);
-> **F3 → D-82** in-crate parity tests, no new DRT TPE harness. Result: tpe tests 93→105 (+12
-> anyall-gated), mutation-verified, full feature matrix green; non-anyall build byte-unchanged.
+> **rebase onto Phase 6's final tip before merge still pending.** Forks RESOLVED: **F1 → D-80**
+> option A (fold concretely, re-implemented over `Residual` + parity-tested vs Phase-3; residual
+> per-element predicate ⇒ conservative residual `All`; full per-element refinement deferred to
+> Phase 9); **F2 → D-81** Lean TPE stays conservative (parity = "re-authorized residual agrees",
+> not shape-equal); **F3 → D-82** in-crate parity tests, no new DRT TPE harness. Result: tpe
+> tests 93→109 (+16 anyall-gated), whole-lib 1737; 4 mutations caught; full feature matrix +
+> clippy green; non-anyall build byte-unchanged.
 
 - **T6.5.1 TPE residual node + concrete-receiver evaluation (gated).**
   Add `ResidualKind::All { expr, pred }` in `cedar-policy-core/src/tpe/residual.rs` and the

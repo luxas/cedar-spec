@@ -101,7 +101,7 @@ Rebase onto Phase 6's final tip before merge.)
 | Round | Agent | Verdict |
 |---|---|---|
 | 1 | `kirocrew-worker` (blind) | **ACTIONABLE FINDINGS: 3** — all fixed (production code was already correct; findings were coverage/wording gaps) |
-| 2 | — | pending |
+| 2 | `kirocrew-worker` (blind) | **NO ACTIONABLE FINDINGS** — one LOW nit (addressed as hardening, D-83) |
 
 **Round 1 findings & fixes** (full report: `members/default/phase65/review-round1.md`):
 - **F1 (MEDIUM)** — `can_error_assuming_well_formed(All)` could be flipped to `false` with zero
@@ -119,3 +119,10 @@ Rebase onto Phase 6's final tip before merge.)
   (re-implemented, parity by tests, kind-free error algebra, D-22 note) in DECISIONS + PLAN +
   this OUTCOMES; parity test `concrete_fold_matches_phase3_evaluator` (~9 cases incl.
   false-then-error and error-then-false) committed in cedar.
+
+**Round 2 (NO ACTIONABLE FINDINGS)** — one LOW nit: `Residual::from_untyped_expr`
+(`tpe/residual.rs`) recursed without a `stack_size_check()`, unlike `interpret` and the
+concrete evaluator (unreachable today — the parser overflows first). Addressed as hardening
+(cedar `9dc62e8`, D-83): a `stack_size_check()` at the top returning `Residual::Error(ty)` on
+exhaustion. Zero behavioural change — whole-lib `tpe,anyall` 1737 and `tpe`-only `tpe::` 93 both
+unchanged, clippy clean.
