@@ -14,6 +14,7 @@ import Cedar.Thm.SymCC.Compiler.WF
 import Cedar.Thm.SymCC.Compiler.CompilePredInterpret
 import Cedar.Thm.SymCC.Compiler.SetAllInterpret
 import Cedar.Thm.SymCC.Term.Interpret.WF
+import Cedar.Thm.SymCC.Term.Interpret.Lit
 import Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Env.Interpret
@@ -22,6 +23,52 @@ import Cedar.Thm.Tactics
 namespace Cedar.Thm
 
 open Spec SymCC Factory Cedar.Data
+
+/-- General-receiver variant of `interpret_set_all_lit`: `S` is any well-formed
+term of set type (not already a literal-set node). It interprets to a well-formed
+literal set `.set (Set.mk vs') elemTy`; the compiled `set.all S P E` node then
+folds element-by-element over `vs'` with each body given by `interpretWith (some vi') I`. -/
+theorem interpret_set_all_wf {εs : SymEntities} {I : Interpretation} {S P E : Term} {elemTy : TermType}
+    (hwI : I.WellFormed εs)
+    (hSw : S.WellFormed εs) (hSty : S.typeOf = .set elemTy)
+    (hPw : P.WellFormed εs) (hPty : P.typeOf = .bool) (hPn : P.NoSetAll = true) (hPa : P.anyAllItTyped elemTy = true)
+    (hEw : E.WellFormed εs) (hEty : E.typeOf = .bool) (hEn : E.NoSetAll = true) (hEa : E.anyAllItTyped elemTy = true) :
+    ∃ (vs' : List Term),
+      (Term.interpret I S = .set (Set.mk vs') elemTy) ∧
+      (∀ vi ∈ vs', vi.isLiteral = true) ∧
+      (∀ vi ∈ vs', vi.WellFormed εs) ∧
+      (∀ vi ∈ vs', vi.typeOf = elemTy) ∧
+      Term.interpret I (Factory.set.all S P E) =
+        Factory.ite
+          (vs'.foldr (fun vi acc => or (Term.interpretWith (Option.some vi) I E) acc) (false : Term))
+          (Factory.noneOf .bool)
+          (Factory.someOf (vs'.foldr (fun vi acc => and (Term.interpretWith (Option.some vi) I P) acc) (true : Term))) := by
+  have hwfl := interpret_term_wfl hwI hSw
+  have hSinty : (Term.interpret I S).typeOf = .set elemTy := by rw [hwfl.right, hSty]
+  have ⟨s', hSeq⟩ := wfl_of_type_set_is_set hwfl.left hSinty
+  cases s' with
+  | mk vs' =>
+  have hSinw : (Term.interpret I S).WellFormed εs := hwfl.left.left
+  have hSinl : (Term.interpret I S).isLiteral = true := hwfl.left.right
+  rw [hSeq] at hSinw hSinl
+  have hlit : ∀ vi ∈ vs', vi.isLiteral = true := by
+    intro vi hmem
+    simp only [Term.isLiteral, Set.all₁_eq_all, Set.all_eq_true] at hSinl
+    exact hSinl vi (by rw [← Set.mem_elts_iff_mem_set]; simpa [Set.elts] using hmem)
+  have hvw : ∀ vi ∈ vs', vi.WellFormed εs := by
+    intro vi hmem
+    exact wf_term_set_implies_wf_elt hSinw (by rw [← Set.mem_elts_iff_mem_set]; simpa [Set.elts] using hmem)
+  have hvty : ∀ vi ∈ vs', vi.typeOf = elemTy := by
+    intro vi hmem
+    exact wf_term_set_implies_typeOf_elt hSinw (by rw [← Set.mem_elts_iff_mem_set]; simpa [Set.elts] using hmem)
+  refine ⟨vs', hSeq, hlit, hvw, hvty, ?_⟩
+  unfold Factory.set.all
+  show Term.interpretWith Option.none I (.app Op.set.all [S, P, E] (.option .bool)) = _
+  have hII : Term.interpretWith Option.none I S = Term.set (Set.mk vs') elemTy := hSeq
+  have hallit : (List.all vs' (·.isLiteral)) = true := by
+    simp only [List.all_eq_true]; intro vi hmem; exact hlit vi hmem
+  rw [Term.interpretWith]
+  simp only [hII, hallit, if_true]
 
 /-- D-68 step 4: interpreting a symbolic environment under `extInterp I v ety`
 gives the same environment as interpreting under `I`. The entities read only
