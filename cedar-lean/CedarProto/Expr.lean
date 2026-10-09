@@ -245,6 +245,13 @@ def ExprKind.Record := ExprKind
 instance : Inhabited ExprKind.Record where
   default := .record default
 
+/-- Proto `All { arg: Expr = 1, pred: Expr = 2 }` (ExprKind field 17, `anyall`
+feature). Accumulated as a `Spec.Expr.all` node during parsing; `pred` decodes
+to a `PredExpr` (D-29). -/
+def ExprKind.All := ExprKind
+instance : Inhabited ExprKind.All where
+  default := .all (.lit (.bool true)) .item
+
 end Proto
 
 def Expr.merge (e1 : Expr) (e2 : Expr) : Expr :=
@@ -793,6 +800,78 @@ def merge (x1 x2 : ExprKind) : ExprKind :=
 -- end of this file
 end Proto.ExprKind
 
+/-!
+Proto decoder for the `.all` quantifier predicate (`anyall` feature, D-29).
+The protobuf `All.pred` field is a full `Expr` message in which the element
+keyword `it` is the `Item` message (field 18). Lean's `Spec.Expr` has no `Item`
+leaf, so the predicate is decoded DIRECTLY into a `PredExpr` by a parser that
+mirrors the `Expr` wire format but recurses into `PredExpr` for every child
+(so a nested `Item` becomes `PredExpr.item`, not a dropped field). It REJECTS
+field 14 (`Set` — a set term) and field 17 (`All` — a nested quantifier),
+exactly as Rust's `PredExpr::try_from_expr` re-check does on untrusted bytes.
+`Like`(12)/`Is`(13) map to `unaryApp .like`/`.is` as the `Expr` decoder does.
+
+Each proto sub-message (If/And/.../Record) is given a `PredExpr` accumulator and
+a pred-targeting field parser; the parsers are mutually recursive and live at the
+end of the file alongside `PredExprMsg.parseField`.
+-/
+namespace Proto.PredExprKind
+def If : Type := Spec.PredExpr
+def And : Type := Spec.PredExpr
+def Or : Type := Spec.PredExpr
+def UApp : Type := Spec.PredExpr
+def BApp : Type := Spec.PredExpr
+def ExtApp : Type := Spec.PredExpr
+def GetAttr : Type := Spec.PredExpr
+def HasAttr : Type := Spec.PredExpr
+def ExtHasAttr : Type := Spec.PredExpr
+def Like : Type := Spec.PredExpr
+def Is : Type := Spec.PredExpr
+def Record : Type := Spec.PredExpr
+
+instance : Inhabited If := ⟨(.ite .item .item .item : Spec.PredExpr)⟩
+instance : Inhabited And := ⟨(.and .item .item : Spec.PredExpr)⟩
+instance : Inhabited Or := ⟨(.or .item .item : Spec.PredExpr)⟩
+instance : Inhabited UApp := ⟨(.unaryApp .not .item : Spec.PredExpr)⟩
+instance : Inhabited BApp := ⟨(.binaryApp .eq .item .item : Spec.PredExpr)⟩
+instance : Inhabited ExtApp := ⟨(.call .decimal [] : Spec.PredExpr)⟩
+instance : Inhabited GetAttr := ⟨(.getAttr .item "" : Spec.PredExpr)⟩
+instance : Inhabited HasAttr := ⟨(.hasAttr .item "" : Spec.PredExpr)⟩
+instance : Inhabited ExtHasAttr := ⟨(.extHasAttr .item "" [] : Spec.PredExpr)⟩
+instance : Inhabited Like := ⟨(.unaryApp (.like []) .item : Spec.PredExpr)⟩
+instance : Inhabited Is := ⟨(.unaryApp (.is default) .item : Spec.PredExpr)⟩
+instance : Inhabited Record := ⟨(.record [] : Spec.PredExpr)⟩
+end Proto.PredExprKind
+
+namespace Proto.ExprKind.All
+
+/-- Merge the decoded `arg` (field 1) into the `.all` accumulator. -/
+@[inline]
+def mergeArg (result : ExprKind.All) (x : Spec.Expr) : ExprKind.All :=
+  match result with
+  | .all a p => .all (Expr.merge a x) p
+  | _        => .all x .item
+
+/-- Merge the decoded `pred` (field 2, already a `PredExpr`) in. -/
+@[inline]
+def mergePred (result : ExprKind.All) (p : Spec.PredExpr) : ExprKind.All :=
+  match result with
+  | .all a _ => .all a p
+  | _        => .all (.lit (.bool true)) p
+
+@[inline]
+def merge (x1 x2 : ExprKind.All) : ExprKind.All :=
+  match x1, x2 with
+  | .all a1 _, .all a2 p2 => .all (Expr.merge a1 a2) p2
+  | _, x2                 => x2
+
+/-- Fold a fully-parsed `All` sub-message into the enclosing `ExprKind`. -/
+@[inline]
+def mergeInto (_result : ExprKind) (x : ExprKind.All) : ExprKind := x
+
+-- parseField requires mutual recursion and is defined at the end of the file
+end Proto.ExprKind.All
+
 -- Expr depends on ExprKind and ExprKind is a sum type
 -- where many of the constructors depend on Expr
 mutual
@@ -980,6 +1059,7 @@ partial def Expr.parseField (t : Proto.Tag) : BParsec (MergeFn Expr) := do
   have : Message Proto.ExprKind.Is := { parseField := Proto.ExprKind.Is.parseField, merge := Proto.ExprKind.Is.merge }
   have : Message Proto.ExprKind.Set := { parseField := Proto.ExprKind.Set.parseField, merge := Proto.ExprKind.Set.merge }
   have : Message Proto.ExprKind.Record := { parseField := Proto.ExprKind.Record.parseField, merge := Proto.ExprKind.Record.merge }
+  have : Message Proto.ExprKind.All := { parseField := Proto.ExprKind.All.parseField, merge := Proto.ExprKind.All.merge }
   match t.fieldNum with
   | 1 =>
     let x : Prim ← Field.guardedParse t
@@ -1026,9 +1106,219 @@ partial def Expr.parseField (t : Proto.Tag) : BParsec (MergeFn Expr) := do
   | 16 =>
     let x : Proto.ExprKind.ExtHasAttr ← Field.guardedParse t
     pureMergeFn (Proto.ExprKind.mergeExtHasAttr · x)
+  | 17 =>
+    -- `.all`/`.any` set quantifier (`anyall`); `pred` is decoded into a
+    -- `PredExpr` by `PredExprMsg.parseField` (D-29). `any` is encoded by Rust
+    -- as the lowered `!all(!p)`, so Lean only ever sees `all`.
+    let x : Proto.ExprKind.All ← Field.guardedParse t
+    pureMergeFn (Proto.ExprKind.All.mergeInto · x)
   | _ =>
     t.wireType.skip
     pure ignore
+
+partial def Proto.ExprKind.All.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.ExprKind.All) := do
+  have : Message Expr := { parseField := Expr.parseField, merge := Expr.merge }
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 =>
+    let x : Expr ← Field.guardedParse t
+    pureMergeFn (Proto.ExprKind.All.mergeArg · x)
+  | 2 =>
+    let p : Spec.PredExpr ← Field.guardedParse t
+    pureMergeFn (Proto.ExprKind.All.mergePred · p)
+  | _ =>
+    t.wireType.skip
+    pure ignore
+
+-- Pred sub-message parsers: identical wire format to the `Expr` sub-messages,
+-- but every child is parsed as a `PredExpr` (via `PredExprMsg`) so a nested
+-- `Item` becomes `PredExpr.item`. Op/pattern/name/entity-type leaves reuse the
+-- Expr-side decoders.
+partial def Proto.PredExprKind.If.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.If) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .ite _ b c => .ite x b c | _ => .ite x .item .item)
+  | 2 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .ite a _ c => .ite a x c | _ => .ite .item x .item)
+  | 3 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .ite a b _ => .ite a b x | _ => .ite .item .item x)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.And.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.And) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .and _ b => .and x b | _ => .and x .item)
+  | 2 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .and a _ => .and a x | _ => .and .item x)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.Or.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.Or) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .or _ b => .or x b | _ => .or x .item)
+  | 2 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .or a _ => .or a x | _ => .or .item x)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.UApp.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.UApp) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Proto.ExprKind.UnaryApp.Op ← Field.guardedParse t
+         pureMergeFn (fun r => match r, x with
+           | .unaryApp _ e, .not => .unaryApp .not e
+           | .unaryApp _ e, .neg => .unaryApp .neg e
+           | .unaryApp _ e, .isEmpty => .unaryApp .isEmpty e
+           | _, .not => .unaryApp .not .item
+           | _, .neg => .unaryApp .neg .item
+           | _, .isEmpty => .unaryApp .isEmpty .item)
+  | 2 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .unaryApp op _ => .unaryApp op x | _ => .unaryApp .not x)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.BApp.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.BApp) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Proto.ExprKind.BinaryApp.Op ← Field.guardedParse t
+         let op : Spec.BinaryOp := match x with
+           | .less => .less | .lesseq => .lessEq | .add => .add | .sub => .sub | .mul => .mul
+           | .in => .mem | .contains => .contains | .containsAll => .containsAll
+           | .containsAny => .containsAny | .getTag => .getTag | .hasTag => .hasTag | .eq => .eq
+         pureMergeFn (fun r => match r with | .binaryApp _ a b => .binaryApp op a b | _ => .binaryApp op .item .item)
+  | 2 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .binaryApp op _ b => .binaryApp op x b | _ => .binaryApp .eq x .item)
+  | 3 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .binaryApp op a _ => .binaryApp op a x | _ => .binaryApp .eq .item x)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.ExtApp.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.ExtApp) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.Name ← Field.guardedParse t
+         let f : Spec.ExtFun ← (match x.id with
+           | "decimal" => pure .decimal | "lessThan" => pure .lessThan
+           | "lessThanOrEqual" => pure .lessThanOrEqual | "greaterThan" => pure .greaterThan
+           | "greaterThanOrEqual" => pure .greaterThanOrEqual | "ip" => pure .ip
+           | "isIpv4" => pure .isIpv4 | "isIpv6" => pure .isIpv6 | "isLoopback" => pure .isLoopback
+           | "isMulticast" => pure .isMulticast | "isInRange" => pure .isInRange
+           | "datetime" => pure .datetime | "duration" => pure .duration | "offset" => pure .offset
+           | "durationSince" => pure .durationSince | "toDate" => pure .toDate | "toTime" => pure .toTime
+           | "toMilliseconds" => pure .toMilliseconds | "toSeconds" => pure .toSeconds
+           | "toMinutes" => pure .toMinutes | "toHours" => pure .toHours | "toDays" => pure .toDays
+           | other => throw s!"unknown extension function {other} in quantifier predicate")
+         pureMergeFn (fun r => match r with | .call _ es => .call f es | _ => .call f [])
+  | 2 => let x : Repeated Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .call f es => .call f (es ++ x.toList) | _ => .call .decimal x.toList)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.GetAttr.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.GetAttr) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .getAttr _ a => .getAttr x a | _ => .getAttr x "")
+  | 2 => let x : String ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .getAttr e a => .getAttr e (Field.merge a x) | _ => .getAttr .item x)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.HasAttr.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.HasAttr) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .hasAttr _ a => .hasAttr x a | _ => .hasAttr x "")
+  | 2 => let x : String ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .hasAttr e a => .hasAttr e (Field.merge a x) | _ => .hasAttr .item x)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.ExtHasAttr.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.ExtHasAttr) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .extHasAttr _ a as => .extHasAttr x a as | _ => .extHasAttr x "" [])
+  | 2 => let x : Repeated String ← Field.guardedParse t
+         pureMergeFn (fun r => match r with
+           | .extHasAttr e a as =>
+             match x.toList with
+             | []       => .extHasAttr e a as
+             | hd :: tl => .extHasAttr e (Field.merge a hd) (as ++ tl)
+           | _ => .extHasAttr .item "" x.toList)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.Like.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.Like) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .unaryApp (.like p) _ => .unaryApp (.like p) x | _ => .unaryApp (.like []) x)
+  | 2 => let x : Repeated PatElem ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .unaryApp (.like p) e => .unaryApp (.like (p ++ x.toList)) e | _ => .unaryApp (.like x.toList) .item)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.Is.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.Is) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .unaryApp (.is et) _ => .unaryApp (.is et) x | _ => .unaryApp (.is default) x)
+  | 2 => let x : Spec.Name ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .unaryApp (.is _) e => .unaryApp (.is x) e | _ => .unaryApp (.is x) .item)
+  | _ => t.wireType.skip; pure ignore
+
+partial def Proto.PredExprKind.Record.parseField (t : Proto.Tag) : BParsec (MergeFn Proto.PredExprKind.Record) := do
+  have : Message Spec.PredExpr := { parseField := PredExprMsg.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Proto.Map String Spec.PredExpr ← Field.guardedParse t
+         pureMergeFn (fun r => match r with | .record m => .record (m ++ x.toList) | _ => .record x.toList)
+  | _ => t.wireType.skip; pure ignore
+
+/-- See the `Proto.PredExprKind` docstring. Decodes the `Expr` wire format into a
+`PredExpr`, recursing into `PredExpr` for every child. -/
+partial def PredExprMsg.parseField (t : Proto.Tag) : BParsec (MergeFn Spec.PredExpr) := do
+  have : Message Prim := { parseField := Prim.parseField, merge := Prim.merge }
+  have : Message Proto.PredExprKind.If := { parseField := Proto.PredExprKind.If.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.And := { parseField := Proto.PredExprKind.And.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.Or := { parseField := Proto.PredExprKind.Or.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.UApp := { parseField := Proto.PredExprKind.UApp.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.BApp := { parseField := Proto.PredExprKind.BApp.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.ExtApp := { parseField := Proto.PredExprKind.ExtApp.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.GetAttr := { parseField := Proto.PredExprKind.GetAttr.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.HasAttr := { parseField := Proto.PredExprKind.HasAttr.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.ExtHasAttr := { parseField := Proto.PredExprKind.ExtHasAttr.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.Like := { parseField := Proto.PredExprKind.Like.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.Is := { parseField := Proto.PredExprKind.Is.parseField, merge := fun _ p => p }
+  have : Message Proto.PredExprKind.Record := { parseField := Proto.PredExprKind.Record.parseField, merge := fun _ p => p }
+  match t.fieldNum with
+  | 1 => let x : Prim ← Field.guardedParse t
+         pureMergeFn (fun _ => .lit x)
+  | 2 => let x : Var ← Field.guardedParse t
+         pureMergeFn (fun _ => .var x)
+  | 4 => let x : Proto.PredExprKind.If ← Field.guardedParse t
+         pureMergeFn (fun _ => x)
+  | 5 => let x : Proto.PredExprKind.And ← Field.guardedParse t
+         pureMergeFn (fun _ => x)
+  | 6 => let x : Proto.PredExprKind.Or ← Field.guardedParse t
+         pureMergeFn (fun _ => x)
+  | 7 => let x : Proto.PredExprKind.UApp ← Field.guardedParse t
+         pureMergeFn (fun _ => x)
+  | 8 => let x : Proto.PredExprKind.BApp ← Field.guardedParse t
+         pureMergeFn (fun _ => x)
+  | 9 => let x : Proto.PredExprKind.ExtApp ← Field.guardedParse t
+         pureMergeFn (fun _ => x)
+  | 10 => let x : Proto.PredExprKind.GetAttr ← Field.guardedParse t
+          pureMergeFn (fun _ => x)
+  | 11 => let x : Proto.PredExprKind.HasAttr ← Field.guardedParse t
+          pureMergeFn (fun _ => x)
+  | 12 => let x : Proto.PredExprKind.Like ← Field.guardedParse t
+          pureMergeFn (fun _ => x)
+  | 13 => let x : Proto.PredExprKind.Is ← Field.guardedParse t
+          pureMergeFn (fun _ => x)
+  | 15 => let x : Proto.PredExprKind.Record ← Field.guardedParse t
+          pureMergeFn (fun _ => x)
+  | 16 => let x : Proto.PredExprKind.ExtHasAttr ← Field.guardedParse t
+          pureMergeFn (fun _ => x)
+  | 18 => t.wireType.skip; pureMergeFn (fun _ => .item)
+  | 14 => throw "`.all`/`.any` predicate may not contain a set literal (set-free fragment)"
+  | 17 => throw "`.all`/`.any` predicate may not contain a nested quantifier"
+  | _  => t.wireType.skip; pure ignore
 
 end
 

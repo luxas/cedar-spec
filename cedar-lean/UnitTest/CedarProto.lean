@@ -224,6 +224,24 @@ def tests := [
         (.call .decimal [.lit (.string "3.14")]),
         (.call .decimal [.lit (.string "3.1416")]),
       ]),
+    -- `.all` / `.any` set quantifiers (feature `anyall`, D-29). `context.ports`
+    -- is `getAttr context "ports"`; `it > 0` lowers (at the builder) to
+    -- `!(it <= 0)`, i.e. the predicate `.unaryApp .not (.binaryApp .lessEq .item (.lit 0))`.
+    testDeserializeProtodata "UnitTest/CedarProto-test-data/all.protodata"
+      (Cedar.Spec.Expr.all
+        (.getAttr (.var .context) "ports")
+        (.unaryApp .not (.binaryApp .lessEq .item (.lit (.int (Int64.ofIntChecked 0 (by decide))))))
+      ),
+    -- `.any(it > 0)` lowers to `!all(!(it > 0))`, so the decoded tree is a
+    -- `not` over an `.all` whose predicate is `!!(it <= 0)` (double negation
+    -- from `.any`'s outer `!` on the already-lowered `!(it <= 0)` body).
+    testDeserializeProtodata "UnitTest/CedarProto-test-data/any.protodata"
+      (Cedar.Spec.Expr.unaryApp .not
+        (.all
+          (.getAttr (.var .context) "ports")
+          (.unaryApp .not (.unaryApp .not (.binaryApp .lessEq .item (.lit (.int (Int64.ofIntChecked 0 (by decide)))))))
+        )
+      ),
     testDeserializeProtodata' "UnitTest/CedarProto-test-data/rbac.protodata"
       (infallible Cedar.Spec.Proto.PolicySet.toPolicies)
       [{

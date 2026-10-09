@@ -15,31 +15,31 @@ fn output_dir() -> PathBuf {
 #[track_caller]
 fn encode_expr(path: impl AsRef<Path>, e: &str) {
     let expr: Expression = e.parse().unwrap();
-    let encoded = expr.encode();
+    let encoded = expr.encode().unwrap();
     std::fs::write(output_dir().join(path.as_ref()), encoded).unwrap();
 }
 
 #[track_caller]
 fn encode_policyset(path: impl AsRef<Path>, ps: &PolicySet) {
-    let encoded = ps.encode();
+    let encoded = ps.encode().unwrap();
     std::fs::write(output_dir().join(path.as_ref()), encoded).unwrap();
 }
 
 #[track_caller]
 fn encode_request(path: impl AsRef<Path>, r: &Request) {
-    let encoded = r.encode();
+    let encoded = r.encode().unwrap();
     std::fs::write(output_dir().join(path.as_ref()), encoded).unwrap();
 }
 
 #[track_caller]
 fn encode_entity(path: impl AsRef<Path>, e: &Entity) {
-    let encoded = e.encode();
+    let encoded = e.encode().unwrap();
     std::fs::write(output_dir().join(path.as_ref()), encoded).unwrap();
 }
 
 #[track_caller]
 fn encode_entities(path: impl AsRef<Path>, es: &Entities) {
-    let encoded = es.encode();
+    let encoded = es.encode().unwrap();
     std::fs::write(output_dir().join(path.as_ref()), encoded).unwrap();
 }
 
@@ -49,7 +49,7 @@ fn encode_schema(path: impl AsRef<Path>, s: &str) {
         .map_err(|e| format!("{:?}", miette::Report::new(e)))
         .unwrap();
     assert_eq!(warnings.count(), 0);
-    let encoded = schema.encode();
+    let encoded = schema.encode().unwrap();
     std::fs::write(output_dir().join(path.as_ref()), encoded).unwrap();
 }
 
@@ -115,6 +115,11 @@ fn main() {
         "decimal.protodata",
         r#"decimal("3.14").lessThan(decimal("3.1416"))"#,
     );
+    // `.all`/`.any` set quantifiers (feature `anyall`, D-29). `all.protodata`
+    // exercises an `it`-predicate (`it > 0`); `any.protodata` exercises the
+    // lowered `!all(!p)` shape the builder produces for `.any`.
+    encode_expr("all.protodata", r#"context.ports.all(it > 0)"#);
+    encode_expr("any.protodata", r#"context.ports.any(it > 0)"#);
 
     encode_policyset(
         "rbac.protodata",
