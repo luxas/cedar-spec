@@ -265,12 +265,19 @@ item was touched. Commits via `git commit -F <file>`, trailer `Co-authored-by: C
 ## 3. Risks & genuine user-decision forks
 
 **Forks (need an owner call):**
-- **F1 — instantiation path A vs B (Design-note-A).** A (delegate to the concrete evaluator;
-  concrete receiver ⇒ always fully folds; 7.3 vacuous) is simpler, reuses the verified Phase-3
-  fold, and is the recommended default. B (re-fold over `Residual`, enabling per-element partial
-  evaluation when the predicate reads unknowns) is literally what 7.3 describes and is strictly
-  more precise, at the cost of re-deriving the QuantifierError fold. **7.4 permits A.** Default:
-  **A**; escalate only if the owner wants the extra TPE precision of B.
+- **F1 — instantiation path A vs B (Design-note-A).** A (concrete receiver ⇒ always fully
+  folds; 7.3 vacuous) is simpler and is the recommended default. B (re-fold with per-element
+  residual retention, enabling per-element partial evaluation when the predicate reads unknowns)
+  is literally what 7.3 describes and is strictly more precise, at the cost of re-deriving the
+  QuantifierError fold. **7.4 permits A.** Default: **A**; escalate only if the owner wants the
+  extra TPE precision of B.
+  > **Correction (review round 1, Finding 3):** the planning text here originally said A would
+  > "delegate to the verified Phase-3 fold … reused verbatim". As BUILT, A **re-implements** the
+  > fold over `Residual` (per-element `instantiate` + `interpret`), it does NOT delegate to the
+  > `evaluator.rs:780` concrete arm. The two folds are independent paths pinned to the same
+  > answers by `concrete_fold_matches_phase3_evaluator` (parity by tests, not code reuse). Sound
+  > because TPE's error algebra is kind-free; the Phase-3 `RecursionLimit` (D-22) distinction is
+  > re-created only at re-authorization. See DECISIONS D-80 (corrected).
 - **F2 — Lean concrete-fold (W5).** Default: Lean TPE stays conservative (sound, 7.4-permitted,
   zero proof risk). Fork: refine Lean to fold concrete receivers for Rust/Lean parity (one
   soundness sub-lemma + three proof-file edits). Recommend **default** unless the owner wants the

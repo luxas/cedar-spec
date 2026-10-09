@@ -29,7 +29,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
 | 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
-| 6.5 | `phase6.5-anyall-tpe` | IN-PROGRESS — W1–W4 IMPLEMENTED (cedar `71c6912`): `ResidualKind::All`, concrete-receiver fold, residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→105 (+12 anyall-gated), mutation-verified; full feature matrix green. D-80/D-81/D-82 recorded. Awaiting blind review; T6.5.2 Lean refinement intentionally skipped (D-81). |
+| 6.5 | `phase6.5-anyall-tpe` | IMPLEMENTED — review round 2 pending. W1–W4 (cedar `71c6912`) + review-round-1 fixes F1 `004c032` / F2 `821313c` / F3 _(this batch)_: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), 4 mutations caught; full feature matrix green; non-anyall byte-unchanged. D-80 (corrected)/D-81/D-82. T6.5.2 Lean refinement intentionally skipped (D-81). |
 | 7 | `phase7-anyall-docs` | not started |
 | 8 | `phase8-anyall-benchmarks` | not started |
 

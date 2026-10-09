@@ -8,7 +8,11 @@ Scope: cedar repo (`cedar-policy-core/src/tpe`); cedar-spec only docs. Satisfies
 | Repo | SHA | What |
 |---|---|---|
 | cedar | `71c6912` | W1–W4 — `ResidualKind::All`, concrete-receiver fold, residual passthrough, central stray-`it` backstop; 12 anyall-gated tests; mutation-verified |
-| cedar-spec | _(this commit)_ | DECISIONS D-80/D-81/D-82; tasks.md Phase 6.5 status; this OUTCOMES.md |
+| cedar-spec | `9a29538` | DECISIONS D-80/D-81/D-82; tasks.md Phase 6.5 status; OUTCOMES.md |
+| cedar | `004c032` | review R1 Finding 1 — test `can_error_assuming_well_formed(All)==true` + behavioural `<All> && false` stays residual; mutation now caught |
+| cedar | `821313c` | review R1 Finding 2 — reauthorization-parity test (residual `All` round-tripped, 4 completions + error-after-false, vs full eval) |
+| cedar | _(F3 commit)_ | review R1 Finding 3 — `concrete_fold_matches_phase3_evaluator` parity test (~9 cases) |
+| cedar-spec | _(F3 commit)_ | review R1 Finding 3 — D-80 wording corrected (re-implemented, not delegated); PLAN/OUTCOMES updated |
 
 (Branches cut off `phase6-anyall-drt-differential`; cedar `826cc339`, cedar-spec `d923c63`.
 Rebase onto Phase 6's final tip before merge.)
@@ -25,10 +29,16 @@ Rebase onto Phase 6's final tip before merge.)
   `Concrete` set, instantiate the predicate per element and interpret each via a new
   `Residual::from_untyped_expr` (assigns the quantifier's own placeholder `Type` to the
   ephemeral per-element residual — the fold inspects only booleans/errors/residual-ness, so the
-  exact type is irrelevant). Semantics mirror the Phase-3 concrete `.all` arm exactly: non-set
-  receiver ⇒ error; any erroring/non-bool element ⇒ QuantifierError image (`mk_error`); **no
-  short-circuit on a `false` element** (reqs 2.5/2.8); empty set ⇒ `true`; record elements
-  supported (B1).
+  exact type is irrelevant). The fold is **re-implemented over `Residual`** (its own
+  `all_true`/`any_residual`/error loop), **not delegated** to the Phase-3 `evaluator.rs:780`
+  arm (review R1 Finding 3; D-80 corrected): the two folds are independent paths pinned to the
+  same answers by `concrete_fold_matches_phase3_evaluator`. The semantics match the Phase-3
+  concrete `.all` arm: non-set receiver ⇒ error; any erroring/non-bool element ⇒ QuantifierError
+  image (`mk_error`); **no short-circuit on a `false` element** (reqs 2.5/2.6/2.8); empty set ⇒
+  `true`; record elements supported (B1). Sound because TPE's error algebra is **kind-free**
+  (`Residual::Error(ty)` carries no error kind); the Phase-3 `RecursionLimit` (D-22) distinction
+  is not tracked per element here but is re-created at re-authorization through the concrete
+  `.all` arm.
 - **W3 passthrough (reqs 7.2/7.4):** a residual receiver keeps the whole `.all` node (receiver
   partially evaluated). A concrete receiver whose per-element predicate stays residual (reads an
   unknown request attribute) conservatively keeps the whole node with the receiver rebuilt from
@@ -46,17 +56,19 @@ Rebase onto Phase 6's final tip before merge.)
   TPE target exists in `cedar-drt`).
 
 ## Verification
-- **Counts:** `tpe::` suite **93 (non-anyall) → 105 (`tpe,anyall`)**, +12 anyall-gated tests, 0
-  failures. Non-anyall count is byte-unchanged before/after (confirmed by stashing the change),
-  so the default build is unaffected (reqs 3.1/7.4). (The PLAN's "91" was a `#[test]`-attribute
-  grep; the runtime filter `tpe::` counts 93 — the +12 delta is what matters.)
+- **Counts:** `tpe::` suite **93 (non-anyall) → 109 (`tpe,anyall`)**, +16 anyall-gated tests
+  (12 from W1–W4 + 4 from review round 1: F1 ×2, F2 ×1, F3 ×1), 0 failures. Non-anyall count is
+  byte-unchanged before/after, so the default build is unaffected (reqs 3.1/7.4). (The PLAN's
+  "91" was a `#[test]`-attribute grep; the runtime filter `tpe::` counts 93 — the +16 delta is
+  what matters.)
 - **Core `cargo check --tests`:** default / `anyall` / `anyall,tolerant-ast` / `experimental` /
   `all-features` — all clean.
 - **cedar-policy `cargo check --tests`:** default / `experimental` / `protobufs` /
   `protobufs,anyall` / `all-features` — all clean.
 - **`cargo clippy --all-features --lib`** (core): no new warnings from `tpe/` (13 pre-existing
   warnings elsewhere, none in changed files).
-- **`cargo test -p cedar-policy-core --features tpe,anyall tpe::`** = 105 passed.
+- **`cargo test -p cedar-policy-core --features tpe,anyall --lib`** = 1737 passed (whole lib);
+  `tpe::` filter = 109 passed.
 
 ## Mutation checks (each caught by a named test, then reverted)
 | Mutation | Test(s) broken |
@@ -64,6 +76,7 @@ Rebase onto Phase 6's final tip before merge.)
 | empty-set / all-true fold init flipped to `false` | `concrete_all_empty_is_true`, `concrete_all_true` (+3) |
 | erroring element folds to `false` (short-circuit) | `false_then_error_is_quantifier_error_not_false` (printed `false` instead of `error()`) |
 | stray-`it` guard disabled | `stray_it_is_rejected_by_tpe_backstop` (fell through to `UnknownNotSupported`) |
+| `can_error_assuming_well_formed(All) => false` (review R1 Finding 1 — was UNCAUGHT) | `all_can_error_assuming_well_formed`, `residual_all_and_false_stays_residual` |
 
 ## What a blind reviewer must verify
 1. Non-`anyall` `tpe` suite byte-unchanged (93); no `ResidualKind::All`/`All` reachable without
@@ -87,4 +100,22 @@ Rebase onto Phase 6's final tip before merge.)
 ## Review loop
 | Round | Agent | Verdict |
 |---|---|---|
-| _pending_ | — | awaiting independent blind review |
+| 1 | `kirocrew-worker` (blind) | **ACTIONABLE FINDINGS: 3** — all fixed (production code was already correct; findings were coverage/wording gaps) |
+| 2 | — | pending |
+
+**Round 1 findings & fixes** (full report: `members/default/phase65/review-round1.md`):
+- **F1 (MEDIUM)** — `can_error_assuming_well_formed(All)` could be flipped to `false` with zero
+  test failures (would let the `&&`/`||` simplifier drop a possibly-erroring `.all`). Fixed in
+  cedar `004c032`: unit test `all_can_error_assuming_well_formed` + behavioural
+  `residual_all_and_false_stays_residual`; the `=> false` mutation is now caught; added to the
+  mutation table.
+- **F2 (LOW)** — the req-7.2 soundness invariant was asserted only structurally (printed shape),
+  not re-authorized. Fixed in cedar `821313c`: `reauthorization_parity_residual_all` round-trips
+  a residual `All` via `From<Residual> for Expr`, completes the receiver with 4 concrete sets +
+  an error-after-false case, and compares concrete evaluation against full evaluation of the
+  original.
+- **F3 (LOW)** — D-80 misdescribed the fold as "delegating to / reusing the Phase-3 fold
+  verbatim … cannot drift"; it is re-implemented over `Residual`. Fixed: D-80 wording corrected
+  (re-implemented, parity by tests, kind-free error algebra, D-22 note) in DECISIONS + PLAN +
+  this OUTCOMES; parity test `concrete_fold_matches_phase3_evaluator` (~9 cases incl.
+  false-then-error and error-then-false) committed in cedar.
