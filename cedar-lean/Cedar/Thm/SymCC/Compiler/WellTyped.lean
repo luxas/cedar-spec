@@ -2102,4 +2102,25 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
       have h := List.sizeOf_lt_of_mem hx
       omega
 
+/--
+D-72 step (3): a predicate that type-checks against element type `itTy` compiles
+(`compilePred`) to a well-typed term, given the reserved element variable `it` is a
+well-formed term of type `.option (TermType.ofType itTy)`. The predicate analogue of
+`compile_well_typed_on_wf_expr`; its `.bool` conclusion is what discharges the D-65
+Bool guard in the `.all` arm. (WIP: leaf arms done, recursive arms building.)
+-/
+theorem compilePred_well_typed {p : Cedar.Spec.PredExpr} {itTy : CedarType} {typ : TypedExpr}
+    {c c' : Capabilities} {Γ : TypeEnv} {it : Term}
+    (hwf : Γ.WellFormed)
+    (hwtp : PredExpr.WellTyped Γ p)
+    (htp : typeOfPred p itTy c Γ = .ok (typ, c'))
+    (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
+    (hitty : it.typeOf = .option (TermType.ofType itTy)) :
+    ∃ t, compilePred p it (SymEnv.ofEnv Γ) = .ok t ∧ t.typeOf = .option (TermType.ofType typ.typeOf) := by
+  -- WIP (red, no placeholder): 13-arm induction mirroring compile_well_typed_on_wf_expr.
+  -- item: compilePred .item = .ok it, typeOfPred .item = .var .principal itTy (typeOf = itTy) ⇒ hitty.
+  -- lit/var: compilePred = compilePrim/compileVar (= compile (.lit/.var).toExpr), reuse the scalar typing.
+  -- ite/and/or/unaryApp/hasAttr/getAttr/extHasAttr/binaryApp/record/call: mirror compile_well_typed_<arm>
+  --   with typeOfPred (not TypedExpr) supplying the sub-types; recurse via the ihs.
+  cases p
 end Cedar.Thm
