@@ -844,4 +844,61 @@ public theorem extInterp_wf {I : Interpretation} {εs : SymEntities} {v : Term} 
     exact ⟨hvl, hvty⟩
   · simp only [h, reduceIte]; exact hI.1 w hw
 
+/-- D-68 step 4: a term with no occurrence of the reserved bound variable (and no
+`set.all` node) interprets identically under `extInterp I v ety` and under `I` —
+`extInterp` only redefines `I.vars` at the reserved name, which such a term never
+reads, and the `Op.interpret` layer reads `I.funs`/`I.partials`, never `I.vars`. -/
+public theorem interpret_extInterp_eq_of_noAnyAllItVar {I : Interpretation} {v : Term} {ety : TermType} :
+    ∀ t : Term, t.NoAnyAllItVar = true → t.NoSetAll = true →
+      Term.interpret (extInterp I v ety) t = Term.interpret I t
+  | .prim _, _, _ => by simp only [Term.interpret, Term.interpretWith]
+  | .var w, hn, _ => by
+    simp only [Term.NoAnyAllItVar, ne_eq, decide_not, Bool.not_eq_true', decide_eq_false_iff_not] at hn
+    simp only [Term.interpret, Term.interpretWith, extInterp]
+    rw [if_neg (fun hc => hn hc.1)]
+  | .none ty, _, _ => by simp only [Term.interpret, Term.interpretWith]
+  | .some t, hn, hs => by
+    simp only [Term.NoAnyAllItVar] at hn
+    simp only [Term.NoSetAll] at hs
+    simp only [Term.interpret, Term.interpretWith, someOf]
+    congr 1
+    exact interpret_extInterp_eq_of_noAnyAllItVar t hn hs
+  | .set ts ty, hn, hs => by
+    simp only [Term.NoAnyAllItVar, Set.all₁_eq_all, Set.all_eq_true] at hn
+    simp only [Term.NoSetAll, Set.all₁_eq_all, Set.all_eq_true] at hs
+    simp only [Term.interpret, Term.interpretWith, Set.map₁_eq_map]
+    congr 1
+    apply Set.map_congr
+    intro x hx; exact interpret_extInterp_eq_of_noAnyAllItVar x (hn x hx) (hs x hx)
+  | .record ats, hn, hs => by
+    simp only [Term.NoAnyAllItVar, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hn
+    simp only [Term.NoSetAll, List.all_attach₂_snd, List.all_eq_true, Prod.forall] at hs
+    simp only [Term.interpret, Term.interpretWith]
+    congr 1
+    simp only [Map.mapOnValues₂_eq_mapOnValues]
+    apply Map.mapOnValues_congr
+    intro w hw
+    have ⟨a, hmem⟩ := Map.in_values_exists_key hw
+    exact interpret_extInterp_eq_of_noAnyAllItVar w (hn a w hmem) (hs a w hmem)
+  | .app op ts ty, hn, hs => by
+    have hop : op ≠ Op.set.all := by
+      intro heq; subst heq; simp only [Term.NoSetAll, Bool.false_eq_true] at hs
+    have ⟨_, hsargs⟩ := noSetAll_app hs
+    simp only [Term.NoAnyAllItVar, List.all_eq_true] at hn
+    rw [interpret_app_ne_setAll hop, interpret_app_ne_setAll hop, op_interpret_extInterp]
+    congr 1
+    simp only [List.map₁_eq_map]
+    apply List.map_congr_left
+    intro x hx
+    exact interpret_extInterp_eq_of_noAnyAllItVar x (hn ⟨x, hx⟩ (List.mem_attach _ _)) (hsargs x hx)
+  termination_by t => sizeOf t
+  decreasing_by
+    all_goals simp_wf
+    all_goals
+      first
+        | omega
+        | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts.elts›; omega)
+        | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+        | (have h1 := List.sizeOf_lt_of_mem ‹(_,_) ∈ Map.toList ats›; have h2 := Map.sizeOf_lt_of_toList ats; simp only [Prod.mk.sizeOf_spec] at h1; omega)
+
 end Cedar.Thm

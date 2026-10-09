@@ -90,6 +90,7 @@ theorem interpret_set_all_lit {εs : SymEntities} {I : Interpretation} {P E : Te
     (hwI : I.WellFormed εs)
     (hlit : ∀ vi ∈ vs, vi.isLiteral = true)
     (hvw : ∀ vi ∈ vs, vi.WellFormed εs) (hvty : ∀ vi ∈ vs, vi.typeOf = ety)
+    (hswf : (Set.mk vs).WellFormed) (hetyw : ety.WellFormed εs)
     (hPw : P.WellFormed εs) (hPty : P.typeOf = .bool) (hPn : P.NoSetAll = true) (hPa : P.anyAllItTyped ety = true)
     (hEw : E.WellFormed εs) (hEty : E.typeOf = .bool) (hEn : E.NoSetAll = true) (hEa : E.anyAllItTyped ety = true) :
     Term.interpret I (Factory.set.all (.set (Set.mk vs) ety) P E) =
@@ -97,29 +98,27 @@ theorem interpret_set_all_lit {εs : SymEntities} {I : Interpretation} {P E : Te
         (vs.foldr (fun vi acc => or (Term.interpretWith (Option.some vi) I E) acc) (false : Term))
         (Factory.noneOf .bool)
         (Factory.someOf (vs.foldr (fun vi acc => and (Term.interpretWith (Option.some vi) I P) acc) (true : Term))) := by
-  have hmemiff : ∀ vi, vi ∈ vs → vi ∈ (Set.mk vs).elts := by intro vi h; simpa [Set.elts] using h
+  -- D-68: `Factory.set.all` always builds the symbolic `.app Op.set.all` node;
+  -- the reducing fold now lives in `interpretWith`.
   unfold Factory.set.all
+  -- the receiver is a well-formed literal set of literals, so it interprets to itself
+  have hrecv : Term.interpret I (.set (Set.mk vs) ety) = .set (Set.mk vs) ety := by
+    rw [interpret_term_set]
+    have hmc : (Set.mk vs).map (Term.interpret I) = (Set.mk vs).map id := by
+      apply Set.map_congr
+      intro t ht
+      simp only [id_eq]
+      have htl : t ∈ vs := by rw [← Set.mem_elts_iff_mem_set] at ht; exact ht
+      exact interpret_lit_id t (hvw t htl) (hlit t htl)
+    rw [hmc, Set.map_id (Set.mk vs) hswf]
+  -- unfold the set.all arm of interpretWith over the (now literal) receiver.
+  -- `simp only [Term.interpretWith]` unfolds the head node while re-folding the
+  -- recursive per-element `interpretWith (some vi)` calls (unlike `unfold`).
+  show Term.interpretWith Option.none I (.app Op.set.all [.set (Set.mk vs) ety, P, E] (.option .bool)) = _
+  have hII : Term.interpretWith Option.none I (.set (Set.mk vs) ety) = Term.set (Set.mk vs) ety := hrecv
   have hallit : (List.all vs (·.isLiteral)) = true := by
     simp only [List.all_eq_true]; intro vi hmem; exact hlit vi hmem
-  simp only [hallit, if_true]
-  have hconj := foldr_and_wf (εs := εs) (g := fun vi => Term.substAnyAllIt vi P) vs (by
-    intro vi hmem
-    have hil := hlit vi hmem
-    have hw := hvw vi hmem
-    have ht := hvty vi hmem
-    have hav : ∀ e, vi.anyAllItTyped e = true := fun e => isLiteral_anyAllItTyped _ hil
-    exact ⟨substAnyAllIt_wf hw (isLiteral_noSetAll vi hil) hav P hPw (ht ▸ hPa), by rw [substAnyAllIt_typeOf P (ht ▸ hPa), hPty]⟩)
-  have hanyErr := foldr_or_wf (εs := εs) (g := fun vi => Term.substAnyAllIt vi E) vs (by
-    intro vi hmem
-    have hil := hlit vi hmem
-    have hw := hvw vi hmem
-    have ht := hvty vi hmem
-    have hav : ∀ e, vi.anyAllItTyped e = true := fun e => isLiteral_anyAllItTyped _ hil
-    exact ⟨substAnyAllIt_wf hw (isLiteral_noSetAll vi hil) hav E hEw (ht ▸ hEa), by rw [substAnyAllIt_typeOf E (ht ▸ hEa), hEty]⟩)
-  simp only [Factory.noneOf, Factory.someOf]
-  rw [interpret_ite hwI hanyErr.left (Term.WellFormed.none_wf TermType.WellFormed.bool_wf) (Term.WellFormed.some_wf hconj.left) hanyErr.right (by simp only [Term.typeOf, hconj.right])]
-  simp only [interpret_term_none, interpret_term_some]
-  rw [interpret_foldr_and_substAnyAllIt hwI hlit hvw hvty hPw hPty hPn hPa]
-  rw [interpret_foldr_or_substAnyAllIt hwI hlit hvw hvty hEw hEty hEn hEa]
+  rw [Term.interpretWith]
+  simp only [hII, hallit, if_true]
 
 end Cedar.Thm
