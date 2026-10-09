@@ -21,6 +21,17 @@ Status legend: **OPEN** = worth a look; **SETTLED** = low risk, recorded for tra
 | D-11 | 2 | **Lean typechecker keeps rejecting `.all` (no Lean type rule / soundness proof yet).** See details: needs your call. | **OPEN — needs decision** |
 | D-12 | 2 | `Validator.mapOnVars` (action substitution for typing precision) does not descend into the predicate. Only precision is affected. | SETTLED |
 | D-13 | 2 | Building the `CedarUnitTests` exe needs `LIBRARY_PATH=<lean toolchain>/lib:<lean toolchain>/lib/lean` on this host (static libc++/gmp/uv). Host quirk, not a code change. | SETTLED |
+| D-14 | 3 | Rust evaluates a predicate by instantiating `PredExpr → Expr` (element via `From<Value> for Expr`) and reusing the evaluator; Lean threads `it` instead. Same semantics. | SETTLED |
+| D-15 | 3 | Rust `QuantifierError` is payload-free, like Lean (D-10). | SETTLED |
+| D-16 | 3 | A non-bool predicate result is a `QuantifierError`, not a `TypeError` (matches Lean). Watch in the Phase 6 differential. | SETTLED |
+| D-17 | 3 | Partial evaluation residualizes the whole `All` node if the receiver or any element predicate is residual. Refined per-element TPE is Phase 6.5. | SETTLED |
+| D-18 | 3 | `subexpressions()`/`slots()`/visitors stay receiver-only (`PredExpr` has no `Slot`/`Unknown`); `level_validate` descends into the predicate. | SETTLED |
+| D-19 | 3 | Validator types predicates with a parallel `typecheck_pred(it_ty)`, which also enforces req 1.5 (no set-typed subterm). | SETTLED |
+| D-20 | 3 | Req 1.4 (no nesting) and 1.6 (`it` outside a predicate) are unrepresentable in the Rust AST; they are enforced by the Phase 4 parser / EST→AST conversion, not by `try_validate`. | SETTLED |
+| D-21 | 3 | The validator types a predicate by instantiating `it` with a reserved unknown (`__cedar::anyall::it`) that a nested typechecker types as the element type, instead of a parallel `typecheck_pred` (refines D-19). Reuses every existing typing rule; the reserved name cannot be written in policy text. | SETTLED |
+| D-22 | 3 | In the Rust evaluator, a `RecursionLimit` error inside a predicate propagates unchanged rather than becoming `QuantifierError` (it is an implementation limit with no Lean counterpart). | OPEN — check in Phase 6 differential |
+| D-23 | 3 | Level validation: dereferencing `it` is charged the level of the receiver's elements (max over a set literal's elements). | SETTLED |
+| D-24 | 3 | When an `.all` receiver is not a set, the predicate is still typechecked with `it : Never`, which can add cascade errors next to the "expected set" error. Sound (the policy is rejected); diagnostics could be tightened later. | OPEN — diagnostic quality |
 
 ## Details
 
