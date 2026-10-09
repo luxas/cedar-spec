@@ -1279,6 +1279,24 @@ private theorem compilePred_interpret_getAttr_on_footprint {x₁ : PredExpr} {a�
         (interpret_option_get_eq hwt₁ hty₁ hihsub ht₁)]
   }
 
+private theorem compilePred_interpret_extHasAttr_on_footprint {x₁ : PredExpr} {a₁ : Attr} {attrs : List Attr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.extHasAttr x₁ a₁ attrs) it εnv ⊆ ft)
+  (hok : compilePred (.extHasAttr x₁ a₁ attrs) it εnv = .ok pt)
+  (ih₁ : ∀ {t₁}, footprintPred x₁ it εnv ⊆ ft → compilePred x₁ it εnv = .ok t₁ → t₁.interpret I₁ = t₁.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  simp only [footprintPred] at hft
+  simp only [compilePred] at hok
+  cases hok₁ : compilePred x₁ it εnv <;> simp only [hok₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+  rename_i t₁
+  rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
+  have hihsub := ih₁ hft hok₁
+  have ⟨hwt₁, ty₁, hty₁⟩ := compilePred_wf hwε hitw hitty hok₁
+  exact compileExtHasAttrRec_interpret_eq hwε.right hI₁ hI₂ hsm.right hwt₁ ⟨ty₁, hty₁⟩ hihsub hok
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
