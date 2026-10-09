@@ -30,7 +30,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 5 | `phase5-anyall-symcc` | DONE — review-clean (round 2: NO ACTIONABLE FINDINGS); full type rule + SymCC `set.filter` encoding (D-33/D-52), soundness proven; D-74 OPEN behind interim `SymCCSupported(.all)=false` (completeness lane); see `branches/phase5-anyall-symcc/OUTCOMES.md` |
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
 | 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
-| 7 | `phase7-anyall-docs` | not started |
+| 7 | `phase7-anyall-docs` | IN-PROGRESS — PLAN written (`branches/phase7-anyall-docs/PLAN.md`); docs-only (rustdoc + CHANGELOGs + Lean/DRT doc comments + spec feature-summary/decisions table); user-language reference handed off to `cedar-docs` website (not in-repo); documents the D-74-interim completeness caveat and D-70-A unsupported shape |
 | 8 | `phase8-anyall-benchmarks` | not started |
 
 ---
@@ -280,6 +280,18 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
   _Satisfies:_ 7.2, 7.4.
 
 ## Phase 7 — Docs & open questions
+
+> **Status: IN-PROGRESS.** Plan: `branches/phase7-anyall-docs/PLAN.md` (ordered work items
+> A1–F1, verifiable-checks table V1–V10, blind-review checklist, open questions Q1–Q3). Branch
+> `phase7-anyall-docs` cut from `phase6.5-anyall-tpe` (cedar-spec `23edc0d`, nested cedar
+> `4b365ea4`); rebased onto Phases 6/6.5 final tips before merge. Docs-only: rustdoc on the
+> public API (`Expr::all`/`Expr::any`, `ast::pred`, `SetTermInQuantifier`), per-crate CHANGELOG
+> entries (`cedar-policy`, `cedar-policy-symcc`; core has none by convention), Lean doc comments,
+> `cedar-drt` `enable_anyall` docs, and a spec feature-summary + open-items table. The
+> policy-author LANGUAGE reference lives in the separate `cedar-docs` website repo (per
+> `cedar/README.md`) — Phase 7 writes a hand-off note, not an in-repo docs tree (Q1). Documents
+> the **D-74-interim** SymCC completeness caveat and the **D-70-A** `it`-dependent-`in`
+> unsupported shape as they currently stand.
 
 - **T7.1 Document the feature, keyword `it`, and the set-free restriction; cite Mohamed et al. (FMCAD 2025).**
   _Satisfies:_ US-1..US-6 traceability; records the resolved analyzability citation.
