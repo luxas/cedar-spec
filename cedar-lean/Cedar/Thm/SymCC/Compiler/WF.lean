@@ -1363,7 +1363,7 @@ public theorem value_bool_wf {b : Bool} {es : Entities} :
   Value.WellFormed es (Value.prim (.bool b))
 := by exact Value.WellFormed.prim_wf (by simp only [Prim.WellFormed])
 
-private theorem value_int_wf {i : Int64} {es : Entities} :
+public theorem value_int_wf {i : Int64} {es : Entities} :
   Value.WellFormed es (Value.prim (.int i))
 := by exact Value.WellFormed.prim_wf (by simp only [Prim.WellFormed])
 
