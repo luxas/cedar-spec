@@ -161,7 +161,10 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 
 ## Phase 5 — SymCC analyzability, gated
 
-**Status (2026-10-09, Phase 5B):** M1–M4 of SymCC `.all` support are DONE — `compile`,
+**Status (2026-10-09, Phase 5B): DONE — review-clean (round 2: NO ACTIONABLE FINDINGS).**
+D-74 remains OPEN but ships behind the D-74-interim (`SymCCSupported(.all)=false`); if deferred,
+Phase 9 carries D-70 option B **and** D-74 option A. Residual follow-ups D-78/D-79 (LOW) tracked.
+M1–M4 of SymCC `.all` support are DONE — `compile`,
 `compile_interpret_on_footprint`, `compile_evaluate`, and the footprint (`footprintAllPred`,
 D-71) all handle `.all` with proofs (axioms = the three standard ones; see run notes). The
 `compile_well_typed` (well-typed ⇒ compiles) dispatcher `compilePred_well_typed` is DONE

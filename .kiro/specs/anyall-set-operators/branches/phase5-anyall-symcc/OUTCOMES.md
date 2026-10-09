@@ -122,6 +122,35 @@ Count note: the `CedarSymTests` exe reports **1216** solver-backed tests (12 of 
 `AnyAll.e2e`). The M5-prep note's "2422" figure double-counts / includes the separate
 `CedarUnitTests` exe; the solver-backed figure is 1216.
 
+## Review
+
+**Round 1** (`review-round1.md`) — 5 findings:
+- **F1 (MAJOR, by design)** — SymCC `.all` COMPLETENESS not established; `SymCCSupported(.all)=false`
+  excludes `.all` from `well-typed ⇒ compiles` and the verifier completeness theorems. **OPEN**,
+  tracked by D-74 (interim shipped) / D-77. Sound and documented.
+- **F2 (MODERATE)** — `typeOfAll` does not store `PredExpr.normalize p`; `normalize` +
+  `compilePred_well_typed` are landed but inert (not wired). **OPEN**, tied to D-74 (recorded on the
+  D-74 row).
+- **F3 (MINOR, doc)** — stale "SymCCOpt rejects `.all`" / D-49-D-50 "tree RED" / "exe does not link"
+  claims. **FIXED** — `c07b677` (AnyAll NOTE) + `33f3e38` (D-49/D-50 SUPERSEDED, tasks.md exe-link
+  corrected to links/runs 1216/1216 with the D-13 `LIBRARY_PATH`).
+- **F4 (MINOR, test-coverage)** — no e2e sat case pivoting on a genuine per-element error; no `.any`
+  e2e. **FIXED** — `c07b677` added `all(it < it+1) ≢ true` [overflow error path, sat] and the `.any`
+  lowering pair (`≡` unsat, `≢ all` sat); exe 1213 → 1216, AnyAll.e2e 12/12.
+- **F5 (NIT)** — OUTCOMES.md missing. **FIXED** — `34af13b` (this file).
+
+**Round 2** (`review-round2.md`) — **NO ACTIONABLE FINDINGS.** Two LOW residual observations,
+recorded as follow-ups:
+- **F6 → D-78 (LOW)** — `HO_ALL` set for every SymCC query, not only `.all` queries (sound; candidate
+  improvement: gate on a `set.all` term being present).
+- **F7 → D-79 (LOW, dead code today)** — `PredExpr.normalize`'s `.ite` arms duplicate the live branch
+  ⇒ worst-case exponential; inert until D-74 option A; fix by sharing or folding-to-live-branch.
+
+**Publication:** PR [#6](https://github.com/luxas/cedar-spec/pull/6) (luxas/cedar-spec) updated to
+`34af13b` (and the final doc-close-out commit below).
+
+---
+
 ---
 
 ## Per-milestone commit map
