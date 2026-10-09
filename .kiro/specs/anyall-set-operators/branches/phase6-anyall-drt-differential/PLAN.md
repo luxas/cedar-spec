@@ -252,6 +252,9 @@ nothing.
 - **OQ-1 → RESOLVED (D-75): proceed Rust-only now.** Do W1, W2, W3, W5, W6, W7 against the nested
   cedar branch (green). DEFER W4 (Lean proto decoder, D-29) and W8 (SymCC differential) until
   Phase 5B re-lands green on `phase5-anyall-symcc` AND D-74 is resolved.
+  **DONE 2026-10-09: W4 and W8 LANDED after Phase 5B re-landed green @ `bf97fa2` (the D-75 reversal
+  clause), under the D-74-interim. Verified by the eval/validation/symcc fuzzers (0 mismatch) and a
+  cvc5-backed `check_equivalent` on a symbolic `.all` (review F-4).**
 - **OQ-2 → RESOLVED (D-76): yes, emit the SymCC-unsupported shape at low weight.**
   `arbitrary_pred_expr` sometimes produces the `it`-dependent left operand of `in` (the D-70 A
   rejection path), at low weight, so W8 fuzzes the lockstep `unsupportedError` rejection.
