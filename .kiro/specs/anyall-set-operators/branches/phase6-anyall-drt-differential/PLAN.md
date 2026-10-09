@@ -247,31 +247,17 @@ nothing.
 
 ---
 
-## 5. Open questions (genuine user decisions — real forks only)
+## 5. Open questions — RESOLVED by user 2026-10-09 (D-75 / D-76); OQ-3 noted
 
-- **OQ-1 — Branch/rebase coupling to Phase 5B (process).** Phase 6 is cut from the Phase 5B **WIP**
-  branch (`phase5-anyall-symcc-wip-partA` @ `1e5d4bd`), which is not green (D-49) and has the open
-  D-74 obligation. Options: **(a)** do Phase 6's Rust-only, Lean-independent items (W1, W2, W3,
-  W5, W6, W7) now against the nested cedar branch (which IS green — Phase 5 had no Rust diff), and
-  defer the Lean-dependent items (W4, W8) until Phase 5B re-lands green on `phase5-anyall-symcc`,
-  then rebase; **(b)** block all of Phase 6 until Phase 5B is green. (a) makes progress without
-  waiting; (b) avoids a rebase. **Recommend (a).**
-- **OQ-2 — Should the generator produce the SymCC-*unsupported* `.all` shape (the `it`-dependent
-  left operand of `in`, D-70 A)?** **(a)** YES — generate it sometimes, so W8 exercises the
-  rejection path and confirms both engines return `unsupportedError` in lockstep (more coverage,
-  but every such case is a non-solved query). **(b)** NO — `arbitrary_pred_expr` avoids emitting
-  `it in …`, so every generated `.all` is SymCC-supported and actually solved (cleaner green, but
-  the rejection path is only unit-tested, not fuzzed). This is a real coverage-vs-cleanliness
-  fork. **Recommend (a)** with a low weight, since the rejection path is load-bearing (D-70) and
-  cheap to check.
-- **OQ-3 — D-74 is still OPEN and gates the *shape* of SymCC support.** If the user resolves D-74
-  via option **C'** (widen `TypedExpr.SymCCSupported` to also exclude `.all` predicates with a
-  dead non-Bool constant-bool branch, deferring the honest normalize path to Phase 9), then the
-  set of `.all` policies SymCC accepts is narrower, and W5's `arbitrary_pred_expr` + W8's
-  expectations must match that narrower `SymCCSupported`. Phase 6 **cannot finalize W8** until
-  D-74 is decided, because W8's "expected support" set is defined by `SymCCSupported`. This is not
-  a Phase-6 decision to make — it is a dependency to flag. **Phase 6 should proceed through W7 and
-  hold W8's final expectations until D-74 lands.**
+- **OQ-1 → RESOLVED (D-75): proceed Rust-only now.** Do W1, W2, W3, W5, W6, W7 against the nested
+  cedar branch (green). DEFER W4 (Lean proto decoder, D-29) and W8 (SymCC differential) until
+  Phase 5B re-lands green on `phase5-anyall-symcc` AND D-74 is resolved.
+- **OQ-2 → RESOLVED (D-76): yes, emit the SymCC-unsupported shape at low weight.**
+  `arbitrary_pred_expr` sometimes produces the `it`-dependent left operand of `in` (the D-70 A
+  rejection path), at low weight, so W8 fuzzes the lockstep `unsupportedError` rejection.
+- **OQ-3 — noted (not a Phase-6 decision).** D-74 is still OPEN and defines the
+  `TypedExpr.SymCCSupported` set W8's expected-support must match. Phase 6 proceeds through W7 and
+  holds W8's final expectations until D-74 lands.
 
 ---
 
