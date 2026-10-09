@@ -1558,6 +1558,70 @@ private theorem compilePred_interpret_binaryApp_on_footprint {op₂ : BinaryOp} 
     simp only [SymEntities.tags, Option.map_eq_some_iff] at hτs
     replace ⟨δ, hδ, hτs⟩ := hτs
     simp only [(hsm.right ety δ hδ).right.right τs hτs]
+
+private theorem compilePred_interpret_call_on_footprint {xfn : ExtFun} {xs : List PredExpr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.call xfn xs) it εnv ⊆ ft)
+  (hok : compilePred (.call xfn xs) it εnv = .ok pt)
+  (ih : ∀ x, x ∈ xs → ∀ {t}, footprintPred x it εnv ⊆ ft → compilePred x it εnv = .ok t → t.interpret I₁ = t.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  simp only [footprintPred, List.mapUnion₁_eq_mapUnion (footprintPred · it εnv)] at hft
+  replace ⟨ts, ha, hok⟩ := compilePred_call_ok_implies hok
+  have hwts := compilePred_wfs hwε hitw hitty ha
+  replace ha := List.forall₂_implies_all_right ha
+  have hih : ∀ t ∈ ts, t.interpret I₁ = t.interpret I₂ := by
+    intro t ht
+    replace ⟨x, hx, hxok⟩ := ha t ht
+    exact ih x hx (Set.subset_trans (List.mem_implies_subset_mapUnion (footprintPred · it εnv) hx) hft) hxok
+  have hr₁ := compileCall_interpret hI₁ hwts hok
+  have hr₂ := compileCall_interpret hI₂ hwts hok
+  simp only [List.map_congr hih] at hr₁
+  simp only [hr₁, Except.ok.injEq] at hr₂
+  exact hr₂
+
+private theorem compilePred_interpret_record_on_footprint {axs : List (Attr × PredExpr)} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.record axs) it εnv ⊆ ft)
+  (hok : compilePred (.record axs) it εnv = .ok pt)
+  (ih : ∀ a x, (a, x) ∈ axs → ∀ {t}, footprintPred x it εnv ⊆ ft → compilePred x it εnv = .ok t → t.interpret I₁ = t.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  simp only [footprintPred, List.mapUnion₂_eq_mapUnion (λ x : Attr × PredExpr => footprintPred x.snd it εnv)] at hft
+  replace hft : ∀ ax ∈ axs, footprintPred ax.snd it εnv ⊆ ft := by
+    intro x hx
+    exact Set.subset_trans (List.mem_implies_subset_mapUnion (fun x : Attr × PredExpr => footprintPred x.snd it εnv) hx) hft
+  replace ⟨ats, ha, hok⟩ := compilePred_record_ok_implies hok
+  subst hok
+  have hwts : ∀ a t, (a, t) ∈ ats → t.WellFormed εnv.entities ∧ ∃ ty, t.typeOf = .option ty := by
+    intro a t hmem
+    have ⟨px, hpx, heq, hp⟩ := List.forall₂_implies_all_right ha (a, t) hmem
+    simp only at heq hp
+    exact compilePred_wf hwε hitw hitty hp
+  have hwg := wf_prods_implies_wf_map_snd (wf_prods_option_implies_wf_prods hwts)
+  have ⟨hwo, ty, hty⟩ := wf_some_recordOf_map (wf_option_get_mem_of_type_snd hwts)
+  replace ha := List.forall₂_implies_all_right ha
+  have ihc : ∀ p ∈ ats, (Term.interpret I₁ ∘ Prod.snd) p = (Term.interpret I₂ ∘ Prod.snd) p := by
+    intro (a, t) ht
+    have ⟨(a', x), hx, heq, hp⟩ := ha (a, t) ht
+    simp only at heq hp
+    subst heq
+    simp only [Function.comp_apply]
+    exact ih a' x hx (hft (a', x) hx) hp
+  simp only [compileRecord, someOf, interpret_ifAllSome hI₁ hwg hwo hty,
+    interpret_ifAllSome hI₂ hwg hwo hty, List.map_map, List.map_congr ihc]
+  have hwo₁ := interpret_term_wf hI₁ hwo
+  have hwo₂ := interpret_term_wf hI₂ hwo
+  rw [hty] at hwo₁ hwo₂
+  have hwts' := interpret_attr_terms_wfls hI₂ hwts
+  rcases (pe_wfls_of_type_option hwts') with ⟨_, hn⟩ | ⟨ts, hs⟩
+  · simp only [pe_ifAllSome_none hn hwo₁.right, pe_ifAllSome_none hn hwo₂.right]
+  · simp only [hs, interpret_term_some, interpret_recordOf, List.map_map,
+      prod_map_id_comp_eq, map_interpret_snd_option_get_eq hwts ihc hs]
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
