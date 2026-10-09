@@ -161,6 +161,28 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 
 ## Phase 5 — SymCC analyzability, gated
 
+**Status (2026-10-09, Phase 5B):** M1–M4 of SymCC `.all` support are DONE — `compile`,
+`compile_interpret_on_footprint`, `compile_evaluate`, and the footprint (`footprintAllPred`,
+D-71) all handle `.all` with proofs (axioms = the three standard ones; see run notes). The
+`compile_well_typed` (well-typed ⇒ compiles) dispatcher `compilePred_well_typed` is DONE
+(all 13 arms, 0 sorry, axioms `[propext, Classical.choice, Quot.sound]`). Its `.all`
+assembly is BLOCKED on **D-74 (OPEN)** — `normalize_evaluatePred` needs predicate type
+soundness, which does not yet exist. **D-74-interim** (committed): `TypedExpr.SymCCSupported
+(.all _ _ _) := false` so the `well-typed ⇒ compiles` fragment temporarily excludes `.all`
+and `compile_well_typed_on_wf_expr`'s `.all` arm closes by contradiction — this keeps every
+theorem true while D-74 is decided (restore the real guard + arm under option A or C').
+CedarFFI `ToJson` now serializes the anyall nodes (`Op.set.all`, `PredExpr`).
+**Still red (one spot):** the `Cedar.Thm.SymCC.Opt` verifier-completeness theorems
+(`compile_ok_iff_welltypedpolicy_ok` and the ~22 `verify*_is_ok`/`_eqv_*_ok` happy-path
+theorems) call `compile_well_typed`/`verify*_is_ok`, which now REQUIRE the
+`SymCCSupported`/`PolicySymCCSupported` guard (D-72); that guard was never threaded through
+Opt.lean because `WellTyped.lean` never compiled before. Threading it narrows those theorems
+(notably `compile_ok_iff_welltypedpolicy_ok`, currently a general iff) to the SymCC-supported
+fragment and ripples to `Opt/Verifier.lean`/`Opt/Enforcer.lean` and the `Cedar:static` FFI
+build — a pending refactor flagged for the conductor. Green now: SymTest, UnitTest, DiffTest,
+Protobuf, CedarProto, Cedar.Thm.SymCC.Compiler.WellTyped. Red: `Cedar`/`SymCC` library
+targets (only via `Cedar.Thm.SymCC.Opt`) and the `CedarSymTests` exe link.
+
 - **T5.1 SymCC compiler arm for `all` (gated).**
   `Cedar/SymCC/Compiler.lean` (+ `SymCCOpt/`): compile `all` to a bounded conjunction over the
   symbolic set's elements of the compiled set-free predicate; reject predicates that contain a
