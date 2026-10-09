@@ -19,7 +19,7 @@ module
 public import Cedar.Spec
 public import Cedar.SymCC.Concretizer
 public import Cedar.SymCC.Env
-import Cedar.SymCC.Factory
+public import Cedar.SymCC.Factory
 public import Cedar.SymCC.Interpretation
 public import Cedar.SymCC.Verifier
 import Cedar.Thm.Data.Control
@@ -544,6 +544,15 @@ public inductive Op.WellTyped (εs : SymEntities) : Op → List Term → TermTyp
     (h₁ : t₁.typeOf = .set ty)
     (h₂ : t₂.typeOf = .set ty) :
     WellTyped εs Op.set.inter [t₁, t₂] (.set ty)
+  | set.all_wt {setT predT errT : Term} {elemTy : TermType}
+    (h₁ : setT.typeOf = .set elemTy)
+    (h₂ : predT.typeOf = .bool)
+    (h₃ : errT.typeOf = .bool)
+    (h₄ : predT.NoSetAll = true)
+    (h₅ : errT.NoSetAll = true)
+    (h₆ : predT.anyAllItTyped elemTy = true)
+    (h₇ : errT.anyAllItTyped elemTy = true) :
+    WellTyped εs Op.set.all [setT, predT, errT] (.option .bool)
   | option.get_wt {t : Term} {ty : TermType}
     (h₁ : t.typeOf = .option ty) :
     WellTyped εs Op.option.get [t] ty
@@ -610,12 +619,20 @@ public def UnaryFunction.WellFormed (εs : SymEntities) : UnaryFunction → Prop
 public def SymRequest.WellFormed (εs : SymEntities) (req : SymRequest) : Prop :=
   req.principal.WellFormed εs ∧
   req.principal.typeOf.isEntityType ∧
+  req.principal.NoAnyAllItVar ∧
+  req.principal.NoSetAll ∧
   req.action.WellFormed εs ∧
   req.action.typeOf.isEntityType ∧
+  req.action.NoAnyAllItVar ∧
+  req.action.NoSetAll ∧
   req.resource.WellFormed εs ∧
   req.resource.typeOf.isEntityType ∧
+  req.resource.NoAnyAllItVar ∧
+  req.resource.NoSetAll ∧
   req.context.WellFormed εs ∧
-  req.context.typeOf.isCedarRecordType
+  req.context.typeOf.isCedarRecordType ∧
+  req.context.NoAnyAllItVar ∧
+  req.context.NoSetAll
 
 @[expose]
 public def SymTags.WellFormed (εs : SymEntities) (ety : EntityType) (τs : SymTags) : Prop :=

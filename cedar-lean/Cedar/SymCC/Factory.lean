@@ -18,6 +18,7 @@ module
 
 import Cedar.Spec
 public import Cedar.SymCC.Function
+import Cedar.Data.SizeOf
 
 /-!
 This file defines an API for construcing well-formed Terms. In this basic
@@ -42,6 +43,102 @@ namespace Cedar.SymCC
 
 open Cedar.Data
 open Cedar.Spec
+
+/--
+Capture-free substitution of the reserved bound element variable `anyAllItVar`
+(by its `id` `!anyall!it`) with a term `v` throughout `t` (D-55). Used by the
+concrete fold of `set.all` over a literal receiver: predicate bodies are
+non-nested (they contain no further `set.all` binder), so this is a plain
+structural replacement with no capture concern. -/
+public def Term.substAnyAllIt (v : Term) : Term → Term
+  | .var w        => if w.id = "!anyall!it" then v else .var w
+  | .prim p       => .prim p
+  | .none ty      => .none ty
+  | .some t       => .some (Term.substAnyAllIt v t)
+  | .set ts ty    => .set (ts.map₁ (fun ⟨t, _⟩ => Term.substAnyAllIt v t)) ty
+  | .record ats   => .record (ats.mapOnValues₂ (fun ⟨t, _⟩ => Term.substAnyAllIt v t))
+  | .app op ts ty => .app op (ts.map₁ (fun ⟨t, _⟩ => Term.substAnyAllIt v t)) ty
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (rename_i h; have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; have := List.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; have := Map.sizeOf_lt_of_toList ats; have := List.sizeOf_lt_of_mem h; omega)
+
+/--
+`Term.NoSetAll t` holds iff `t` contains no `Op.set.all` application node
+anywhere. Predicate/error bodies produced by `compilePred` satisfy this
+(predicates are non-nested, D-55), which is exactly the side condition under
+which `interpretWith (some v)` agrees with `substAnyAllIt v` followed by
+`interpret` (the latter has no `set.all` arm, the former folds it). -/
+public def Term.NoSetAll : Term → Bool
+  | .prim _      => true
+  | .var _       => true
+  | .none _      => true
+  | .some t      => Term.NoSetAll t
+  | .set ts _    => ts.all₁ λ ⟨t, _⟩ => Term.NoSetAll t
+  | .record ats  => ats.toList.attach₂.all λ ⟨(_, t), _⟩ => Term.NoSetAll t
+  | .app Op.set.all _ _ => false
+  | .app _ ts _  => ts.attach.all λ ⟨t, _⟩ => Term.NoSetAll t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (have h := Set.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
+      | omega
+
+/--
+`Term.anyAllItTyped ety t` holds iff every occurrence of the reserved bound
+variable `!anyall!it` in `t` carries type `ety`. Compiler-produced predicate
+bodies satisfy this with `ety = elemTy` (they bind `anyAllItVar elemTy`), which
+is what lets the concrete fold substitute a literal element (of type `elemTy`)
+for the bound variable while preserving well-typedness (D-57). -/
+public def Term.anyAllItTyped (ety : TermType) : Term → Bool
+  | .prim _      => true
+  | .var w       => if w.id = "!anyall!it" then w.ty = ety else true
+  | .none _      => true
+  | .some t      => Term.anyAllItTyped ety t
+  | .set ts _    => ts.all₁ λ ⟨t, _⟩ => Term.anyAllItTyped ety t
+  | .record ats  => ats.toList.attach₂.all λ ⟨(_, t), _⟩ => Term.anyAllItTyped ety t
+  | .app _ ts _  => ts.attach.all λ ⟨t, _⟩ => Term.anyAllItTyped ety t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
+      | omega
+
+/--
+`Term.NoAnyAllItVar t` holds iff `t` contains no occurrence of the reserved
+bound element variable `!anyall!it` (D-62). A well-formed `SymRequest`'s
+principal/action/resource/context must satisfy this: otherwise a receiver term
+mentioning `!anyall!it` would let `s.all(...)` capture the request variable when
+the `set.all` encoding binds it, which is unsound. It implies
+`Term.anyAllItTyped ety` for every `ety` (there is no reserved var to type). -/
+public def Term.NoAnyAllItVar : Term → Bool
+  | .prim _      => true
+  | .var w       => w.id ≠ "!anyall!it"
+  | .none _      => true
+  | .some t      => Term.NoAnyAllItVar t
+  | .set ts _    => ts.all₁ λ ⟨t, _⟩ => Term.NoAnyAllItVar t
+  | .record ats  => ats.toList.attach₂.all λ ⟨(_, t), _⟩ => Term.NoAnyAllItVar t
+  | .app _ ts _  => ts.attach.all λ ⟨t, _⟩ => Term.NoAnyAllItVar t
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (have := Set.sizeOf_lt_of_elts ts; have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := List.sizeOf_lt_of_mem ‹_ ∈ ts›; omega)
+      | (have := Map.sizeOf_lt_of_toList ats; simp only at *; omega)
+      | omega
+
 
 namespace Factory
 
@@ -267,6 +364,33 @@ public def set.isEmpty : Term → Term
 public def set.intersects (ts₁ ts₂ : Term) : Term :=
   not (set.isEmpty (set.inter ts₁ ts₂))
 
+/--
+The reserved bound-element variable for the `.all` set-quantifier encoding
+(D-51). Its `id` cannot be produced by the compiler for any Cedar variable, so
+it never clashes with a free symbolic variable; `set.all` binds it. `elemTy` is
+the set's element type.
+-/
+public def anyAllItVar (elemTy : TermType) : TermVar :=
+  { id := "!anyall!it", ty := elemTy }
+
+/--
+Smart constructor for the `.all` set-quantifier term (D-34/D-51). `set` is the
+compiled receiver (type `.set elemTy`), `pred`/`err` are boolean Terms over
+`anyAllItVar elemTy` (the per-element predicate value and error). The result is `.option .bool` (tri-valued, D-35); it encodes via two
+`set.filter` comprehensions under `HO_ALL` (D-52).
+
+D-68: ALWAYS build the symbolic `.app Op.set.all` node. The literal-receiver
+constant fold used to live here (D-55/D-64), but `Term.substAnyAllIt` is
+*syntactic* and never re-reduces, which makes `compile_interpret .all` FALSE:
+recompiling under a literal interpretation would fold with the unreduced
+substitution (`app bvslt [bv 0, bv 5]`) while interpreting the node reduces to
+`some true`. The fold therefore moves into the compiler's `.all` arm (which can
+compile the predicate per element and so produce *reduced* bodies), and the only
+reducing fold that remains is the one in `Term.interpret`/`interpretWith`
+(`Interpretation.lean`), which IS semantics-preserving. -/
+public def set.all (set pred err : Term) : Term :=
+  .app Op.set.all [set, pred, err] (.option .bool)
+
 ---------- Core ADT operators with a trusted mapping to SMT ----------
 
 public def option.get : Term → Term
@@ -380,5 +504,4 @@ public def bvsubChecked t₁ t₂ := ifFalse (bvssubo t₁ t₂) (bvsub t₁ t�
 public def bvmulChecked t₁ t₂ := ifFalse (bvsmulo t₁ t₂) (bvmul t₁ t₂)
 
 end Factory
-
 end Cedar.SymCC

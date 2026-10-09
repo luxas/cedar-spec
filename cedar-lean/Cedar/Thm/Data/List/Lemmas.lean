@@ -409,6 +409,24 @@ public theorem map_preserves_forall₂
     assumption
     assumption
 
+/--
+Map the LEFT list of a `Forall₂` through `g`, upgrading the relation. The pointwise
+implication receives `a ∈ l₁` so a caller may make a termination-decreasing recursive
+call keyed on membership of `a` (e.g. `List.sizeOf_snd_lt_sizeOf_list` / `sizeOf_lt_of_mem`).
+-/
+public theorem forall₂_map_left_of_mem {α β γ} {l₁ : List α} {l₂ : List β} (g : α → γ)
+  {R : α → β → Prop} {S : γ → β → Prop}
+  (h : ∀ a, a ∈ l₁ → ∀ b, R a b → S (g a) b) :
+  List.Forall₂ R l₁ l₂ → List.Forall₂ S (l₁.map g) l₂
+:= by
+  intro hf
+  induction hf
+  case nil => simp only [List.map_nil, Forall₂.nil]
+  case cons xhd yhd xtl ytl hhd _ ih =>
+    simp only [List.map_cons]
+    refine Forall₂.cons (h xhd (by simp only [mem_cons, true_or]) yhd hhd) ?_
+    exact ih (λ a ha => h a (by simp only [mem_cons, ha, or_true]))
+
 public theorem forall₂_swap
   {R : α → β → Prop} {xs : List α} {ys : List β}
   (hforall₂ : List.Forall₂ (λ y x => R x y) ys xs) :

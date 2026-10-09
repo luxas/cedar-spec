@@ -209,13 +209,15 @@ theorem type_of_getAttr_is_sound {x₁ : Expr} {a : Attr} {c₁ c₂ : Capabilit
   have ⟨_, v₁, h₆, h₈⟩ := ih h₁ h₂ h₄  <;>
   simp [EvaluatesTo] at h₆ <;>
   simp [EvaluatesTo, evaluate] <;>
-  rcases h₆ with h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
+  rcases h₆ with h₆ | h₆ | h₆ | h₆ | h₆ <;> simp [h₆]
   <;> try exact type_of_is_inhabited h₂.wf_env h₃
   · have h₉ : (typeOf x₁ c₁ env).typeOf = Except.ok (CedarType.entity ety, c₁') := by simp [h₄, ResultType.typeOf, Except.map]; exact h₇
     rw [h₇] at h₈
-    exact type_of_getAttr_is_sound_for_entities h₁ h₂ h₃ h₉ h₆ h₈
+    have ⟨v, hd, hi⟩ := type_of_getAttr_is_sound_for_entities h₁ h₂ h₃ h₉ h₆ h₈
+    exact ⟨v, by rcases hd with h|h|h|h <;> simp [h], hi⟩
   · have h₉ : (typeOf x₁ c₁ env).typeOf = Except.ok (CedarType.record rty, c₁') := by simp [h₄, ResultType.typeOf, Except.map]; exact h₇
     rw [h₇] at h₈
-    exact type_of_getAttr_is_sound_for_records h₁ h₃ h₉ h₆ h₈
+    have ⟨v, hd, hi⟩ := type_of_getAttr_is_sound_for_records h₁ h₃ h₉ h₆ h₈
+    exact ⟨v, by rcases hd with h|h|h|h <;> simp [h], hi⟩
 
 end Cedar.Thm

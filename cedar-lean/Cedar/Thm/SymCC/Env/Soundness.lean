@@ -59,7 +59,7 @@ private theorem env_symbolize?_same_request
   all_goals
     simp only [
       beq_iff_eq, Option.bind_eq_bind,
-      Term.interpret, TermVar.mk.injEq,
+      Term.interpret, Term.interpretWith, TermVar.mk.injEq,
       String.reduceEq,
       false_and, ↓reduceIte,
     ]

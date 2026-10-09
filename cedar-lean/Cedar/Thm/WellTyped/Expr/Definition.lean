@@ -17,6 +17,7 @@
 module
 
 public import Cedar.Validation.TypedExpr
+public import Cedar.Validation.Typechecker
 public import Cedar.Spec.Ext
 
 /-!
@@ -280,6 +281,56 @@ public inductive ExtHasAttrChainValid (ets : EntitySchema) : CedarType → List 
     ExtHasAttrChainValid ets (.record recRty) (attr :: rest)
 
 
+/--
+Structural well-formedness of a quantifier predicate (`PredExpr`), capturing the
+one validation-relevant fact that `TypedExpr.WellTyped` needs about an `.all`
+body: every entity-UID literal occurring in the predicate is valid in the type
+environment. (The predicate's full typing is enforced by `typeOfPred`; this is
+the residue needed to carry `ValidRefs` through `.all` for SymCC. The element
+keyword `it`, variables, attributes, and non-entity literals carry no entity
+reference, so only the `lit (.entityUID _)` case is constrained.)
+-/
+public inductive PredExpr.WellTyped (env : TypeEnv) : PredExpr → Prop
+| item : WellTyped env .item
+| lit_entity {uid : EntityUID}
+  (h₁ : env.ets.isValidEntityUID uid ∨ env.acts.contains uid) :
+  WellTyped env (.lit (.entityUID uid))
+| lit_other {p : Prim}
+  (h₁ : ∀ uid, p ≠ .entityUID uid) :
+  WellTyped env (.lit p)
+| var {v : Var} : WellTyped env (.var v)
+| ite {x₁ x₂ x₃ : PredExpr}
+  (h₁ : WellTyped env x₁) (h₂ : WellTyped env x₂) (h₃ : WellTyped env x₃) :
+  WellTyped env (.ite x₁ x₂ x₃)
+| and {x₁ x₂ : PredExpr}
+  (h₁ : WellTyped env x₁) (h₂ : WellTyped env x₂) :
+  WellTyped env (.and x₁ x₂)
+| or {x₁ x₂ : PredExpr}
+  (h₁ : WellTyped env x₁) (h₂ : WellTyped env x₂) :
+  WellTyped env (.or x₁ x₂)
+| unaryApp {op₁ : UnaryOp} {x₁ : PredExpr}
+  (h₁ : WellTyped env x₁) :
+  WellTyped env (.unaryApp op₁ x₁)
+| binaryApp {op₂ : BinaryOp} {x₁ x₂ : PredExpr}
+  (h₁ : WellTyped env x₁) (h₂ : WellTyped env x₂) :
+  WellTyped env (.binaryApp op₂ x₁ x₂)
+| hasAttr {x₁ : PredExpr} {a : Attr}
+  (h₁ : WellTyped env x₁) :
+  WellTyped env (.hasAttr x₁ a)
+| extHasAttr {x₁ : PredExpr} {a : Attr} {as : List Attr}
+  (h₁ : WellTyped env x₁) :
+  WellTyped env (.extHasAttr x₁ a as)
+| getAttr {x₁ : PredExpr} {a : Attr}
+  (h₁ : WellTyped env x₁) :
+  WellTyped env (.getAttr x₁ a)
+| record {axs : List (Attr × PredExpr)}
+  (h₁ : ∀ ax ∈ axs, WellTyped env ax.snd) :
+  WellTyped env (.record axs)
+| call {xfn : ExtFun} {xs : List PredExpr}
+  (h₁ : ∀ x ∈ xs, WellTyped env x) :
+  WellTyped env (.call xfn xs)
+
+
 public inductive TypedExpr.WellTyped (env : TypeEnv) : TypedExpr → Prop
 | lit {p : Prim} {ty : CedarType}
   (h₁ : p.WellTyped env ty) :
@@ -362,5 +413,11 @@ public inductive TypedExpr.WellTyped (env : TypeEnv) : TypedExpr → Prop
   (h₁ : ∀ x, x ∈ args → WellTyped env x)
   (h₂ : xfn.WellTyped args ty) :
   WellTyped env (.call xfn args ty)
+| all {x₁ : TypedExpr} {p : Cedar.Spec.PredExpr} {τ : CedarType}
+  (h₁ : WellTyped env x₁)
+  (h₂ : x₁.typeOf = .set τ)
+  (h₃ : PredExpr.WellTyped env p)
+  (h₄ : ∃ itTy c c' typ, Cedar.Validation.typeOfPred p itTy c env = .ok (typ, c') ∧ ∃ b, typ.typeOf = .bool b) :
+  WellTyped env (.all x₁ p (.bool .anyBool))
 
 end Cedar.Thm

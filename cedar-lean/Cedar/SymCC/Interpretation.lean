@@ -141,28 +141,78 @@ def Op.interpret (I : Interpretation) (op : Op) (ts : List Term) (ty : TermType)
   | .ext xop, [t₁]        => xop.interpret I t₁
   | _, _                  => .app op ts ty
 
-public def Term.interpret (I : Interpretation) : Term → Term
+/--
+`Term.interpretWith σ I` interprets a term under model `I`, additionally
+substituting the reserved bound element variable `anyAllItVar` by `σ` when `σ`
+is `some v` (used inside the `set.all` concrete fold, D-55). It is structural on
+the term and otherwise identical to `interpret` — every arm calls the same
+Factory / `op.interpret` constructors, so it re-normalises (e.g. `bvslt 0 1`
+folds to `true`). `Term.interpret I := interpretWith none I`. -/
+public def Term.interpretWith (σ : Option Term) (I : Interpretation) : Term → Term
   | .prim p       => .prim p
-  | .var v        => I.vars v
+  | .var v        => match σ with
+                     | Option.some v' => if v.id = "!anyall!it" then v' else I.vars v
+                     | Option.none    => I.vars v
   | .none ty      => noneOf ty
-  | .some t       => someOf (t.interpret I)
+  | .some t       => someOf (Term.interpretWith σ I t)
   | .set ts ty    =>
-    let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
+    let ts' := ts.map₁ (λ ⟨t, _⟩ => Term.interpretWith σ I t)
     .set ts' ty
+  | .app Op.set.all [setT, predT, errT] ty =>
+    -- D-55 final semantics: interpret the receiver; if it is a literal set, fold
+    -- element-by-element (bound var substituted by each element, free vars
+    -- interpreted) to a literal, matching `evalAll`. Otherwise keep the symbolic
+    -- node, interpreting free vars in the bodies but leaving the bound var.
+    match Term.interpretWith σ I setT with
+    | .set (Set.mk vs) sty =>
+      -- D-60: fold only when every element is a literal (always true under a
+      -- well-formed interpretation — the receiver interprets to a literal set).
+      -- The guard makes each `vi` a known literal, which is what the fold-WF /
+      -- fold-literal proofs need (via `interpret_lit_id` + `substAnyAllIt_wf`);
+      -- the `else` is a dead proof-convenience fallback carrying its own typing
+      -- evidence, exactly like the non-literal-receiver branch below.
+      if vs.all (·.isLiteral) then
+        let conj   := vs.foldr (fun vi acc => Factory.and (Term.interpretWith (Option.some vi) I predT) acc) (true : Term)
+        let anyErr := vs.foldr (fun vi acc => Factory.or  (Term.interpretWith (Option.some vi) I errT)  acc) (false : Term)
+        Factory.ite anyErr (Factory.noneOf .bool) (Factory.someOf conj)
+      else
+        let p' := Term.interpretWith Option.none I predT
+        let e' := Term.interpretWith Option.none I errT
+        if p'.NoSetAll && e'.NoSetAll && p'.anyAllItTyped sty && e'.anyAllItTyped sty
+        then .app Op.set.all [.set (Set.mk vs) sty, p', e'] ty
+        else .app Op.set.all [.set (Set.mk vs) sty, predT, errT] ty
+    | setT' =>
+      -- D-59: the receiver did not interpret to a literal set. This branch is
+      -- unreachable under a well-formed interpretation (an interpretation makes
+      -- every term of set type a literal set), so it exists only to keep
+      -- `interpretWith` total. We still interpret the bodies' free variables, but
+      -- only adopt the interpreted bodies when they carry the `set.all` typing
+      -- evidence (`NoSetAll` + `anyAllItTyped`) that a well-formed `set.all` node
+      -- requires; otherwise we fall back to the original bodies, which carry that
+      -- evidence by the node's own well-formedness. Both shapes are well-formed.
+      let p' := Term.interpretWith Option.none I predT
+      let e' := Term.interpretWith Option.none I errT
+      match setT'.typeOf with
+      | .set elemTy =>
+        if p'.NoSetAll && e'.NoSetAll && p'.anyAllItTyped elemTy && e'.anyAllItTyped elemTy
+        then .app Op.set.all [setT', p', e'] ty
+        else .app Op.set.all [setT', predT, errT] ty
+      | _ => .app Op.set.all [setT', predT, errT] ty
   | .app op ts ty =>
-    let ts' := ts.map₁ (λ ⟨t, _⟩ => t.interpret I)
+    let ts' := ts.map₁ (λ ⟨t, _⟩ => Term.interpretWith σ I t)
     op.interpret I ts' ty
   | .record ats   =>
-    .record $ ats.mapOnValues₂ (λ ⟨t, _⟩ => t.interpret I)
+    .record $ ats.mapOnValues₂ (λ ⟨t, _⟩ => Term.interpretWith σ I t)
 decreasing_by
   all_goals simp_wf
-  · rename t ∈ ts => h
-    have := Set.sizeOf_lt_of_mem h
-    omega
-  · rename t ∈ ts => h
-    have := List.sizeOf_lt_of_mem h
-    omega
-  · omega
+  all_goals
+    first
+      | omega
+      | (rename_i h; have := Set.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; have := List.sizeOf_lt_of_mem h; omega)
+
+@[expose]
+public def Term.interpret (I : Interpretation) (t : Term) : Term := Term.interpretWith Option.none I t
 
 @[expose]
 public def SymRequest.interpret (I : Interpretation) (req : SymRequest)  : SymRequest :=

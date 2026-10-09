@@ -568,8 +568,13 @@ theorem typeOf_preserves_valid_refs
     apply typeOf_preserves_valid_refs_set entities hty hrefs
     intros x hmem_x tx c c'
     apply typeOf_preserves_valid_refs
-  | all _ _ =>
-    simp [typeOf] at hty
+  | all x₁ p =>
+    have ⟨_, _, tyr, cr, τ, htr, _, htyeq⟩ := type_of_all_inversion hty
+    subst htyeq
+    cases hrefs with
+    | all_valid hrecv hpred =>
+      simp only [TypedExpr.toExpr]
+      exact Expr.ValidRefs.all_valid (typeOf_preserves_valid_refs entities htr hrecv) hpred
   | call _ args =>
     apply typeOf_preserves_valid_refs_call entities hty hrefs
     intros arg hmem_arg tx c c'

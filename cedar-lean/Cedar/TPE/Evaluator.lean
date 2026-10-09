@@ -285,6 +285,11 @@ def evaluate
     record (axs.map₁ (λ ⟨(a, x₁), _⟩ => (a, (evaluate env x₁ req es)))) ty
   | .call xfn xs ty =>
     call xfn (xs.map₁ (λ ⟨x₁, _⟩ => evaluate env x₁ req es)) ty
+  | .all e p ty =>
+    -- Part A (D-17/D-43): partially evaluate the receiver; the whole quantifier
+    -- node is retained as a residual. Per-element TPE of the predicate (reducing
+    -- `.all` to a value when the receiver is concrete) is a Phase-6.5 refinement.
+    .all (evaluate env e req es) p ty
 termination_by x
 decreasing_by
   all_goals

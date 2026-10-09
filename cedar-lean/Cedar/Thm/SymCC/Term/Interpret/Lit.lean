@@ -19,9 +19,11 @@ module
 import Cedar.Data.SizeOf
 public import Cedar.SymCC.Env
 public import Cedar.SymCC.Interpretation
+import all Cedar.SymCC.Interpretation
 import Cedar.Thm.SymCC.Data
 import Cedar.Thm.SymCC.Term.Interpret.Basic
 public import Cedar.Thm.SymCC.Term.Interpret.WF
+import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 import Cedar.Thm.SymCC.Term.Lit
 import Cedar.Thm.SymCC.Term.PE
 import Cedar.Thm.SymCC.Term.WF
@@ -282,6 +284,64 @@ private theorem interpret_term_app_lit {εs : SymEntities} {I : Interpretation} 
     show_interpret_term_app_unary_lit t hI hwf h₁ ih interpret_term_app_string_like pe_string_like_wfl
   case ext_wt h₁ =>
     exact interpret_term_app_ext_lit hI hwf h₁ ih
+  case set.all_wt setT predT errT elemTy hset hpred herr hpn hen hpty hety =>
+    have hpredWF := hwf predT (by simp)
+    have herrWF := hwf errT (by simp)
+    have hsetWF := hwf setT (by simp)
+    have hsetwfl : (Term.interpret I setT).WellFormedLiteral εs ∧ (Term.interpret I setT).typeOf = setT.typeOf :=
+      interpret_wf_to_wfl setT hI hwf rfl ih
+    have hsetlit : (Term.interpret I setT).isLiteral := hsetwfl.left.right
+    have hsetty : (Term.interpret I setT).typeOf = .set elemTy := by rw [hsetwfl.right]; exact hset
+    show (Term.interpretWith Option.none I (Term.app Op.set.all [setT, predT, errT] (.option .bool))).isLiteral = true
+    unfold Term.interpretWith
+    have hII : Term.interpretWith Option.none I setT = Term.interpret I setT := rfl
+    rw [hII]
+    match hM : Term.interpret I setT with
+    | .set (Set.mk vs) sty =>
+      rw [hM] at hsetwfl hsetlit hsetty
+      have hstyeq : sty = elemTy := by
+        simp only [Term.typeOf, TermType.set.injEq] at hsetty; exact hsetty
+      subst hstyeq
+      have helem : ∀ vi ∈ vs, vi.WellFormedLiteral εs ∧ vi.typeOf = sty := by
+        intro vi hvi
+        have hmem : vi ∈ (Set.mk vs : Set Term) := (Set.mem_set_iff_mem_mk vi vs).mpr hvi
+        cases hsetwfl.left.left with
+        | set_wf hw hty _ _ =>
+          refine ⟨⟨hw vi hmem, ?_⟩, hty vi hmem⟩
+          simp only [Term.isLiteral, Set.all₁_eq_all, Set.all_eq_true] at hsetlit
+          exact hsetlit vi (by rw [← Set.mem_elts_iff_mem_set] at hmem; exact hmem)
+      have hg : vs.all (·.isLiteral) = true := by
+        rw [List.all_eq_true]; intro vi hvi; exact (helem vi hvi).left.right
+      simp only [hg, if_true]
+      have hPlit : ∀ vi ∈ vs, (Term.interpretWith (Option.some vi) I predT).WellFormedLiteral εs ∧
+          (Term.interpretWith (Option.some vi) I predT).typeOf = .bool := by
+        intro vi hvi
+        have ⟨hviwfl, hvity⟩ := helem vi hvi
+        have hw := interpretWith_wf hI hviwfl.left predT hpredWF hpn (by rw [hvity]; exact hpty)
+        exact ⟨⟨hw.left, interpretWith_lit hI hviwfl predT hpredWF hpn (by rw [hvity]; exact hpty)⟩, hw.right.trans hpred⟩
+      have hElit : ∀ vi ∈ vs, (Term.interpretWith (Option.some vi) I errT).WellFormedLiteral εs ∧
+          (Term.interpretWith (Option.some vi) I errT).typeOf = .bool := by
+        intro vi hvi
+        have ⟨hviwfl, hvity⟩ := helem vi hvi
+        have hw := interpretWith_wf hI hviwfl.left errT herrWF hen (by rw [hvity]; exact hety)
+        exact ⟨⟨hw.left, interpretWith_lit hI hviwfl errT herrWF hen (by rw [hvity]; exact hety)⟩, hw.right.trans herr⟩
+      have hconjL := foldr_and_isLit (g := fun vi => Term.interpretWith (Option.some vi) I predT) vs hPlit
+      have hconjW := foldr_and_wf (g := fun vi => Term.interpretWith (Option.some vi) I predT) vs
+        (fun vi hvi => ⟨(hPlit vi hvi).left.left, (hPlit vi hvi).right⟩)
+      have hanyL := foldr_or_isLit (g := fun vi => Term.interpretWith (Option.some vi) I errT) vs hElit
+      have hanyW := foldr_or_wf (g := fun vi => Term.interpretWith (Option.some vi) I errT) vs
+        (fun vi hvi => ⟨(hElit vi hvi).left.left, (hElit vi hvi).right⟩)
+      simp only [Factory.noneOf, Factory.someOf]
+      exact pe_ite_wfl ⟨hanyW.left, hanyL⟩
+        ⟨Term.WellFormed.none_wf TermType.WellFormed.bool_wf, by simp only [Term.isLiteral]⟩
+        ⟨Term.WellFormed.some_wf hconjW.left, by simp only [Term.isLiteral]; exact hconjL⟩ hanyW.right
+    | .prim pp => rw [hM] at hsetty; simp only [Term.typeOf] at hsetty
+                  cases pp <;> rename_i x <;> (try cases x) <;> simp_all [TermPrim.typeOf]
+    | .var _ => rw [hM] at hsetlit; simp [Term.isLiteral] at hsetlit
+    | .none _ => rw [hM] at hsetty; simp [Term.typeOf] at hsetty
+    | .some _ => rw [hM] at hsetty; simp [Term.typeOf] at hsetty
+    | .app _ _ _ => rw [hM] at hsetlit; simp [Term.isLiteral] at hsetlit
+    | .record _ => rw [hM] at hsetty; simp [Term.typeOf] at hsetty
 
 public theorem interpret_term_lit {εs : SymEntities} {I : Interpretation} {t : Term}
   (h₀ : I.WellFormed εs)

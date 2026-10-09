@@ -56,7 +56,7 @@ theorem level_based_slicing_is_sound_or {e₁ e₂ : Expr} {n : Nat} {c₀ c₁:
     simp only [evaluate]
     specialize ih₁ hc hr htx₁ hl
     rw [←ih₁]
-    rcases he₁ with he₁ | he₁ | he₁ | he₁ <;>
+    rcases he₁ with he₁ | he₁ | he₁ | he₁ | he₁ <;>
     simp [he₁, Result.as, Coe.coe, Value.asBool]
   case isFalse =>
     replace ⟨ bt, tx₂, bty₂, c₂, htx, htx₂, hty₂, ht ⟩ := ht

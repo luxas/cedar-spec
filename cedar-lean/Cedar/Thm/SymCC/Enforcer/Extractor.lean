@@ -369,7 +369,7 @@ private theorem interpret_request_repair_eq {xs : List Expr} {εnv : SymEnv} {I 
   (hwε : εnv.request.StronglyWellFormed εnv.entities) :
   εnv.request.interpret I = εnv.request.interpret (Interpretation.repair (footprints xs εnv) εnv I)
 := by
-  have ⟨hwtp, _, hwta, _, hwtr, _, hwtc, _⟩ := hwε.left
+  have ⟨hwtp, _, _, _, hwta, _, _, _, hwtr, _, _, _, hwtc, _, _, _⟩ := hwε.left
   have ⟨hbtp, hbta, hbtr, hbtc⟩ := hwε.right
   simp only [SymRequest.interpret,
     interpret_term_isBasic_repair_eq xs I hwtp hbtp,

@@ -54,7 +54,7 @@ theorem level_based_slicing_is_sound_and {e₁ e₂ : Expr} {n : Nat} {c₀ c₁
     subst v₁
     specialize ih₁ hc hr htx₁ hl
     simp only [evaluate, ←ih₁]
-    rcases he₁ with he₁ | he₁ | he₁ | he₁ <;>
+    rcases he₁ with he₁ | he₁ | he₁ | he₁ | he₁ <;>
     simp [he₁, Result.as, Coe.coe, Value.asBool]
   case isFalse =>
     replace ⟨ bty, tx₂, bty₂, c₂, htx, htx₂, hty₂, ht ⟩ := ht
@@ -63,7 +63,7 @@ theorem level_based_slicing_is_sound_and {e₁ e₂ : Expr} {n : Nat} {c₀ c₁
     cases hl ; rename_i hl₁ hl₂
     specialize ih₁ hc hr htx₁ hl₁
     simp only [evaluate, ←ih₁]
-    rcases he₁ with he₁ | he₁ | he₁ | he₁ <;>
+    rcases he₁ with he₁ | he₁ | he₁ | he₁ | he₁ <;>
     simp only [he₁, Result.as, Bool.not_eq_eq_eq_not, Bool.not_true, Coe.coe, Value.asBool, Except.bind_err]
     cases b₁ <;> simp only [Except.bind_ok, ↓reduceIte]
     specialize hgc he₁

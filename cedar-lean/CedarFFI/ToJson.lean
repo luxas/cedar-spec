@@ -106,6 +106,7 @@ instance : Lean.ToJson Op where
   | Op.set.member => Lean.Json.str "set.member"
   | Op.set.subset => Lean.Json.str "set.subset"
   | Op.set.inter => Lean.Json.str "set.inter"
+  | Op.set.all => Lean.Json.str "set.all"
   ---------- Core ADT operators with a trusted mapping to SMT ----------
   | Op.option.get => Lean.Json.str "option.get"
   | Op.record.get attr => Lean.Json.mkObj [("record.get", Lean.Json.str attr)]
@@ -296,6 +297,7 @@ deriving instance Lean.ToJson for BinaryOp
 deriving instance Lean.ToJson for UnaryOp
 deriving instance Lean.ToJson for Var
 deriving instance Lean.ToJson for Spec.ExtFun
+deriving instance Lean.ToJson for Spec.PredExpr
 deriving instance Lean.ToJson for Residual
 deriving instance Lean.ToJson for Effect
 deriving instance Lean.ToJson for TPE.ResidualPolicy

@@ -27,7 +27,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 2 | `phase2-anyall-lean-spec` | DONE — review converged (2 rounds); T2.3 type rule deferred (D-11) |
 | 3 | `phase3-anyall-rust-eval-validator` | DONE — review converged (1 round) |
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
-| 5 | `phase5-anyall-symcc` | planning |
+| 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
 | 6 | `phase6-anyall-drt-differential` | not started |
 | 6.5 | `phase6_5-anyall-tpe` | not started |
 | 7 | `phase7-anyall-docs` | not started |
@@ -161,6 +161,33 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 
 ## Phase 5 — SymCC analyzability, gated
 
+**Status (2026-10-09, Phase 5B):** M1–M4 of SymCC `.all` support are DONE — `compile`,
+`compile_interpret_on_footprint`, `compile_evaluate`, and the footprint (`footprintAllPred`,
+D-71) all handle `.all` with proofs (axioms = the three standard ones; see run notes). The
+`compile_well_typed` (well-typed ⇒ compiles) dispatcher `compilePred_well_typed` is DONE
+(all 13 arms, 0 sorry, axioms `[propext, Classical.choice, Quot.sound]`). Its `.all`
+assembly is BLOCKED on **D-74 (OPEN)** — `normalize_evaluatePred` needs predicate type
+soundness, which does not yet exist. **D-74-interim** (committed): `TypedExpr.SymCCSupported
+(.all _ _ _) := false` so the `well-typed ⇒ compiles` fragment temporarily excludes `.all`
+and `compile_well_typed_on_wf_expr`'s `.all` arm closes by contradiction — this keeps every
+theorem true while D-74 is decided (restore the real guard + arm under option A or C').
+CedarFFI `ToJson` now serializes the anyall nodes (`Op.set.all`, `PredExpr`).
+**D-77 (SETTLED, option b) — DONE:** the `SymCCSupported` guard is threaded into the SymCC
+verifier COMPLETENESS lane only. `compile_ok_iff_welltypedpolicy[ies]_ok` is split into the
+UNGUARDED `.mp` (`compile_ok_implies_welltypedpolicy[ies]_ok`, soundness) and a GUARDED
+biconditional; every `verify*_is_ok` caller and `*Opt?_eqv_*?` / `check*_eqv_*` (and their
+`_ok`) theorem now carries a `PolicySymCCSupported`/`PoliciesSymCCSupported` hypothesis.
+Soundness-lane theorems stay unguarded. **Full tree is GREEN** (782 jobs; Cedar, SymCC,
+SymTest, UnitTest, DiffTest, Protobuf, CedarProto), 0 sorry; the DRT FFI static-lib target
+(`lake build Cedar:static Protobuf:static CedarProto:static Cedar.SymCC:static CedarFFI:static
+Batteries:static`) builds and archives `libCedar_CedarFFI.a` (1079 jobs). Guarded top-level
+verifier theorems' axioms = `[propext, Classical.choice, Quot.sound]` (no sorryAx). The
+`CedarSymTests` executable **links and runs** here with the documented env
+`LIBRARY_PATH=$HOME/.elan/toolchains/leanprover--lean4---v4.34.1/lib:$HOME/.elan/toolchains/leanprover--lean4---v4.34.1/lib/lean`
+and `CVC5` set (D-13 host quirk): **1216/1216 success, 0 failure** (AnyAll.e2e 12/12, incl. the
+F4 overflow error-path and `.any`-lowering cases). `.all` COMPLETENESS of `compile_well_typed`
+remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A or C').
+
 - **T5.1 SymCC compiler arm for `all` (gated).**
   `Cedar/SymCC/Compiler.lean` (+ `SymCCOpt/`): compile `all` to a bounded conjunction over the
   symbolic set's elements of the compiled set-free predicate; reject predicates that contain a
@@ -280,6 +307,25 @@ times cvc5 on each verb.
   smoke-bench at one small size with a generous timeout to catch gross regressions, kept off the
   default path.
   _Satisfies:_ 5.4 (documents the practical analyzability envelope).
+
+
+## Phase 9 — Enforcer set-footprint extension (D-70 option B) — PLANNED-LATER (not in current stack)
+
+Follow-up to D-70 (RESOLVED 2026-10-09: option A shipped in Phase 5B; option B deferred to here).
+The user placed this at **Phase 9**, the very end of the stack, AFTER Phase 8 benchmarks. This is now
+the concrete meaning of "Phase 9" — superseding the historical "phase 9 = end of the branch stack"
+reading in D-01 (there is no separate abstract Phase 9; this is it).
+
+Phase 5B option A keeps the quantifier footprint `it`-free by having `compile` reject `.all`
+predicates that apply `in` (the ancestors UF) to an `it`-dependent left operand. Phase 9 lifts that
+restriction by extending the Enforcer with SET-TYPED footprint entries (the receiver set itself),
+grounding the hierarchy assumptions via `set.filter` instead of only over finitely-many named entity
+Terms, and extending `SameOn` to grant ancestor agreement over the filtered set. Scope: acyclicity for
+a set entry is one `set.filter`; element-vs-footprint-term transitivity is one `set.filter`;
+element-vs-element transitivity is a `set.filter` NESTED over the same set — whose SMT decidability
+(does cvc5's `ALL`/`set.filter` fragment stay decidable under the nested quantifier?) is the open
+question this phase must settle before committing to the encoding. Status: PLANNED-LATER.
+_See:_ `branches/phase9-anyall-set-footprint/PLAN.md`, DECISIONS.md D-70.
 
 ---
 

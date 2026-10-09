@@ -56,6 +56,7 @@ def EvaluatesTo (e: Expr) (request : Request) (entities : Entities) (v : Value) 
   evaluate e request entities = .error .entityDoesNotExist ∨
   evaluate e request entities = .error .extensionError ∨
   evaluate e request entities = .error .arithBoundsError ∨
+  evaluate e request entities = .error .quantifierError ∨
   evaluate e request entities = .ok v
 
 /--

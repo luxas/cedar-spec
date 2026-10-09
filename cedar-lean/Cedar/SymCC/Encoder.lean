@@ -299,7 +299,71 @@ def defineApp (tyEnc : String) (op : Op) (tEncs : List String) (ts : List Term):
   | .uuf f         => defineTerm tyEnc s!"({← encodeUUF f} {args})"
   | _              => defineTerm tyEnc s!"({encodeOp op} {args})"
 
-def encodeTerm (t : Term) : EncoderM String := do
+/-- Does the term mention the reserved `.all` bound element variable `!anyall!it`?
+A subterm that does not can be safely A-normal-form-lifted (encoded with
+`encodeTerm`) even inside the `set.filter` lambda body (it is closed w.r.t. the
+binder); only subterms that do must be encoded inline (D-53). -/
+partial def Term.mentionsAnyAllIt : Term → Bool
+  | .var v        => v.id = "!anyall!it"
+  | .prim _       => false
+  | .none _       => false
+  | .some t       => Term.mentionsAnyAllIt t
+  | .set ts _     => ts.elts.any (fun t => Term.mentionsAnyAllIt t)
+  | .record ats   => ats.toList.any (fun p => Term.mentionsAnyAllIt p.2)
+  | .app _ ts _   => ts.any (fun t => Term.mentionsAnyAllIt t)
+
+mutual
+/--
+Encode a Term *inline* (not in A-normal form) for use inside a `set.filter`
+lambda body (the `set.all` encoding, D-52/D-53). Subterms that do NOT mention the
+reserved bound variable `!anyall!it` are closed w.r.t. the binder and delegated
+to the ANF `encodeTerm` (returning a top-level id, valid inside the lambda); only
+subterms that mention it are inlined. Covers the full `compilePred` fragment:
+`record.get` (record & entity attribute access), `uuf` applications (entity
+attributes / ancestors / tags), `string.like`, extension ops, `option.get`,
+`eq`/`ite`/`and`/`or`/`not`, bitvector ops, and set membership/subset/inter. -/
+partial def encodeTermInline (t : Term) : EncoderM String := do
+  if !(Term.mentionsAnyAllIt t) then return (← encodeTerm t)
+  match t with
+  | .var v =>
+    if v.id = "!anyall!it" then return "!anyall!it" else return (← encodeTerm t)
+  | .some t₁ => return s!"(some {← encodeTermInline t₁})"
+  | .set ts ety =>
+    let encs ← ts.elts.mapM encodeTermInline
+    if encs.isEmpty then return s!"(as set.empty {← encodeType (.set ety)})"
+    else return s!"(set.insert {String.intercalate " " encs} (as set.empty {← encodeType (.set ety)}))"
+  | .app op args _ =>
+    match op, args with
+    | Op.record.get a, [r] =>
+      let rEnc ← encodeTermInline r
+      let aIdx ← indexOfAttrInline a r.typeOf
+      return s!"({aIdx} {rEnc})"
+    | Op.string.like p, [a] => return s!"(str.in_re {← encodeTermInline a} {← encodePattern p})"
+    | Op.option.get, [a]    => return s!"(val {← encodeTermInline a})"
+    | .uuf f, [a]           => return s!"({← encodeUUF f} {← encodeTermInline a})"
+    | .ext xop, [a]         => return s!"({encodeExtOp xop} {← encodeTermInline a})"
+    | .eq, [a, b]           => return s!"(= {← encodeTermInline a} {← encodeTermInline b})"
+    | .zero_extend n, [a]   => return s!"((_ zero_extend {n}) {← encodeTermInline a})"
+    | _, _ =>
+      let encs ← args.mapM encodeTermInline
+      return s!"({encodeOp op} {String.intercalate " " encs})"
+  | _ => throw (IO.userError "encodeTermInline: unexpected term shape mentioning the bound variable")
+
+/-- Inline analogue of `indexOfAttr`/`defineRecordGet`: resolve the SMT selector
+id `R_a<idx>` for attribute `a` of record type `ty`. -/
+partial def indexOfAttrInline (a : Attr) (ty : TermType) : EncoderM String := do
+  match ty with
+  | .record (.mk rty) =>
+    match rty.findIdx? (Prod.fst · = a) with
+    | .some attrIdx =>
+      let rId ← match (← get).types.get? ty with
+        | .some rId => pure rId
+        | .none => throw (IO.userError "record.get on unencoded type in quantifier body")
+      return recordAttrId rId attrIdx
+    | .none => throw (IO.userError s!"Unknown record attribute `{a}` in quantifier body")
+  | _ => throw (IO.userError "record.get on non-record type in quantifier body")
+
+partial def encodeTerm (t : Term) : EncoderM String := do
   if let (.some enc) := (← get).terms.get? t then return enc
   let tyEnc ← encodeType t.typeOf
   let enc ←
@@ -331,8 +395,23 @@ def encodeTerm (t : Term) : EncoderM String := do
         -- we could put anything here and be sound, because `bvnego` should only be
         -- applied to Terms of type .bitvec
         return "false"
+    | .app Op.set.all [setT, predT, errT] _ =>
+      -- D-52 tri-valued set.filter encoding (HO_ALL):
+      -- ite (not (set.filter (λ it. ERR[it]) S = ∅)) none (some (set.filter (λ it. P[it]) S = S))
+      let elemTyEnc ← match setT.typeOf with
+        | .set ety => encodeType ety
+        | _        => throw (IO.userError "set.all: receiver is not a set")
+      let sEnc ← encodeTerm setT
+      let predEnc ← encodeTermInline predT
+      let errEnc ← encodeTermInline errT
+      let valFilter := s!"(set.filter (lambda ((!anyall!it {elemTyEnc})) {predEnc}) {sEnc})"
+      let errFilter := s!"(set.filter (lambda ((!anyall!it {elemTyEnc})) {errEnc}) {sEnc})"
+      let v := s!"(= {valFilter} {sEnc})"
+      let e := s!"(not (= {errFilter} (as set.empty (Set {elemTyEnc}))))"
+      defineTerm tyEnc s!"(ite {e} (as none {tyEnc}) (some {v}))"
     | .app op ts _      => defineApp tyEnc op (← ts.mapM₁ (λ ⟨tᵢ, _⟩ => encodeTerm tᵢ)) ts
   modifyGet λ state => (enc, {state with terms := state.terms.insert t enc})
+end
 
 /--
 Once you've generated `Asserts` with one of the functions in Verifier.lean, you
@@ -351,7 +430,7 @@ etc.
 public def encode (ts : List Term) (εnv : SymEnv) (produceModels : Bool := false) : SolverM EncoderState := do
   Solver.reset
   Solver.setOptionProduceModels produceModels
-  Solver.setLogic "ALL"
+  Solver.setLogic "HO_ALL"
   Solver.declareDatatype "Option" ["X"] ["(none)", "(some (val X))"]
   let (ids, s) ← ts.mapM encodeTerm |>.run (EncoderState.init εnv)
   for id in ids do

@@ -24,6 +24,8 @@ import all Cedar.Thm.SymCC.Compiler.Invert -- we require some lemmas from Compil
 public import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Term.TypeOf
 import Cedar.Thm.SymCC.Term.WF
+import all Cedar.Thm.SymCC.Compiler.SetAllWF
+import all Cedar.Thm.SymCC.Compiler.CompilePredWF
 
 /-!
 This file proves that both `compile` and `evaluate` preserve well-formedness.
@@ -885,6 +887,444 @@ private theorem compile_call_wf {f : ExtFun} {xs : List Expr} {εnv : SymEnv} {t
   replace ⟨x, hx, heq⟩ := List.forall₂_implies_all_right heq t ht
   simp only [@ih x hx εnv t (hwf x hx) heq]
 
+public theorem compileIf_wf {εs : SymEntities} {t₁ t : Term} {r₂ r₃ : SymCC.Result Term}
+  (hw₁ : t₁.WellFormed εs)
+  (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ ∃ ty, t₂.typeOf = .option ty)
+  (hr₃ : ∀ t₃, r₃ = .ok t₃ → t₃.WellFormed εs ∧ ∃ ty, t₃.typeOf = .option ty)
+  (hok : compileIf t₁ r₂ r₃ = .ok t) : t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty := by
+  rw [compileIf.eq_def] at hok
+  split at hok
+  · exact hr₂ t hok
+  · exact hr₃ t hok
+  · rename_i hguard
+    cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    cases he3 : r₃ <;> simp only [he3, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₂ t₃
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    rename_i hteq
+    have ⟨hw₂, ty₂, ht₂⟩ := hr₂ t₂ he2
+    have ⟨hw₃, ty₃, ht₃⟩ := hr₃ t₃ he3
+    have hg := wf_option_get hw₁ hguard
+    have hite := wf_ite hg.left hw₂ hw₃ hg.right hteq
+    have h := wf_ifSome_option hw₁ hite.left (by rw [hite.right]; exact ht₂)
+    exact ⟨h.left, ty₂, h.right⟩
+  · simp only [reduceCtorEq] at hok
+
+public theorem compileOr_wf {εs : SymEntities} {t₁ t : Term} {r₂ : SymCC.Result Term}
+  (hw₁ : t₁.WellFormed εs)
+  (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ ∃ ty, t₂.typeOf = .option ty)
+  (hok : compileOr t₁ r₂ = .ok t) : t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty := by
+  rw [compileOr.eq_def] at hok
+  split at hok
+  · simp only [Except.ok.injEq] at hok; subst hok
+    exact ⟨hw₁, .bool, by simp only [typeOf_term_some, typeOf_bool]⟩
+  · rename_i hguard
+    cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₂
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    rename_i ht₂eq
+    have ⟨hw₂, ty₂, ht₂⟩ := hr₂ t₂ he2
+    have hg := wf_option_get hw₁ hguard
+    have hite := wf_ite (t₂ := Term.some (Term.prim (TermPrim.bool true)))
+      hg.left (Term.WellFormed.some_wf wf_bool) hw₂ hg.right
+      (by simp only [typeOf_term_some, typeOf_bool, ← ht₂eq])
+    simp only [typeOf_term_some, typeOf_bool] at hite
+    have h := wf_ifSome_option hw₁ hite.left hite.right
+    exact ⟨h.left, _, h.right⟩
+  · simp only [reduceCtorEq] at hok
+
+public theorem compileAnd_wf {εs : SymEntities} {t₁ t : Term} {r₂ : SymCC.Result Term}
+  (hw₁ : t₁.WellFormed εs)
+  (hr₂ : ∀ t₂, r₂ = .ok t₂ → t₂.WellFormed εs ∧ ∃ ty, t₂.typeOf = .option ty)
+  (hok : compileAnd t₁ r₂ = .ok t) : t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty := by
+  rw [compileAnd.eq_def] at hok
+  split at hok
+  · simp only [Except.ok.injEq] at hok; subst hok
+    exact ⟨hw₁, .bool, by simp only [typeOf_term_some, typeOf_bool]⟩
+  · rename_i hguard
+    cases he2 : r₂ <;> simp only [he2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₂
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    rename_i ht₂eq
+    have ⟨hw₂, ty₂, ht₂⟩ := hr₂ t₂ he2
+    have hg := wf_option_get hw₁ hguard
+    have hite := wf_ite (t₃ := Term.some (Term.prim (TermPrim.bool false)))
+      hg.left hw₂ (Term.WellFormed.some_wf wf_bool) hg.right
+      (by simp only [typeOf_term_some, typeOf_bool, ht₂eq])
+    have h := wf_ifSome_option hw₁ hite.left (by rw [hite.right, ht₂eq])
+    exact ⟨h.left, _, h.right⟩
+  · simp only [reduceCtorEq] at hok
+
+public theorem compileRecord_wf {εs : SymEntities} {ats : List (Attr × Term)}
+  (ih : ∀ a t, (a, t) ∈ ats → t.WellFormed εs ∧ ∃ ty, t.typeOf = .option ty) :
+  (compileRecord ats).WellFormed εs ∧ ∃ ty, (compileRecord ats).typeOf = .option ty := by
+  simp only [compileRecord]
+  have hwf := wf_prods_option_implies_wf_prods ih
+  have hwg := wf_prods_implies_wf_map_snd hwf
+  have ⟨hwo, ty, hty⟩ := wf_some_recordOf_map (wf_option_get_mem_of_type_snd ih)
+  have hwa := wf_ifAllSome hwg hwo hty
+  simp only [someOf, hwa, TermType.option.injEq, exists_eq', and_self]
+
+public theorem compilePred_wf {p : PredExpr} {it r : Term} {εnv : SymEnv} {elemTy : TermType}
+  (hwε : εnv.WellFormed) (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hok : compilePred p it εnv = Except.ok r) : r.WellFormed εnv.entities ∧ ∃ ty, r.typeOf = .option ty := by
+  match p with
+  | .item =>
+    simp only [compilePred, Except.ok.injEq] at hok; subst hok; exact ⟨hitw, elemTy, hitty⟩
+  | .lit l =>
+    simp only [compilePred, compilePrim] at hok
+    cases l <;> simp only [Except.ok.injEq, someOf] at * <;> first | subst hok | skip
+    · exact ⟨Term.WellFormed.some_wf wf_bool, typeOf_term_some_is_option⟩
+    · exact ⟨Term.WellFormed.some_wf wf_bv, typeOf_term_some_is_option⟩
+    · exact ⟨Term.WellFormed.some_wf (Term.WellFormed.prim_wf TermPrim.WellFormed.string_wf), typeOf_term_some_is_option⟩
+    · split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+      rename_i h; subst hok
+      exact ⟨Term.WellFormed.some_wf (Term.WellFormed.prim_wf (TermPrim.WellFormed.entity_wf h)), typeOf_term_some_is_option⟩
+  | .var v =>
+    simp only [compilePred, compileVar] at hok
+    have hwf := hwε.left
+    simp only [SymRequest.WellFormed] at hwf
+    split at hok <;> split at hok <;> simp only [Except.ok.injEq, someOf, reduceCtorEq] at hok <;> subst hok <;>
+      refine ⟨Term.WellFormed.some_wf ?_, typeOf_term_some_is_option⟩
+    · exact hwf.left
+    · exact hwf.right.right.right.right.left
+    · exact hwf.right.right.right.right.right.right.right.right.left
+    · exact hwf.right.right.right.right.right.right.right.right.right.right.right.right.left
+  | .ite x₁ x₂ x₃ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact compileIf_wf (compilePred_wf hwε hitw hitty h1).left
+      (fun t₂ he => compilePred_wf hwε hitw hitty he) (fun t₃ he => compilePred_wf hwε hitw hitty he) hok
+  | .and x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact compileAnd_wf (compilePred_wf hwε hitw hitty h1).left
+      (fun t₂ he => compilePred_wf hwε hitw hitty he) hok
+  | .or x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    exact compileOr_wf (compilePred_wf hwε hitw hitty h1).left
+      (fun t₂ he => compilePred_wf hwε hitw hitty he) hok
+  | .unaryApp op₁ x₁ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hA : compileApp₁ op₁ (option.get t₁) <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have hget := wf_option_get ih1w hty1
+    have ⟨haw, tya, hat⟩ := compileApp₁_wf hget.left hA
+    have h := wf_ifSome_option ih1w haw hat
+    exact ⟨h.left, tya, h.right⟩
+  | .binaryApp op₂ x₁ x₂ =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x₁ it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    cases h2 : compilePred x₂ it εnv <;> simp only [h2, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁ t₂
+    cases hA : compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities <;> simp only [hA, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have ⟨ih2w, ty2, hty2⟩ := compilePred_wf hwε hitw hitty h2
+    have hget1 := wf_option_get ih1w hty1
+    have hget2 := wf_option_get ih2w hty2
+    have ⟨haw, tya, hat⟩ := compileApp₂_wf hwε.right hget1.left hget2.left hA
+    have hinner := wf_ifSome_option ih2w haw hat
+    have h := wf_ifSome_option ih1w hinner.left hinner.right
+    exact ⟨h.left, _, h.right⟩
+  | .hasAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hH : compileHasAttr (option.get t₁) a εnv.entities <;> simp only [hH, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have hget := wf_option_get ih1w hty1
+    have ⟨haw, hat⟩ := compileHasAttr_wf hwε.right hget.left hH
+    have h := wf_ifSome_option ih1w haw hat
+    exact ⟨h.left, _, h.right⟩
+  | .getAttr x a =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    cases hG : compileGetAttr (option.get t₁) a εnv.entities <;> simp only [hG, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    simp only [Except.ok.injEq] at hok; subst hok
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    have hget := wf_option_get ih1w hty1
+    have ⟨haw, tya, hat⟩ := compileGetAttr_wf hwε.right hget.left hG
+    have h := wf_ifSome_option ih1w haw hat
+    exact ⟨h.left, tya, h.right⟩
+  | .extHasAttr x a ats =>
+    simp only [compilePred] at hok
+    cases h1 : compilePred x it εnv <;> simp only [h1, Except.bind_err, Except.bind_ok, reduceCtorEq] at hok
+    rename_i t₁
+    have ⟨ih1w, ty1, hty1⟩ := compilePred_wf hwε hitw hitty h1
+    rw [compileExtHasAttr_eq_compileExtHasAttrRec] at hok
+    have ⟨haw, hat⟩ := compileExtHasAttrRec_wf hwε.right ih1w ⟨ty1, hty1⟩ hok
+    exact ⟨haw, _, hat⟩
+  | .record axs =>
+    simp only [compilePred] at hok
+    simp_do_let (axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do Except.ok (a₁, ← compilePred x₁ it εnv))) at hok
+    rename_i ats hts
+    simp only [List.mapM₂_eq_mapM λ (q : Attr × PredExpr) => do
+        Except.ok (q.fst, ← compilePred q.snd it εnv),
+      List.mapM_ok_iff_forall₂] at hts
+    simp only [Except.ok.injEq] at hok; subst hok
+    apply compileRecord_wf
+    intro a t hmem
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts (a, t) hmem
+    cases hxv : compilePred px.snd it εnv <;>
+      simp only [hxv, Except.bind_err, Except.bind_ok, reduceCtorEq, Except.ok.injEq] at hp
+    rename_i tv
+    have hwv := compilePred_wf (p := px.snd) hwε hitw hitty hxv
+    simp only [Prod.mk.injEq] at hp
+    obtain ⟨_, rfl⟩ := hp
+    exact hwv
+  | .call xfn xs =>
+    simp only [compilePred] at hok
+    simp_do_let (xs.mapM₁ (λ ⟨x₁, _⟩ => compilePred x₁ it εnv)) at hok
+    rename_i ts hts
+    simp only [List.mapM₁_eq_mapM λ (q : PredExpr) => compilePred q it εnv,
+      List.mapM_ok_iff_forall₂] at hts
+    apply compileCall_wf _ hok
+    intro t ht
+    have ⟨px, hpx, hp⟩ := List.forall₂_implies_all_right hts t ht
+    exact (compilePred_wf (p := px) hwε hitw hitty hp).left
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have := List.sizeOf_snd_lt_sizeOf_list hpx; omega)
+      | (have := List.sizeOf_lt_of_mem hpx; omega)
+
+/-- Inner term of the compiler's literal-fold `.all` result (D-68): the `ite anyErr none (some conj)`
+fold over Bool-option-typed `pts` is well-formed of type `.option .bool`. -/
+public theorem compile_all_fold_inner_wf {εs : SymEntities} {pts : List Term}
+  (hpts : ∀ pti ∈ pts, pti.WellFormed εs ∧ pti.typeOf = .option .bool) :
+  (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term)))).WellFormed εs ∧
+  (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term)))).typeOf = .option .bool := by
+  -- conjunction (fold of `option.get pti`) is WF + bool
+  have hconj := foldr_and_wf (εs := εs) (g := fun pti => option.get pti) pts (by
+    intro pti hmem
+    have ⟨hw, hty⟩ := hpts pti hmem
+    exact wf_option_get hw hty)
+  -- error disjunction (fold of `not (isSome pti)`) is WF + bool
+  have hanyErr := foldr_or_wf (εs := εs) (g := fun pti => Factory.not (Factory.isSome pti)) pts (by
+    intro pti hmem
+    have hns := wf_isSome (hpts pti hmem).left
+    exact wf_not hns.left hns.right)
+  -- someOf conj
+  have hsomew : (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))).WellFormed εs :=
+    Term.WellFormed.some_wf hconj.left
+  have hsomety : (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))).typeOf = .option .bool := by
+    simp only [Factory.someOf, typeOf_term_some, hconj.right]
+  -- noneOf .bool
+  have hnonew : (Factory.noneOf .bool).WellFormed εs := Term.WellFormed.none_wf TermType.WellFormed.bool_wf
+  have hnonety : (Factory.noneOf .bool).typeOf = .option .bool := by simp only [Factory.noneOf, typeOf_term_none]
+  -- the inner ite
+  have hite := wf_ite hanyErr.left hnonew hsomew hanyErr.right (by rw [hnonety, hsomety])
+  rw [hnonety] at hite
+  exact hite
+
+/-- D-68: WF of the literal-fold result produced by the compiler's `.all` arm.
+Each `pti ∈ pts` is a compiled per-element predicate whose `option.get` is
+Bool-typed (the D-65 guard in the `mapM`); the fold builds a conjunction and an
+error-disjunction, wrapped by `ite`/`ifSome`. -/
+public theorem compile_all_fold_result_wf {εs : SymEntities} {t : Term} {ety : TermType} {pts : List Term}
+  (htw : t.WellFormed εs) (htty : t.typeOf = .option (.set ety))
+  (hpts : ∀ pti ∈ pts, pti.WellFormed εs ∧ pti.typeOf = .option .bool) :
+  (Factory.ifSome t
+      (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).WellFormed εs ∧
+  (Factory.ifSome t
+      (Factory.ite
+        (pts.foldr (fun pti acc => Factory.or (Factory.not (Factory.isSome pti)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (pts.foldr (fun pti acc => Factory.and (option.get pti) acc) (true : Term))))).typeOf = .option .bool := by
+  have hite := compile_all_fold_inner_wf hpts
+  exact wf_ifSome_option htw hite.left hite.right
+
+/-- Public twin of `compile_all_wf`'s symbolic sub-proof: the symbolic `.all` result term
+(`ifSome t₁ (set.all (option.get t₁) (option.get pt) (not (isSome pt)))`) is well-formed of type
+`.option .bool`, given a well-formed set-typed receiver and a Bool-typed compiled predicate. -/
+public theorem compile_all_symbolic_inner_wf {p : PredExpr} {εnv : SymEnv} {t₁ pt : Term} {elemTy : TermType}
+  (hwε : εnv.WellFormed)
+  (hwt₁ : t₁.WellFormed εnv.entities) (hty₁ : t₁.typeOf = .option (.set elemTy))
+  (hpt : compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv = Except.ok pt)
+  (hpbool : (option.get pt).typeOf = .bool) :
+  (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt))).WellFormed εnv.entities ∧
+  (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt))).typeOf = .option .bool := by
+  have hgt := wf_option_get hwt₁ hty₁
+  have hel : TermType.WellFormed εnv.entities elemTy := by
+    have hw := typeOf_wf_term_is_wf hgt.left
+    rw [hgt.right] at hw
+    cases hw with | set_wf h => exact h
+  have hvarw : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).WellFormed εnv.entities :=
+    Term.WellFormed.some_wf (Term.WellFormed.var_wf hel)
+  have hvarty : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).typeOf = .option elemTy := by
+    simp only [Factory.someOf, typeOf_term_some, typeOf_term_var, Factory.anyAllItVar]
+  have hvarn : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).NoSetAll = true := by
+    simp only [Factory.someOf, Term.NoSetAll]
+  have hvara : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).anyAllItTyped elemTy = true := by
+    simp [Factory.someOf, Term.anyAllItTyped, Factory.anyAllItVar]
+  have ⟨hptw, pty, hptty⟩ := compilePred_wf hwε hvarw hvarty hpt
+  have hptn := compilePred_noSetAll hwε hvarn hpt
+  have hpta := compilePred_anyAllItTyped (elemTy := elemTy) hwε hvara hpt
+  have hgp := wf_option_get hptw hptty
+  rw [hpbool] at hgp
+  have hgpn : (option.get pt).NoSetAll = true := noSetAll_option_get hptn
+  have hgpa : (option.get pt).anyAllItTyped elemTy = true := anyAllItTyped_option_get hpta
+  have hns := wf_isSome hptw
+  have hnotw := wf_not hns.left hns.right
+  have hnotn : (Factory.not (isSome pt)).NoSetAll = true := noSetAll_not (noSetAll_isSome hptn)
+  have hnota : (Factory.not (isSome pt)).anyAllItTyped elemTy = true := anyAllItTyped_not (anyAllItTyped_isSome hpta)
+  exact wf_set_all hgt.left hgt.right hgp.left hpbool hnotw.left hnotw.right hgpn hnotn hgpa hnota
+
+private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
+  (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
+  (hok : compile (Expr.all x₁ p) εnv = Except.ok t)
+  (ih₁ : CompileWF x₁) :
+  t.WellFormed εnv.entities ∧ t.typeOf = .option .bool := by
+  have hwφ₁ : SymEnv.WellFormedFor εnv x₁ := by
+    refine ⟨hwf.left, ?_⟩
+    have hv := hwf.right
+    cases hv with | all_valid hvx _ => exact hvx
+  rw [compile.eq_def] at hok
+  simp only [] at hok
+  split at hok
+  · simp only [reduceCtorEq] at hok   -- D-71 guard: ¬ NoItDependentIn ⇒ .error, contradicts hok
+  simp_do_let (compile x₁ εnv) at hok
+  rename_i t₁ hr₁
+  have ⟨ih1w, ty1, hty1⟩ := ih₁ hwφ₁ hr₁
+  split at hok
+  · -- D-69: `.none ty` receiver
+    rename_i ty
+    split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+    subst hok
+    refine ⟨Term.WellFormed.none_wf TermType.WellFormed.bool_wf, ?_⟩
+    simp only [Factory.noneOf, typeOf_term_none]
+  · -- non-`.none` receiver: existing structure
+    split at hok
+    · rename_i elemTy helemq
+      -- shared receiver facts (independent of the fold / symbolic split)
+      have hgt := wf_option_get ih1w hty1
+      have htys : ty1 = .set elemTy := by rw [← hgt.right]; exact helemq
+      rw [htys] at hgt
+      have hel : TermType.WellFormed εnv.entities elemTy := by
+        have hw := typeOf_wf_term_is_wf hgt.left
+        rw [hgt.right] at hw
+        cases hw with | set_wf h => exact h
+      -- symbolic path proof, reused by both symbolic sub-cases
+      have symbolic :
+        ∀ {pt : Term},
+          compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv = Except.ok pt →
+          (option.get pt).typeOf = .bool →
+          (Factory.ifSome t₁ (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt)))).WellFormed εnv.entities ∧
+          (Factory.ifSome t₁ (Factory.set.all (option.get t₁) (option.get pt) (Factory.not (Factory.isSome pt)))).typeOf = .option .bool := by
+        intro pt hpt hpbool
+        have hvarw : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).WellFormed εnv.entities :=
+          Term.WellFormed.some_wf (Term.WellFormed.var_wf hel)
+        have hvarty : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).typeOf = .option elemTy := by
+          simp only [Factory.someOf, typeOf_term_some, typeOf_term_var, Factory.anyAllItVar]
+        have hvarn : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).NoSetAll = true := by
+          simp only [Factory.someOf, Term.NoSetAll]
+        have hvara : (Factory.someOf (Term.var (Factory.anyAllItVar elemTy))).anyAllItTyped elemTy = true := by
+          simp [Factory.someOf, Term.anyAllItTyped, Factory.anyAllItVar]
+        have ⟨hptw, pty, hptty⟩ := compilePred_wf hwf.left hvarw hvarty hpt
+        have hptn := compilePred_noSetAll hwf.left hvarn hpt
+        have hpta := compilePred_anyAllItTyped (elemTy := elemTy) hwf.left hvara hpt
+        have hgp := wf_option_get hptw hptty
+        rw [hpbool] at hgp
+        have hgpn : (option.get pt).NoSetAll = true := noSetAll_option_get hptn
+        have hgpa : (option.get pt).anyAllItTyped elemTy = true := anyAllItTyped_option_get hpta
+        have hns := wf_isSome hptw
+        have hnotw := wf_not hns.left hns.right
+        have hnotn : (Factory.not (isSome pt)).NoSetAll = true := noSetAll_not (noSetAll_isSome hptn)
+        have hnota : (Factory.not (isSome pt)).anyAllItTyped elemTy = true := anyAllItTyped_not (anyAllItTyped_isSome hpta)
+        have hsa := wf_set_all hgt.left hgt.right hgp.left hpbool hnotw.left hnotw.right hgpn hnotn hgpa hnota
+        exact wf_ifSome_option ih1w hsa.left hsa.right
+      -- now split on the inner `match option.get t₁`
+      split at hok
+      · rename_i vs ety' hvseq
+        -- `option.get t₁ = .set (Set.mk vs) ety'`; so ety' = elemTy and the set is WF
+        have htyeq : ety' = elemTy := by
+          have := hgt.right
+          rw [hvseq] at this
+          simp only [Term.typeOf, TermType.set.injEq] at this
+          exact this
+        subst htyeq
+        split at hok
+        · -- literal fold path
+          rename_i hlit
+          simp only [List.all_eq_true] at hlit
+          -- element facts from set-WF of (option.get t₁)
+          have hsetw := hgt.left
+          rw [hvseq] at hsetw
+          have helts : ∀ vi ∈ vs, vi.WellFormed εnv.entities ∧ vi.typeOf = ety' := by
+            cases hsetw with | set_wf h₁ h₂ _ _ =>
+            intro vi hmem
+            exact ⟨h₁ vi hmem, by rw [h₂ vi hmem]⟩
+          -- extract pts from the mapM
+          simp_do_let (vs.mapM (fun vi => do
+            let pti ← compilePred p (Factory.someOf vi) εnv
+            if (option.get pti).typeOf = TermType.bool then Except.ok pti else Except.error SymCC.Error.typeError)) at hok
+          rename_i pts hpts
+          simp only [Except.ok.injEq] at hok; subst hok
+          rw [List.mapM_ok_iff_forall₂] at hpts
+          -- per-element WF of pts entries
+          have hptsfacts : ∀ pti ∈ pts, pti.WellFormed εnv.entities ∧ pti.typeOf = .option .bool := by
+            intro pti hmem
+            have ⟨vi, hvimem, hvi⟩ := List.forall₂_implies_all_right hpts pti hmem
+            -- hvi : (do let p ← compilePred ...; if ... then .ok p else .error) = .ok pti
+            cases hcp : compilePred p (Factory.someOf vi) εnv <;>
+              simp only [hcp, Except.bind_err, Except.bind_ok, reduceCtorEq] at hvi
+            rename_i cpt
+            split at hvi <;> simp only [Except.ok.injEq, reduceCtorEq] at hvi
+            rename_i hbool; subst hvi
+            have ⟨hvw, hvty⟩ := helts vi hvimem
+            have hviw : (Factory.someOf vi).WellFormed εnv.entities := Term.WellFormed.some_wf hvw
+            have hvity : (Factory.someOf vi).typeOf = .option ety' := by
+              simp only [Factory.someOf, typeOf_term_some, hvty]
+            have ⟨hcpw, cty, hcpty⟩ := compilePred_wf hwf.left hviw hvity hcp
+            -- (option.get cpt).typeOf = .bool and cpt.typeOf = .option cty ⇒ cty = .bool
+            have hgcp := wf_option_get hcpw hcpty
+            rw [hbool] at hgcp
+            refine ⟨hcpw, ?_⟩
+            rw [hcpty, hgcp.right]
+          have hres := compile_all_fold_result_wf (ety := ety') ih1w (by rw [hty1, htys]) hptsfacts
+          exact ⟨hres.left, hres.right⟩
+        · -- inner symbolic path (else of the literal guard)
+          rename_i hlit
+          simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar ety'))) εnv) at hok
+          rename_i pt hpt
+          split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+          rename_i hpbool; subst hok
+          have h := symbolic hpt hpbool
+          exact ⟨h.left, h.right⟩
+      · -- typeOf-symbolic path (option.get t₁ not a literal set)
+        simp_do_let (compilePred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv) at hok
+        rename_i pt hpt
+        split at hok <;> simp only [Except.ok.injEq, reduceCtorEq] at hok
+        rename_i hpbool; subst hok
+        have h := symbolic hpt hpbool
+        exact ⟨h.left, h.right⟩
+    · simp only [reduceCtorEq] at hok
+
 public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
   εnv.WellFormedFor x →
   compile x εnv = .ok t →
@@ -939,7 +1379,17 @@ public theorem compile_wf {x : Expr} {εnv : SymEnv} {t : Term} :
       intro xᵢ _
       exact @compile_wf xᵢ
     exact compile_call_wf hwf hok ih
-  | .all _ _         => simp [compile] at hok
+  | .all x₁ p        =>
+    have ih₁ := @compile_wf x₁
+    have h := compile_all_wf hwf hok ih₁
+    exact ⟨h.1, .bool, h.2⟩
+
+/-- The compiled `.all` term is well-formed of type `.option .bool`. -/
+public theorem typeOf_compile_all_option_bool {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
+    (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
+    (hok : compile (Expr.all x₁ p) εnv = Except.ok t) :
+    t.typeOf = .option .bool :=
+  (compile_all_wf hwf hok (fun h₁ h₂ => compile_wf h₁ h₂)).2
 
 public theorem compile_extHasAttr_typeOf {x₁ : Expr} {a : Attr} {l : List Attr} {εnv : SymEnv} {t : Term}
   (hwf : SymEnv.WellFormedFor εnv (Expr.extHasAttr x₁ a l))
@@ -969,15 +1419,15 @@ private def EvaluateWF (x : Expr)  : Prop :=
     evaluate x env.request env.entities = .ok v →
     v.WellFormed env.entities
 
-private theorem value_bool_wf {b : Bool} {es : Entities} :
+public theorem value_bool_wf {b : Bool} {es : Entities} :
   Value.WellFormed es (Value.prim (.bool b))
 := by exact Value.WellFormed.prim_wf (by simp only [Prim.WellFormed])
 
-private theorem value_int_wf {i : Int64} {es : Entities} :
+public theorem value_int_wf {i : Int64} {es : Entities} :
   Value.WellFormed es (Value.prim (.int i))
 := by exact Value.WellFormed.prim_wf (by simp only [Prim.WellFormed])
 
-private theorem value_record_wf_implies_attr_value_wf {r : Map Attr Value} {a : Attr} {v : Value} {es : Entities} :
+public theorem value_record_wf_implies_attr_value_wf {r : Map Attr Value} {a : Attr} {v : Value} {es : Entities} :
   Value.WellFormed es (Value.record r) →
   Map.find? r a = some v →
   Value.WellFormed es v
@@ -1112,7 +1562,7 @@ private theorem evaluate_hasAttr_wf {x : Expr} {a : Attr} {env : Env} {v : Value
     subst hok
     exact value_bool_wf
 
-private theorem hasAttrs_loop_ok_is_bool {v : Value} {attrs : List Attr} {es : Entities} {r : Value} :
+public theorem hasAttrs_loop_ok_is_bool {v : Value} {attrs : List Attr} {es : Entities} {r : Value} :
   hasAttrs.loop v attrs es = .ok r →
   ∃ b, r = Value.prim (.bool b)
 := by
@@ -1130,7 +1580,7 @@ private theorem hasAttrs_loop_ok_is_bool {v : Value} {attrs : List Attr} {es : E
         exact ⟨false, hok.symm⟩
     · simp at hok
 
-private theorem hasAttrs_ok_is_bool {v : Value} {attr : Attr} {attrs : List Attr} {es : Entities} {r : Value} :
+public theorem hasAttrs_ok_is_bool {v : Value} {attr : Attr} {attrs : List Attr} {es : Entities} {r : Value} :
   hasAttrs v attr attrs es = .ok r →
   ∃ b, r = Value.prim (.bool b)
 := by
@@ -1181,7 +1631,7 @@ private theorem evaluate_getAttr_wf {x : Expr} {a : Attr} {env : Env} {v : Value
   case h_3 =>
     simp only [Except.bind_err, reduceCtorEq] at hok
 
-private theorem intOrErr_ok_wf {i : Option Int64} {v : Value} {es : Entities} :
+public theorem intOrErr_ok_wf {i : Option Int64} {v : Value} {es : Entities} :
   intOrErr i = Except.ok v → Value.WellFormed es v
 := by
   intro hok
@@ -1204,7 +1654,7 @@ private theorem evaluate_unaryApp_wf {op : UnaryOp} {x : Expr} {env : Env} {v : 
   case h_2 =>
     exact intOrErr_ok_wf hok
 
-private theorem inₛ_wf {uid : EntityUID} {vs : Set Value} {es : Entities} {v : Value} :
+public theorem inₛ_wf {uid : EntityUID} {vs : Set Value} {es : Entities} {v : Value} :
   inₛ uid vs es = Except.ok v → Value.WellFormed es v
 := by
   intro hok
@@ -1349,5 +1799,29 @@ public theorem wf_value_uid_implies_exists_entity_data {es : Entities} {uid : En
   cases hwf ; rename_i hwf
   simp only [Prim.WellFormed, Map.contains_iff_some_find?] at hwf
   exact hwf
+
+/-- Public re-export of `compilePred_noSetAll` (D-68): a compiled predicate over a
+`NoSetAll` `it` is itself `NoSetAll`. Needed by the non-module `AllInterpret`, which
+cannot `import all` the module `CompilePredWF` where the original lives. -/
+public theorem compilePred_noSetAll' {p : PredExpr} {it r : Term} {εnv : SymEnv}
+    (hwε : εnv.WellFormed) (hit : it.NoSetAll = true) (hok : compilePred p it εnv = Except.ok r) :
+    r.NoSetAll = true :=
+  compilePred_noSetAll hwε hit hok
+
+/-- Public re-export of `compilePred_anyAllItTyped` (D-68). See `compilePred_noSetAll'`. -/
+public theorem compilePred_anyAllItTyped' {p : PredExpr} {it r : Term} {εnv : SymEnv} {elemTy : TermType}
+    (hwε : εnv.WellFormed) (hit : it.anyAllItTyped elemTy = true) (hok : compilePred p it εnv = Except.ok r) :
+    r.anyAllItTyped elemTy = true :=
+  compilePred_anyAllItTyped hwε hit hok
+
+/-- Public re-export of `wf_set_all` (D-68). See `compilePred_noSetAll'`. -/
+public theorem wf_set_all' {εs : SymEntities} {S P E : Term} {ety : TermType}
+    (hSwf : S.WellFormed εs) (hSty : S.typeOf = .set ety)
+    (hPwf : P.WellFormed εs) (hPty : P.typeOf = .bool)
+    (hEwf : E.WellFormed εs) (hEty : E.typeOf = .bool)
+    (hPn : P.NoSetAll = true) (hEn : E.NoSetAll = true)
+    (hPa : P.anyAllItTyped ety = true) (hEa : E.anyAllItTyped ety = true) :
+    (Factory.set.all S P E).WellFormed εs ∧ (Factory.set.all S P E).typeOf = .option .bool :=
+  wf_set_all hSwf hSty hPwf hPty hEwf hEty hPn hEn hPa hEa
 
 end Cedar.Thm

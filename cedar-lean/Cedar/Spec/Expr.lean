@@ -246,4 +246,98 @@ end
 
 public instance : DecidableEq Expr := decExpr
 
+/--
+Internal placeholder expression standing for the quantifier element keyword `it`
+(`PredExpr.item`) when a predicate is reconstructed as an `Expr` for typing. It is
+never evaluated: the evaluator binds the real element value through
+`evaluatePred`. Only its identity (as a capability key, and as a non-literal for
+equality typing) matters, so any fixed closed expression serves; `principal` is
+used because it is always well-typed in any request environment. This mirrors the
+Rust validator's reserved unknown `__cedar::anyall::it` (D-21/D-44).
+-/
+public def itExpr : Expr := .var .principal
+
+/--
+Reconstruct the `Expr` denoted by a predicate, substituting the element keyword
+`it` with `itExpr`. Used to type a predicate by reusing the ordinary expression
+typing machinery (D-44). The set-free, non-nested shape of `PredExpr` (no `set`,
+no `all`) is preserved — the result never contains `Expr.set` or `Expr.all`.
+-/
+public def PredExpr.toExpr : PredExpr → Expr
+  | .item               => itExpr
+  | .lit l              => .lit l
+  | .var v              => .var v
+  | .ite a b c          => .ite a.toExpr b.toExpr c.toExpr
+  | .and a b            => .and a.toExpr b.toExpr
+  | .or a b             => .or a.toExpr b.toExpr
+  | .unaryApp op a      => .unaryApp op a.toExpr
+  | .binaryApp op a b   => .binaryApp op a.toExpr b.toExpr
+  | .getAttr a attr     => .getAttr a.toExpr attr
+  | .hasAttr a attr     => .hasAttr a.toExpr attr
+  | .extHasAttr a attr attrs => .extHasAttr a.toExpr attr attrs
+  | .record axs         => .record $ axs.map₂ (λ ⟨(a, e), _⟩ => (a, e.toExpr))
+  | .call f xs          => .call f $ xs.map₁ (λ ⟨e, _⟩ => e.toExpr)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
+/--
+Does the predicate syntactically mention the current set element `it`
+(`PredExpr.item`)?  SymCC uses this to keep the quantifier footprint `it`-free.
+-/
+public def PredExpr.mentionsIt : PredExpr → Bool
+  | .item                    => true
+  | .lit _                   => false
+  | .var _                   => false
+  | .ite c t e               => c.mentionsIt || t.mentionsIt || e.mentionsIt
+  | .and a b                 => a.mentionsIt || b.mentionsIt
+  | .or a b                  => a.mentionsIt || b.mentionsIt
+  | .unaryApp _ e            => e.mentionsIt
+  | .binaryApp _ a b         => a.mentionsIt || b.mentionsIt
+  | .getAttr e _             => e.mentionsIt
+  | .hasAttr e _             => e.mentionsIt
+  | .extHasAttr e _ _        => e.mentionsIt
+  | .record axs              => axs.attach₂.any (λ x => x.val.snd.mentionsIt)
+  | .call _ xs               => xs.attach.any (λ x => have := List.sizeOf_lt_of_mem x.property; x.val.mentionsIt)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
+/--
+`p` applies no `in` (ancestors) to an `it`-dependent left operand: every
+`.binaryApp .mem l r` in `p` has `l.mentionsIt = false`.  This is the predicate
+whose compiled footprint-sensitive `in` operands are all `it`-free, hence covered
+by `footprintPred` (D-70, option A — `compile` guarantees it).
+-/
+public def PredExpr.NoItDependentIn : PredExpr → Bool
+  | .item                    => true
+  | .lit _                   => true
+  | .var _                   => true
+  | .ite c t e               => c.NoItDependentIn && t.NoItDependentIn && e.NoItDependentIn
+  | .and a b                 => a.NoItDependentIn && b.NoItDependentIn
+  | .or a b                  => a.NoItDependentIn && b.NoItDependentIn
+  | .unaryApp _ e            => e.NoItDependentIn
+  | .binaryApp .mem l r      => (!l.mentionsIt) && l.NoItDependentIn && r.NoItDependentIn
+  | .binaryApp _ a b         => a.NoItDependentIn && b.NoItDependentIn
+  | .getAttr e _             => e.NoItDependentIn
+  | .hasAttr e _             => e.NoItDependentIn
+  | .extHasAttr e _ _        => e.NoItDependentIn
+  | .record axs              => axs.attach₂.all (λ x => x.val.snd.NoItDependentIn)
+  | .call _ xs               => xs.attach.all (λ x => have := List.sizeOf_lt_of_mem x.property; x.val.NoItDependentIn)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
 end Cedar.Spec

@@ -157,7 +157,8 @@ theorem type_of_set_is_sound_err {xs : List Expr} {c₁ : Capabilities} {env : T
   (h₅ : (xs.mapM fun x => evaluate x request entities) = Except.error err) :
   err = Error.entityDoesNotExist ∨
   err = Error.extensionError ∨
-  err = Error.arithBoundsError
+  err = Error.arithBoundsError ∨
+  err = Error.quantifierError
 := by
   cases h₆ : xs
   case nil =>
@@ -172,7 +173,7 @@ theorem type_of_set_is_sound_err {xs : List Expr} {c₁ : Capabilities} {env : T
     specialize (h₉ h₁ h₂ h₇) ; have ⟨_, v, h₉⟩ := h₉
     simp [EvaluatesTo] at h₉
     have ⟨h₉, _⟩ := h₉
-    rcases h₉ with h₉ | h₉ | h₉ | h₉ <;>
+    rcases h₉ with h₉ | h₉ | h₉ | h₉ | h₉ <;>
     simp [h₉] at h₅ <;>
     try { simp [h₅] }
     subst h₆
@@ -219,7 +220,7 @@ theorem type_of_set_is_sound_ok { xs : List Expr } { c₁ : Capabilities } { env
       specialize ih h₁ h₂ h₃
       have ⟨_, v', ihl, ihr⟩ := ih
       simp [EvaluatesTo] at ihl
-      rcases ihl with ihl | ihl | ihl | ihl <;>
+      rcases ihl with ihl | ihl | ihl | ihl | ihl <;>
       simp [ihl] at h₇
       subst h₇
       exact instance_of_lub_left h₆ ihr
