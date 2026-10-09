@@ -5,8 +5,10 @@ IMPLEMENTED; review round 2 pending. Blind review round 1 raised 5 findings (F-1
 all fixed (see below). Branches cut from Phase 5B (`phase5-anyall-symcc` @ `bf97fa2`, green).
 
 ## Branch heads
-- cedar-spec `phase6-anyall-drt-differential` @ `fd093b3`
-- cedar (nested) `phase6-anyall-drt-differential` @ `5aae930d`
+- cedar-spec `phase6-anyall-drt-differential` — HEAD is this OUTCOMES-update commit
+  (the F-7 doc commit); see `git log -1 phase6-anyall-drt-differential`. The last
+  *code* commit before it is F-1 `2113ecf` / F-2 `fd093b3`.
+- cedar (nested) `phase6-anyall-drt-differential` @ `d34291f8` (final: F-6).
 
 ## What landed, per work-item, with commits
 
@@ -25,11 +27,20 @@ all fixed (see below). Branches cut from Phase 5B (`phase5-anyall-symcc` @ `bf97
 
 | F | What | cedar-spec | nested cedar |
 |---|---|---|---|
-| F-1 | `generates_all_and_any_nodes` made deterministic (fixed-seed `StdRng`, `type_directed()`, 400 iters). Ran 30× → **30/30**. | `2113ecf` | — |
+| F-1 | `generates_all_and_any_nodes` made deterministic (fixed-seed `StdRng`, `type_directed()`, 400 iters). Ran **30×/30** here (and a 5×/5 re-confirm); round-2 reviewer independently reproduced **20×/20**. | `2113ecf` | — |
 | F-2 | deterministic tests for the 3 uncaught mutations: 3a-i (value/error filter-body swap), 3b (literal-fold value), 3d (FFI `Op::SetAll` bridge+serde) — each re-run and now CAUGHT | `fd093b3` | `d296f223` |
 | F-3 | DONE notes appended to D-75 + PLAN OQ-1 | (DECISIONS/PLAN) | — |
 | F-4 | Rust solve path `set-logic ALL`→`HO_ALL` (match Lean, unconditional); added the missing `footprint` `.all` arm (`footprint_pred`/`footprint_all_pred`, D-70-A/D-71 — a real panic the review surfaced); cvc5-backed `check_equivalent` proof (`tests/anyall.rs`) | — | `5aae930d` |
 | F-5 | SUPERSEDED-by-D-52 notes on D-51 + D-34 | (DECISIONS) | — |
+
+### Review round-2 fixes
+Round 1 all confirmed RESOLVED (incl. the footprint `.all` arm confirmed an exact Lean mirror,
+arm-by-arm). Round 2 raised 2 LOW findings, both fixed:
+
+| F | What | cedar-spec | nested cedar |
+|---|---|---|---|
+| F-6 | the F-4 footprint `.all` code had no deterministic test (its only exerciser, `tests/anyall.rs` over `Set<Long>`, has an empty entity footprint). Added `anyall_footprint_tests` in `enforcer.rs` over a `Set<User>` schema — `resource.owners.all(it == principal)`'s footprint is the receiver ∪ the predicate's `it`-free `principal` term; `it.manager == it` (it-dependent) contributes none. Mutation-checked: drop receiver footprint → union test fails; drop pred footprint → it-dependent test fails. Added an entity-set cvc5 case to `tests/anyall.rs`; documented why a "missing footprint flips the verdict" cvc5 case is infeasible (D-70-A rejects the only footprint-sensitive op, `it`-dependent `in`). | — | `d34291f8` |
+| F-7 | OUTCOMES branch-heads bumped (cedar-spec head made relative to this commit; nested → `d34291f8`); F-1 "30×" claim corrected (30×/30 here + 5×/5 re-confirm; reviewer 20×/20). | (this commit) | — |
 
 ## Non-vacuity (reviewer-measured, `type_directed()` md=3, `enable_anyall=true`)
 - `arbitrary_static_policy`: **~6.18%** of policies carry a `.all`/`.any` (103/1666; 116 `.all`
