@@ -11,6 +11,7 @@
 
 import Cedar.SymCC
 import Cedar.Thm.SymCC.Compiler.WF
+
 import Cedar.Thm.SymCC.Compiler.CompilePredInterpret
 import Cedar.Thm.SymCC.Compiler.SetAllInterpret
 import Cedar.Thm.SymCC.Term.Interpret.WF
@@ -182,6 +183,24 @@ theorem foldr_or_congr {α} {g₁ g₂ : α → Term} {ws : List α}
   | nil => rfl
   | cons hd tl ih =>
     simp only [List.foldr_cons, h hd (by simp), ih (fun w hw => h w (by simp [hw]))]
+
+/-- The compiler's per-element `.all` mapM over a list `vs'` evaluates to `.ok (vs'.map fval)`
+when each element compiles to `fval vi'` with a Bool-typed `option.get`. -/
+theorem mapM_someOf_eq_map {p : PredExpr} {εnv : SymEnv} {fval : Term → Term} {vs' : List Term}
+    (hbridge : ∀ vi' ∈ vs', compilePred p (Factory.someOf vi') εnv = .ok (fval vi'))
+    (hget : ∀ vi' ∈ vs', (Factory.option.get (fval vi')).typeOf = .bool) :
+    (vs'.mapM (fun vi => do
+        let pti ← compilePred p (Factory.someOf vi) εnv
+        if (Factory.option.get pti).typeOf = TermType.bool then Except.ok pti else Except.error SymCC.Error.typeError))
+      = .ok (vs'.map fval) := by
+  induction vs' with
+  | nil => rfl
+  | cons hd tl ih =>
+    rw [List.mapM_cons, hbridge hd (by simp)]
+    simp only [hget hd (by simp), if_true, Except.bind_ok,
+      ih (fun vi' h => hbridge vi' (by simp [h])) (fun vi' h => hget vi' (by simp [h])),
+      List.map_cons]
+    rfl
 
 /-- Route A (D-68), fold reconciliation over the element list `vs'`. `fval vi'` is the
 per-element interpreted predicate body (a WF literal of type `.option .bool`). The GOAL side

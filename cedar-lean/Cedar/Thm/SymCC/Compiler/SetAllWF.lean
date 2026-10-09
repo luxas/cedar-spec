@@ -73,7 +73,7 @@ theorem noSetAll_noneOf {ty : TermType} : (Factory.noneOf ty).NoSetAll = true :=
 theorem anyAllItTyped_noneOf {ety ty : TermType} : (Factory.noneOf ty).anyAllItTyped ety = true := by
   simp only [Factory.noneOf, Term.anyAllItTyped]
 
-theorem noSetAll_not {t : Term} (h : t.NoSetAll = true) : (Factory.not t).NoSetAll = true := by
+public theorem noSetAll_not {t : Term} (h : t.NoSetAll = true) : (Factory.not t).NoSetAll = true := by
   unfold Factory.not
   split
   · simp only [Term.NoSetAll]
@@ -81,7 +81,7 @@ theorem noSetAll_not {t : Term} (h : t.NoSetAll = true) : (Factory.not t).NoSetA
     simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all,
       Bool.and_eq_true, and_true] at h; exact h
   · exact noSetAll_app1 (op := Op.not) (by intro h; cases h) h
-theorem anyAllItTyped_not {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+public theorem anyAllItTyped_not {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
     (Factory.not t).anyAllItTyped ety = true := by
   unfold Factory.not
   split
@@ -191,9 +191,9 @@ theorem anyAllItTyped_isNone {ety : TermType} {t : Term} (h : t.anyAllItTyped et
     (try (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;>
     (try simp only [Term.anyAllItTyped])
 
-theorem noSetAll_isSome {t : Term} (h : t.NoSetAll = true) : (Factory.isSome t).NoSetAll = true := by
+public theorem noSetAll_isSome {t : Term} (h : t.NoSetAll = true) : (Factory.isSome t).NoSetAll = true := by
   unfold Factory.isSome; exact noSetAll_not (noSetAll_isNone h)
-theorem anyAllItTyped_isSome {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+public theorem anyAllItTyped_isSome {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
     (Factory.isSome t).anyAllItTyped ety = true := by
   unfold Factory.isSome; exact anyAllItTyped_not (anyAllItTyped_isNone h)
 
@@ -219,10 +219,10 @@ theorem anyAllItTyped_record {ety : TermType} {ats : Map Attr Term}
 
 /-! ### leaf-app constructors (reduce to literal or non-set.all .app) -/
 
-theorem noSetAll_option_get {t : Term} (h : t.NoSetAll = true) : (Factory.option.get t).NoSetAll = true := by
+public theorem noSetAll_option_get {t : Term} (h : t.NoSetAll = true) : (Factory.option.get t).NoSetAll = true := by
   unfold Factory.option.get; repeat' split
   all_goals (try exact h) <;> (try (simp only [Term.NoSetAll, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try simp only [Term.NoSetAll])
-theorem anyAllItTyped_option_get {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
+public theorem anyAllItTyped_option_get {ety : TermType} {t : Term} (h : t.anyAllItTyped ety = true) :
     (Factory.option.get t).anyAllItTyped ety = true := by
   unfold Factory.option.get; repeat' split
   all_goals (try exact h) <;> (try (simp only [Term.anyAllItTyped, List.map, List.attach, List.attachWith, List.pmap, List.all] at *; simp_all)) <;> (try simp only [Term.anyAllItTyped])

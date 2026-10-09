@@ -1732,4 +1732,28 @@ public theorem wf_value_uid_implies_exists_entity_data {es : Entities} {uid : En
   simp only [Prim.WellFormed, Map.contains_iff_some_find?] at hwf
   exact hwf
 
+/-- Public re-export of `compilePred_noSetAll` (D-68): a compiled predicate over a
+`NoSetAll` `it` is itself `NoSetAll`. Needed by the non-module `AllInterpret`, which
+cannot `import all` the module `CompilePredWF` where the original lives. -/
+public theorem compilePred_noSetAll' {p : PredExpr} {it r : Term} {εnv : SymEnv}
+    (hwε : εnv.WellFormed) (hit : it.NoSetAll = true) (hok : compilePred p it εnv = Except.ok r) :
+    r.NoSetAll = true :=
+  compilePred_noSetAll hwε hit hok
+
+/-- Public re-export of `compilePred_anyAllItTyped` (D-68). See `compilePred_noSetAll'`. -/
+public theorem compilePred_anyAllItTyped' {p : PredExpr} {it r : Term} {εnv : SymEnv} {elemTy : TermType}
+    (hwε : εnv.WellFormed) (hit : it.anyAllItTyped elemTy = true) (hok : compilePred p it εnv = Except.ok r) :
+    r.anyAllItTyped elemTy = true :=
+  compilePred_anyAllItTyped hwε hit hok
+
+/-- Public re-export of `wf_set_all` (D-68). See `compilePred_noSetAll'`. -/
+public theorem wf_set_all' {εs : SymEntities} {S P E : Term} {ety : TermType}
+    (hSwf : S.WellFormed εs) (hSty : S.typeOf = .set ety)
+    (hPwf : P.WellFormed εs) (hPty : P.typeOf = .bool)
+    (hEwf : E.WellFormed εs) (hEty : E.typeOf = .bool)
+    (hPn : P.NoSetAll = true) (hEn : E.NoSetAll = true)
+    (hPa : P.anyAllItTyped ety = true) (hEa : E.anyAllItTyped ety = true) :
+    (Factory.set.all S P E).WellFormed εs ∧ (Factory.set.all S P E).typeOf = .option .bool :=
+  wf_set_all hSwf hSty hPwf hPty hEwf hEty hPn hEn hPa hEa
+
 end Cedar.Thm
