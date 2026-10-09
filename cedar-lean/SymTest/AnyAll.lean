@@ -15,6 +15,7 @@
 -/
 
 import Cedar.SymCC
+import SymTest.Util
 
 /-! Compile-time regression guards for the `set.all` concrete fold under
 `Term.interpret` (D-55/D-60), guarding against the D-61 bound-variable
@@ -77,3 +78,67 @@ private def In (nval : BitVec 64) : Interpretation :=
 #guard allN.interpret (In 1) == Term.some (Term.prim (.bool false))
 
 end SymTest.AnyAll
+
+/-! End-to-end symbolic `.all` tests through the encoder + cvc5. -/
+
+namespace SymTest.AnyAll.E2E
+
+open Cedar Data Spec SymCC Validation
+open UnitTest
+
+-- Context with a set-of-int attr `xs`, a set-of-record attr `rs` (record with int `k`),
+-- and a set-of-entity attr `es`.
+private def recTy : RecordType := Map.make [("k", .required .int)]
+private def E : EntityType := ⟨"Principal", []⟩
+
+private def ctx : RecordType :=
+  Map.make [
+    ("xs", .required (.set .int)),
+    ("rs", .required (.set (.record recTy))),
+    ("es", .required (.set (.entity E))),
+    ("n",  .required .int)
+  ]
+
+private def Γ := BasicTypes.env Map.empty Map.empty ctx
+
+private def xs : Expr := .getAttr (.var .context) "xs"
+private def rs : Expr := .getAttr (.var .context) "rs"
+private def es : Expr := .getAttr (.var .context) "es"
+private def nAttr : Expr := .getAttr (.var .context) "n"
+
+-- predicate `it > 0`
+private def pGt0 : PredExpr := .binaryApp .less (.lit (.int 0)) .item
+-- predicate `it >= 0`
+private def pGe0 : PredExpr := .or (.binaryApp .less (.lit (.int 0)) .item) (.binaryApp .eq .item (.lit (.int 0)))
+-- predicate `it.k > 0`  (record-attr)
+private def pRecK : PredExpr := .binaryApp .less (.lit (.int 0)) (.getAttr .item "k")
+-- predicate `it has k`   (entity/record-attr existence; always typed Bool)
+private def pHasK : PredExpr := .hasAttr .item "k"
+-- predicate `principal in it`  (entity, it on the RIGHT — the sound/footprint-free side)
+private def pPrinIn : PredExpr := .binaryApp .mem (.var .principal) .item
+-- predicate `it > n`  (free context variable n)
+private def pGtN : PredExpr := .binaryApp .less (.getAttr (.var .context) "n") .item
+
+private def permit (x : Expr) : Policy :=
+  { id := "policy", effect := .permit, principalScope := .principalScope .any,
+    actionScope := .actionScope .any, resourceScope := .resourceScope .any, condition := [⟨.when, x⟩] }
+
+private def mkEquiv (desc : String) (x₁ x₂ : Expr) (o : Outcome) : TestCase SolverM :=
+  test desc ⟨λ _ => o.check (verifyEquivalent [permit x₁] [permit x₂]) (SymEnv.ofTypeEnv Γ)⟩
+
+private def mkImplies (desc : String) (x₁ x₂ : Expr) (o : Outcome) : TestCase SolverM :=
+  test desc ⟨λ _ => o.check (verifyImplies [permit x₁] [permit x₂]) (SymEnv.ofTypeEnv Γ)⟩
+
+-- NOTE: unoptimized SymCC path only; the optimized SymCCOpt compiler still rejects `.all`
+-- (`Cedar/SymCCOpt/Compiler.lean:412`), which is M4 scope (blocked on the D-70 footprint decision).
+def tests : List (TestSuite SolverM) :=
+  [ { name := "AnyAll.e2e", tests :=
+      [ mkEquiv "all(it>0) ≢ true" (.all xs pGt0) (.lit (.bool true)) .sat,
+        mkImplies "all(it>0) ⇒ all(it>=0)" (.all xs pGt0) (.all xs pGe0) .unsat,
+        mkEquiv "all(it.k>0) ≢ true" (.all rs pRecK) (.lit (.bool true)) .sat,
+        mkEquiv "all(principal in it) ≢ true" (.all es pPrinIn) (.lit (.bool true)) .sat,
+        mkEquiv "all(it has k) ≢ true" (.all es pHasK) (.lit (.bool true)) .sat,
+        mkEquiv "all(it>n) ≢ true" (.all xs pGtN) (.lit (.bool true)) .sat,
+        mkEquiv "all(it>0) ≡ all(it>0)" (.all xs pGt0) (.all xs pGt0) .unsat ] } ]
+
+end SymTest.AnyAll.E2E
