@@ -29,7 +29,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 4 | `phase4-anyall-surface-syntax` | DONE — review converged (1 round) |
 | 5 | `phase5-anyall-symcc` | user chose full type rule + bounded quantifier (D-33); part A type rule + soundness done on WIP branch (D-50), red only in SymCC Opt until part B (D-49); part B implementing |
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
-| 6.5 | `phase6_5-anyall-tpe` | not started |
+| 6.5 | `phase6.5-anyall-tpe` | IN-PROGRESS — PLAN written (`branches/phase6.5-anyall-tpe/PLAN.md`); W1–W6 ordered, forks F1 (instantiation path A/B), F2 (Lean conservative vs concrete-fold), F3 (no DRT TPE target exists today) flagged |
 | 7 | `phase7-anyall-docs` | not started |
 | 8 | `phase8-anyall-benchmarks` | not started |
 
@@ -236,6 +236,18 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
   _Satisfies:_ 2.1, 2.2, 2.3, 2.5, 2.7, 2.8 (parity), 5.3.
 
 ## Phase 6.5 — Typed partial evaluation (late commit)
+
+> **Status: IN-PROGRESS.** Plan: `branches/phase6.5-anyall-tpe/PLAN.md` (ordered work items
+> W1–W6, non-vacuous green checks, blind-review list, risks R1–R6). Branches cut in both repos
+> off `phase6-anyall-drt-differential` (cedar-spec `d923c63`, cedar `826cc339`) — rebase onto
+> Phase 6's final tip before merge. Open forks for the owner: **F1** instantiation path (A —
+> delegate to the verified Phase-3 concrete fold, recommended; vs B — re-fold over `Residual`
+> for per-element partial eval); **F2** Lean TPE stays conservative (sound, 7.4-permitted, zero
+> proof risk, recommended) vs refined to fold concrete receivers for Rust/Lean parity; **F3**
+> there is **no DRT TPE differential target today** (TPE is unit/parity-tested in
+> `cedar-policy-core`), so "DRT TPE wiring" defaults to in-crate parity tests, not a new harness.
+> The Lean TPE `.all` arm + soundness already exist (conservative whole-node residual, D-48), so
+> the Lean side is note-only unless F2 picks the refinement.
 
 - **T6.5.1 TPE residual node + concrete-receiver evaluation (gated).**
   Add `ResidualKind::All { expr, pred }` in `cedar-policy-core/src/tpe/residual.rs` and the
