@@ -278,6 +278,10 @@ theorem compile_interpret_all {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {I : 
     cases hv with | all_valid hvx _ => exact hvx
   rw [compile.eq_def] at hok
   simp only [] at hok
+  split at hok
+  · simp only [reduceCtorEq] at hok
+  rename_i hnoit
+  rw [Decidable.not_not] at hnoit
   simp_do_let (compile x₁ εnv) at hok
   rename_i t₁ hr₁
   have ⟨ih1w, ty1, hty1⟩ := compile_wf hwφ₁ hr₁
@@ -290,7 +294,7 @@ theorem compile_interpret_all {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {I : 
     · rename_i sty
       simp only [Except.ok.injEq] at hok
       subst hok
-      rw [compile.eq_def]; simp only []; rw [hrecv]; simp only [Except.bind_ok]
+      rw [compile.eq_def]; simp only []; rw [if_neg (by simp only [hnoit, not_true, not_false_eq_true])]; rw [hrecv]; simp only [Except.bind_ok]
       rw [interpret_term_none]
       simp only [Factory.noneOf, interpret_term_none]
     · simp only [reduceCtorEq] at hok
@@ -337,7 +341,7 @@ theorem compile_interpret_all {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {I : 
         obtain ⟨vs', hSeq, hlit', hvw', hvty', hfold⟩ :=
           interpret_set_all_wf hI hgt.left hgt.right hgp.left hpbool hgpn hgpa hnotw.left hnotw.right hnotn hnota
         rw [hfold]
-        rw [compile.eq_def]; simp only []; rw [hrecv]; simp only [Except.bind_ok]
+        rw [compile.eq_def]; simp only []; rw [if_neg (by simp only [hnoit, not_true, not_false_eq_true])]; rw [hrecv]; simp only [Except.bind_ok]
         -- per-element value function and the two set.all fold bodies
         let fval : Term → Term := fun vi' => pt.interpret (extInterp I vi' elemTy)
         -- bridge: each element's εnv.interpret-I compile equals fval vi'
@@ -566,7 +570,7 @@ theorem compile_interpret_all {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {I : 
               he.right (by simp only [typeOf_term_none, typeOf_term_some, hc.right])
             rw [this.right]; simp only [typeOf_term_none]
           -- LHS: reduce the interpreted-side compile; case on interpret I t₁
-          rw [compile.eq_def]; simp only []; rw [hrecv]; simp only [Except.bind_ok]
+          rw [compile.eq_def]; simp only []; rw [if_neg (by simp only [hnoit, not_true, not_false_eq_true])]; rw [hrecv]; simp only [Except.bind_ok]
           rcases wfl_of_type_option_is_option hwfl.left hwfl.right with hnone | ⟨w, hsome, hwty⟩
           · -- interpret I t₁ = .none ty1 : D-69 short-circuit; RHS ifSome (.none) collapses to noneOf
             have htys : ty1 = .set eltsTy :=

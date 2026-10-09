@@ -345,6 +345,8 @@ theorem compile_evaluate_all {x₁ : Expr} {p : PredExpr} {env : Env} {εnv : Sy
     have hv := hwe.right; cases hv with | all_valid _ hp => exact hp
   rw [compile.eq_def] at hok
   simp only [] at hok
+  split at hok
+  · simp only [reduceCtorEq] at hok
   simp_do_let (compile x₁ εnv) at hok
   rename_i t₁ hr₁
   have ihr := ih₁ heq hwe₁ hwφ₁ hr₁

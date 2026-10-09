@@ -371,6 +371,11 @@ def compile (x : Expr) (εnv : SymEnv) : Result Term := do
   -- term. Error propagates from the receiver via `ifSome`; the per-element
   -- predicate value / error feed the tri-valued `set.all`.
   | .all x₁ p =>
+    -- D-70 option A / D-71 guard: a predicate whose `in` has an `it`-dependent left
+    -- operand reads the ancestors UF at symbolic element UIDs, which the footprint
+    -- (option A) cannot cover; reject it as unsupported (option B — set-typed footprint
+    -- entries — is deferred to Phase 9). On well-typed Part-A input this never fires.
+    if ¬ p.NoItDependentIn then .error .unsupportedError else
     let t ← compile x₁ εnv
     match t with
     | .none ty =>

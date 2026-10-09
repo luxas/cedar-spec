@@ -1156,6 +1156,8 @@ private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t :
     cases hv with | all_valid hvx _ => exact hvx
   rw [compile.eq_def] at hok
   simp only [] at hok
+  split at hok
+  · simp only [reduceCtorEq] at hok   -- D-71 guard: ¬ NoItDependentIn ⇒ .error, contradicts hok
   simp_do_let (compile x₁ εnv) at hok
   rename_i t₁ hr₁
   have ⟨ih1w, ty1, hty1⟩ := ih₁ hwφ₁ hr₁
