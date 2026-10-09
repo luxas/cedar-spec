@@ -172,16 +172,21 @@ soundness, which does not yet exist. **D-74-interim** (committed): `TypedExpr.Sy
 and `compile_well_typed_on_wf_expr`'s `.all` arm closes by contradiction — this keeps every
 theorem true while D-74 is decided (restore the real guard + arm under option A or C').
 CedarFFI `ToJson` now serializes the anyall nodes (`Op.set.all`, `PredExpr`).
-**Still red (one spot):** the `Cedar.Thm.SymCC.Opt` verifier-completeness theorems
-(`compile_ok_iff_welltypedpolicy_ok` and the ~22 `verify*_is_ok`/`_eqv_*_ok` happy-path
-theorems) call `compile_well_typed`/`verify*_is_ok`, which now REQUIRE the
-`SymCCSupported`/`PolicySymCCSupported` guard (D-72); that guard was never threaded through
-Opt.lean because `WellTyped.lean` never compiled before. Threading it narrows those theorems
-(notably `compile_ok_iff_welltypedpolicy_ok`, currently a general iff) to the SymCC-supported
-fragment and ripples to `Opt/Verifier.lean`/`Opt/Enforcer.lean` and the `Cedar:static` FFI
-build — a pending refactor flagged for the conductor. Green now: SymTest, UnitTest, DiffTest,
-Protobuf, CedarProto, Cedar.Thm.SymCC.Compiler.WellTyped. Red: `Cedar`/`SymCC` library
-targets (only via `Cedar.Thm.SymCC.Opt`) and the `CedarSymTests` exe link.
+**D-77 (SETTLED, option b) — DONE:** the `SymCCSupported` guard is threaded into the SymCC
+verifier COMPLETENESS lane only. `compile_ok_iff_welltypedpolicy[ies]_ok` is split into the
+UNGUARDED `.mp` (`compile_ok_implies_welltypedpolicy[ies]_ok`, soundness) and a GUARDED
+biconditional; every `verify*_is_ok` caller and `*Opt?_eqv_*?` / `check*_eqv_*` (and their
+`_ok`) theorem now carries a `PolicySymCCSupported`/`PoliciesSymCCSupported` hypothesis.
+Soundness-lane theorems stay unguarded. **Full tree is GREEN** (782 jobs; Cedar, SymCC,
+SymTest, UnitTest, DiffTest, Protobuf, CedarProto), 0 sorry; the DRT FFI static-lib target
+(`lake build Cedar:static Protobuf:static CedarProto:static Cedar.SymCC:static CedarFFI:static
+Batteries:static`) builds and archives `libCedar_CedarFFI.a` (1079 jobs). Guarded top-level
+verifier theorems' axioms = `[propext, Classical.choice, Quot.sound]` (no sorryAx). The only
+thing that does not complete in-sandbox is LINKING the `CedarSymTests` *executable* (missing
+`libc++`/`libc++abi`/`libuv` static libs — an environment/toolchain gap, not a proof/code
+issue; the SymTest proof library builds green, and the DRT consumes the static FFI archive,
+not this exe). `.all` COMPLETENESS of `compile_well_typed` remains the only narrowed piece,
+behind the D-74-interim, pending D-74 (option A or C').
 
 - **T5.1 SymCC compiler arm for `all` (gated).**
   `Cedar/SymCC/Compiler.lean` (+ `SymCCOpt/`): compile `all` to a bounded conjunction over the
