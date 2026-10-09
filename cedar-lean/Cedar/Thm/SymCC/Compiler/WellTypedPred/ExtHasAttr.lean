@@ -713,10 +713,10 @@ success, so `compileExtHasAttrRec_ne_error` gives compile success and
 -/
 theorem compilePred_well_typed_extHasAttr
     {a : Attr} {attrs : List Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ : TypedExpr} {e₁ : Cedar.Spec.Expr} {bty : BoolType}
-    {c c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    {c c' : Capabilities} {elemTy : TermType} {Γ : TypeEnv} {it t₁ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
-    (hitty : it.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (hitty : it.typeOf = .option elemTy)
     (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
     (htp : typeOfExtHasAttr ty₁ e₁ (a :: attrs) c Γ = .ok (bty, c')) :

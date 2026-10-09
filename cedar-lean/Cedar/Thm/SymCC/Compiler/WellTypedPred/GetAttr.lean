@@ -106,10 +106,10 @@ theorem getAttrInRecord_ok_find
 
 theorem compilePred_well_typed_getAttr
     {a : Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr} {e₁ : Cedar.Spec.Expr}
-    {c c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    {c c' : Capabilities} {elemTy : TermType} {Γ : TypeEnv} {it t₁ : Term}
     (hwε : (SymEnv.ofEnv Γ).WellFormed)
     (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
-    (hitty : it.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (hitty : it.typeOf = .option elemTy)
     (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
     (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
     (htp : typeOfGetAttr ty₁ e₁ a c Γ = .ok (typ, c')) :
