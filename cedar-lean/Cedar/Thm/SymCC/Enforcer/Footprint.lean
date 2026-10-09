@@ -187,6 +187,111 @@ private theorem mem_footprintPred_ofEntity_option_entity {q : PredExpr} {it tₑ
     rw [Set.mem_singleton] at hin
     subst hin
     exact isOptionEntityType_implies_option_entity_type hty
+/--
+For an `it`-free predicate `q`, compiling it against any element term `it` equals compiling its
+`toExpr` as an ordinary expression (D-70, option A — the `it`-free footprint subterms are groundable
+because their compiled form is a closed `compile`).
+-/
+theorem compilePred_toExpr_eq {q : PredExpr} {it : Term} {εnv : SymEnv}
+    (hfree : q.mentionsIt = false) :
+    compilePred q it εnv = compile q.toExpr εnv := by
+  match q, hfree with
+  | .item, hfree => exact absurd hfree (by simp only [PredExpr.mentionsIt, Bool.true_eq_false, not_false_eq_true])
+  | .lit l, _ => simp only [compilePred, compile, PredExpr.toExpr]
+  | .var v, _ => simp only [compilePred, compile, PredExpr.toExpr]
+  | .ite c t e, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr,
+      compilePred_toExpr_eq hfree.1.1, compilePred_toExpr_eq hfree.1.2, compilePred_toExpr_eq hfree.2]
+  | .and a b, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree.1, compilePred_toExpr_eq hfree.2]
+  | .or a b, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree.1, compilePred_toExpr_eq hfree.2]
+  | .unaryApp o e, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
+  | .binaryApp o a b, hfree =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree.1, compilePred_toExpr_eq hfree.2]
+  | .getAttr e a, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
+  | .hasAttr e a, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
+  | .extHasAttr e a l, hfree =>
+    simp only [PredExpr.mentionsIt] at hfree
+    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
+  | .record axs, hfree =>
+    simp only [compilePred, compile, PredExpr.toExpr]
+    congr 1
+    rw [List.map₂_eq_map (λ p : Attr × PredExpr => (p.fst, p.snd.toExpr))]
+    simp only [List.mapM₂_eq_mapM λ (p : Attr × PredExpr) => do .ok (p.fst, ← compilePred p.snd it εnv),
+      List.mapM₂_eq_mapM λ (p : Attr × Expr) => do .ok (p.fst, ← compile p.snd εnv),
+      List.mapM_map]
+    apply List.mapM_congr
+    intro x hx
+    have hxfree : x.snd.mentionsIt = false := by
+      simp only [PredExpr.mentionsIt] at hfree
+      have hall : (axs.attach₂.all (fun y => !y.val.snd.mentionsIt)) = true := by
+        rw [← List.not_any_eq_all_not]; simp only [hfree, Bool.not_false]
+      rw [show (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) => !y.val.snd.mentionsIt)
+            = (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) =>
+                (fun (p : Attr × PredExpr) => !p.snd.mentionsIt) y.val) from rfl,
+          List.all_attach₂ (f := fun (p : Attr × PredExpr) => !p.snd.mentionsIt), List.all_eq_true] at hall
+      have := hall x hx
+      simp only [Bool.not_eq_true'] at this
+      exact this
+    simp only [Function.comp, compilePred_toExpr_eq hxfree]
+  | .call xfn xs, hfree =>
+    simp only [compilePred, compile, PredExpr.toExpr]
+    congr 1
+    rw [List.map₁_eq_map (λ x : PredExpr => x.toExpr)]
+    simp only [List.mapM₁_eq_mapM (λ x => compilePred x it εnv),
+      List.mapM₁_eq_mapM (λ x => compile x εnv), List.mapM_map]
+    apply List.mapM_congr
+    intro x hx
+    have hxfree : x.mentionsIt = false := by
+      simp only [PredExpr.mentionsIt] at hfree
+      rw [List.any_eq_false] at hfree
+      have := hfree ⟨x, hx⟩ (List.mem_attach xs ⟨x, hx⟩)
+      simp only [Bool.not_eq_true] at this
+      exact this
+    simp only [Function.comp, compilePred_toExpr_eq hxfree]
+termination_by sizeOf q
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | omega
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_snd_lt_sizeOf_list h; omega)
+      | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
+
+/--
+Leaf of the `.all` predicate-branch witness: a term in `footprintPred.ofEntity`
+of an `it`-free quantifier subterm `q` is exactly `compile q.toExpr εnv`, so
+`q.toExpr` is the witnessing expression.
+-/
+private theorem mem_footprintPred_ofEntity_exists {q : PredExpr} {it tₑ : Term} {εnv : SymEnv}
+  (hin : tₑ ∈ footprintPred.ofEntity it εnv q) :
+  q.mentionsIt = false ∧ compile q.toExpr εnv = .ok tₑ
+:= by
+  simp only [footprintPred.ofEntity] at hin
+  split at hin
+  · simp only [Set.not_mem_empty] at hin
+  · rename_i hfree
+    rw [Bool.not_eq_true] at hfree
+    split at hin
+    · split at hin
+      · rename_i hok _
+        rw [Set.mem_singleton] at hin
+        subst hin
+        exact ⟨hfree, by rw [← compilePred_toExpr_eq hfree]; exact hok⟩
+      · simp only [Set.not_mem_empty] at hin
+    · simp only [Set.not_mem_empty] at hin
+
 
 theorem mem_footprintPred_option_entity {p : PredExpr} {it : Term} {εnv : SymEnv} {t : Term} :
   t ∈ footprintPred p it εnv → ∃ ety, t.typeOf = .option (.entity ety)
@@ -294,87 +399,6 @@ theorem mem_footprint_option_entity {x : Expr} {εnv : SymEnv} {t : Term} :
     · exact ih hin
     · exact mem_footprintAllPred_option_entity hin
 
-/--
-For an `it`-free predicate `q`, compiling it against any element term `it` equals compiling its
-`toExpr` as an ordinary expression (D-70, option A — the `it`-free footprint subterms are groundable
-because their compiled form is a closed `compile`).
--/
-theorem compilePred_toExpr_eq {q : PredExpr} {it : Term} {εnv : SymEnv}
-    (hfree : q.mentionsIt = false) :
-    compilePred q it εnv = compile q.toExpr εnv := by
-  match q, hfree with
-  | .item, hfree => exact absurd hfree (by simp only [PredExpr.mentionsIt, Bool.true_eq_false, not_false_eq_true])
-  | .lit l, _ => simp only [compilePred, compile, PredExpr.toExpr]
-  | .var v, _ => simp only [compilePred, compile, PredExpr.toExpr]
-  | .ite c t e, hfree =>
-    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr,
-      compilePred_toExpr_eq hfree.1.1, compilePred_toExpr_eq hfree.1.2, compilePred_toExpr_eq hfree.2]
-  | .and a b, hfree =>
-    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree.1, compilePred_toExpr_eq hfree.2]
-  | .or a b, hfree =>
-    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree.1, compilePred_toExpr_eq hfree.2]
-  | .unaryApp o e, hfree =>
-    simp only [PredExpr.mentionsIt] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
-  | .binaryApp o a b, hfree =>
-    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree.1, compilePred_toExpr_eq hfree.2]
-  | .getAttr e a, hfree =>
-    simp only [PredExpr.mentionsIt] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
-  | .hasAttr e a, hfree =>
-    simp only [PredExpr.mentionsIt] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
-  | .extHasAttr e a l, hfree =>
-    simp only [PredExpr.mentionsIt] at hfree
-    simp only [compilePred, compile, PredExpr.toExpr, compilePred_toExpr_eq hfree]
-  | .record axs, hfree =>
-    simp only [compilePred, compile, PredExpr.toExpr]
-    congr 1
-    rw [List.map₂_eq_map (λ p : Attr × PredExpr => (p.fst, p.snd.toExpr))]
-    simp only [List.mapM₂_eq_mapM λ (p : Attr × PredExpr) => do .ok (p.fst, ← compilePred p.snd it εnv),
-      List.mapM₂_eq_mapM λ (p : Attr × Expr) => do .ok (p.fst, ← compile p.snd εnv),
-      List.mapM_map]
-    apply List.mapM_congr
-    intro x hx
-    have hxfree : x.snd.mentionsIt = false := by
-      simp only [PredExpr.mentionsIt] at hfree
-      have hall : (axs.attach₂.all (fun y => !y.val.snd.mentionsIt)) = true := by
-        rw [← List.not_any_eq_all_not]; simp only [hfree, Bool.not_false]
-      rw [show (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) => !y.val.snd.mentionsIt)
-            = (fun (y : {z : Attr × PredExpr // sizeOf z.snd < 1 + sizeOf axs}) =>
-                (fun (p : Attr × PredExpr) => !p.snd.mentionsIt) y.val) from rfl,
-          List.all_attach₂ (f := fun (p : Attr × PredExpr) => !p.snd.mentionsIt), List.all_eq_true] at hall
-      have := hall x hx
-      simp only [Bool.not_eq_true'] at this
-      exact this
-    simp only [Function.comp, compilePred_toExpr_eq hxfree]
-  | .call xfn xs, hfree =>
-    simp only [compilePred, compile, PredExpr.toExpr]
-    congr 1
-    rw [List.map₁_eq_map (λ x : PredExpr => x.toExpr)]
-    simp only [List.mapM₁_eq_mapM (λ x => compilePred x it εnv),
-      List.mapM₁_eq_mapM (λ x => compile x εnv), List.mapM_map]
-    apply List.mapM_congr
-    intro x hx
-    have hxfree : x.mentionsIt = false := by
-      simp only [PredExpr.mentionsIt] at hfree
-      rw [List.any_eq_false] at hfree
-      have := hfree ⟨x, hx⟩ (List.mem_attach xs ⟨x, hx⟩)
-      simp only [Bool.not_eq_true] at this
-      exact this
-    simp only [Function.comp, compilePred_toExpr_eq hxfree]
-termination_by sizeOf q
-decreasing_by
-  all_goals simp_wf
-  all_goals
-    first
-      | omega
-      | (have h := ‹_ ∈ _›; have := List.sizeOf_snd_lt_sizeOf_list h; omega)
-      | (have h := ‹_ ∈ _›; have := List.sizeOf_lt_of_mem h; omega)
 
 private theorem mem_footprint_exists_wf_prop {p : Expr → Prop} {x : Expr} {tₑ : Term} {εnv : SymEnv}
   (hwε : εnv.WellFormedFor x)
