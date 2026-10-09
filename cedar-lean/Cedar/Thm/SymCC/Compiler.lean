@@ -166,7 +166,9 @@ theorem compile_interpret {x : Expr} {εnv : SymEnv} {I : Interpretation} {t : T
       intro xᵢ _
       exact @compile_interpret xᵢ
     exact compile_interpret_call h₁ h₂ h₃ ih
-  | .all _ _           => simp [compile] at h₃
+  | .all x₁ _          =>
+    have ih₁ := @compile_interpret x₁
+    exact compile_interpret_all h₁ h₂ h₃ ih₁
 
 theorem compile_bisimulation {x : Expr} {env : Env} {εnv : SymEnv} {t : Term} {I : Interpretation} :
   εnv.WellFormedFor x →

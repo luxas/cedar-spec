@@ -454,7 +454,7 @@ decreasing_by
          simp only [Prod.mk.sizeOf_spec] at h1; omega)
 
 /-- `Term.interpret` fixes well-formed literals. Self-contained (no Lit import). -/
-theorem interpret_lit_id {εs : SymEntities} {I : Interpretation} :
+public theorem interpret_lit_id {εs : SymEntities} {I : Interpretation} :
   ∀ t : Term, t.WellFormed εs → t.isLiteral = true → Term.interpret I t = t
   | .prim _, _, _ => by simp only [interpret_term_prim]
   | .none _, _, _ => by simp only [interpret_term_none]
