@@ -26,18 +26,18 @@ open Spec SymCC Validation
 /-- The well-typed form of a policy is quantifier-free (SymCC-supported fragment).
 SymCC cannot compile/verify `.all` policies until Part B (D-33/D-34), so the
 verifier completeness lemmas are stated over this fragment. -/
-def PolicyNoQ (p' : Policy) (Γ : TypeEnv) : Prop :=
-  ∀ tx : TypedExpr, TypedExpr.WellTyped Γ tx → tx.toExpr = p'.toExpr → tx.NoQuantifier
+def PolicySymCCSupported (p' : Policy) (Γ : TypeEnv) : Prop :=
+  ∀ tx : TypedExpr, TypedExpr.WellTyped Γ tx → tx.toExpr = p'.toExpr → tx.SymCCSupported
 
 /-- Every policy in a list has a quantifier-free well-typed form. -/
-def PoliciesNoQ (ps' : Policies) (Γ : TypeEnv) : Prop :=
-  ∀ p' ∈ ps', PolicyNoQ p' Γ
+def PoliciesSymCCSupported (ps' : Policies) (Γ : TypeEnv) : Prop :=
+  ∀ p' ∈ ps', PolicySymCCSupported p' Γ
 
 /-- `verifyEvaluate` succeeds on sufficiently well-formed inputs. -/
 theorem verifyEvaluate_is_ok {φ : Term → Term} {p p' : Policy} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicy p Γ = .ok p')
-  (hnq : PolicyNoQ p' Γ) :
+  (hnq : PolicySymCCSupported p' Γ) :
   ∃ asserts, verifyEvaluate φ p' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   have ⟨tx, hwt_tx, heq_tx⟩ := wellTypedPolicy_ok_implies_well_typed_expr hwt
@@ -51,8 +51,8 @@ theorem verifyEvaluatePair_is_ok {φ : Term → Term → Term} {p₁ p₁' p₂ 
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicy p₁ Γ = .ok p₁')
   (hwt₂ : wellTypedPolicy p₂ Γ = .ok p₂')
-  (hnq₁ : PolicyNoQ p₁' Γ)
-  (hnq₂ : PolicyNoQ p₂' Γ) :
+  (hnq₁ : PolicySymCCSupported p₁' Γ)
+  (hnq₂ : PolicySymCCSupported p₂' Γ) :
   ∃ asserts, verifyEvaluatePair φ p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   have ⟨tx₁, hwt_tx₁, heq_tx₁⟩ := wellTypedPolicy_ok_implies_well_typed_expr hwt₁
@@ -67,7 +67,7 @@ theorem verifyEvaluatePair_is_ok {φ : Term → Term → Term} {p₁ p₁' p₂ 
 theorem compileWithEffect_is_ok (effect : Effect) {p p' : Policy} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicy p Γ = .ok p')
-  (hnq : PolicyNoQ p' Γ) :
+  (hnq : PolicySymCCSupported p' Γ) :
   ∃ asserts, compileWithEffect effect p' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   have ⟨tx, hwt_tx, heq_tx⟩ := wellTypedPolicy_ok_implies_well_typed_expr hwt
@@ -81,7 +81,7 @@ theorem compileWithEffect_is_ok (effect : Effect) {p p' : Policy} {Γ : TypeEnv}
 theorem satisfiedPolicies_is_ok (effect : Effect) {ps ps' : Policies} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicies ps Γ = .ok ps')
-  (hnq : PoliciesNoQ ps' Γ) :
+  (hnq : PoliciesSymCCSupported ps' Γ) :
   ∃ asserts, satisfiedPolicies effect ps' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   simp only [SymCC.satisfiedPolicies]
@@ -119,7 +119,7 @@ theorem satisfiedPolicies_is_ok (effect : Effect) {ps ps' : Policies} {Γ : Type
 theorem isAuthorized_is_ok {ps ps' : Policies} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicies ps Γ = .ok ps')
-  (hnq : PoliciesNoQ ps' Γ) :
+  (hnq : PoliciesSymCCSupported ps' Γ) :
   ∃ asserts, isAuthorized ps' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   simp only [SymCC.isAuthorized]
@@ -132,8 +132,8 @@ theorem verifyIsAuthorized_is_ok (φ : Term → Term → Term) {ps₁ ps₁' ps�
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicies ps₁ Γ = .ok ps₁')
   (hwt₂ : wellTypedPolicies ps₂ Γ = .ok ps₂')
-  (hnq₁ : PoliciesNoQ ps₁' Γ)
-  (hnq₂ : PoliciesNoQ ps₂' Γ) :
+  (hnq₁ : PoliciesSymCCSupported ps₁' Γ)
+  (hnq₂ : PoliciesSymCCSupported ps₂' Γ) :
   ∃ asserts, verifyIsAuthorized φ ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   simp only [verifyIsAuthorized]
@@ -145,7 +145,7 @@ theorem verifyIsAuthorized_is_ok (φ : Term → Term → Term) {ps₁ ps₁' ps�
 theorem verifyNeverErrors_is_ok {p p' : Policy} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicy p Γ = .ok p')
-  (hnq : PolicyNoQ p' Γ) :
+  (hnq : PolicySymCCSupported p' Γ) :
   ∃ asserts, verifyNeverErrors p' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyEvaluate_is_ok hwf hwt hnq
@@ -154,7 +154,7 @@ theorem verifyNeverErrors_is_ok {p p' : Policy} {Γ : TypeEnv}
 theorem verifyAlwaysMatches_is_ok {p p' : Policy} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicy p Γ = .ok p')
-  (hnq : PolicyNoQ p' Γ) :
+  (hnq : PolicySymCCSupported p' Γ) :
   ∃ asserts, verifyAlwaysMatches p' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyEvaluate_is_ok hwf hwt hnq
@@ -163,7 +163,7 @@ theorem verifyAlwaysMatches_is_ok {p p' : Policy} {Γ : TypeEnv}
 theorem verifyNeverMatches_is_ok {p p' : Policy} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicy p Γ = .ok p')
-  (hnq : PolicyNoQ p' Γ) :
+  (hnq : PolicySymCCSupported p' Γ) :
   ∃ asserts, verifyNeverMatches p' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyEvaluate_is_ok hwf hwt hnq
@@ -173,8 +173,8 @@ theorem verifyMatchesEquivalent_is_ok {p₁ p₁' p₂ p₂' : Policy} {Γ : Typ
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicy p₁ Γ = .ok p₁')
   (hwt₂ : wellTypedPolicy p₂ Γ = .ok p₂')
-  (hnq₁ : PolicyNoQ p₁' Γ)
-  (hnq₂ : PolicyNoQ p₂' Γ) :
+  (hnq₁ : PolicySymCCSupported p₁' Γ)
+  (hnq₂ : PolicySymCCSupported p₂' Γ) :
   ∃ asserts, verifyMatchesEquivalent p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyEvaluatePair_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
@@ -184,8 +184,8 @@ theorem verifyMatchesImplies_is_ok {p₁ p₁' p₂ p₂' : Policy} {Γ : TypeEn
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicy p₁ Γ = .ok p₁')
   (hwt₂ : wellTypedPolicy p₂ Γ = .ok p₂')
-  (hnq₁ : PolicyNoQ p₁' Γ)
-  (hnq₂ : PolicyNoQ p₂' Γ) :
+  (hnq₁ : PolicySymCCSupported p₁' Γ)
+  (hnq₂ : PolicySymCCSupported p₂' Γ) :
   ∃ asserts, verifyMatchesImplies p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyEvaluatePair_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
@@ -195,8 +195,8 @@ theorem verifyMatchesDisjoint_is_ok {p₁ p₁' p₂ p₂' : Policy} {Γ : TypeE
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicy p₁ Γ = .ok p₁')
   (hwt₂ : wellTypedPolicy p₂ Γ = .ok p₂')
-  (hnq₁ : PolicyNoQ p₁' Γ)
-  (hnq₂ : PolicyNoQ p₂' Γ) :
+  (hnq₁ : PolicySymCCSupported p₁' Γ)
+  (hnq₂ : PolicySymCCSupported p₂' Γ) :
   ∃ asserts, verifyMatchesDisjoint p₁' p₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyEvaluatePair_is_ok hwf hwt₁ hwt₂ hnq₁ hnq₂
@@ -206,8 +206,8 @@ theorem verifyImplies_is_ok {ps₁ ps₁' ps₂ ps₂' : Policies} {Γ : TypeEnv
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicies ps₁ Γ = .ok ps₁')
   (hwt₂ : wellTypedPolicies ps₂ Γ = .ok ps₂')
-  (hnq₁ : PoliciesNoQ ps₁' Γ)
-  (hnq₂ : PoliciesNoQ ps₂' Γ) :
+  (hnq₁ : PoliciesSymCCSupported ps₁' Γ)
+  (hnq₂ : PoliciesSymCCSupported ps₂' Γ) :
   ∃ asserts, verifyImplies ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyIsAuthorized_is_ok _ hwf hwt₁ hwt₂ hnq₁ hnq₂
@@ -227,7 +227,7 @@ theorem isAuthorized_allowAll_is_ok (Γ : TypeEnv) :
 theorem verifyAlwaysAllows_is_ok {ps ps' : Policies} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicies ps Γ = .ok ps')
-  (hnq : PoliciesNoQ ps' Γ) :
+  (hnq : PoliciesSymCCSupported ps' Γ) :
   ∃ asserts, verifyAlwaysAllows ps' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   have ⟨_, h₁⟩ := isAuthorized_is_ok hwf hwt hnq
@@ -243,7 +243,7 @@ theorem verifyAlwaysAllows_is_ok {ps ps' : Policies} {Γ : TypeEnv}
 theorem verifyAlwaysDenies_is_ok {ps ps' : Policies} {Γ : TypeEnv}
   (hwf : Γ.WellFormed)
   (hwt : wellTypedPolicies ps Γ = .ok ps')
-  (hnq : PoliciesNoQ ps' Γ) :
+  (hnq : PoliciesSymCCSupported ps' Γ) :
   ∃ asserts, verifyAlwaysDenies ps' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   have ⟨_, h⟩ := isAuthorized_is_ok hwf hwt hnq
@@ -259,8 +259,8 @@ theorem verifyEquivalent_is_ok {ps₁ ps₁' ps₂ ps₂' : Policies} {Γ : Type
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicies ps₁ Γ = .ok ps₁')
   (hwt₂ : wellTypedPolicies ps₂ Γ = .ok ps₂')
-  (hnq₁ : PoliciesNoQ ps₁' Γ)
-  (hnq₂ : PoliciesNoQ ps₂' Γ) :
+  (hnq₁ : PoliciesSymCCSupported ps₁' Γ)
+  (hnq₂ : PoliciesSymCCSupported ps₂' Γ) :
   ∃ asserts, verifyEquivalent ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyIsAuthorized_is_ok _ hwf hwt₁ hwt₂ hnq₁ hnq₂
@@ -270,8 +270,8 @@ theorem verifyDisjoint_is_ok {ps₁ ps₁' ps₂ ps₂' : Policies} {Γ : TypeEn
   (hwf : Γ.WellFormed)
   (hwt₁ : wellTypedPolicies ps₁ Γ = .ok ps₁')
   (hwt₂ : wellTypedPolicies ps₂ Γ = .ok ps₂')
-  (hnq₁ : PoliciesNoQ ps₁' Γ)
-  (hnq₂ : PoliciesNoQ ps₂' Γ) :
+  (hnq₁ : PoliciesSymCCSupported ps₁' Γ)
+  (hnq₂ : PoliciesSymCCSupported ps₂' Γ) :
   ∃ asserts, verifyDisjoint ps₁' ps₂' (SymEnv.ofEnv Γ) = .ok asserts
 := by
   exact verifyIsAuthorized_is_ok _ hwf hwt₁ hwt₂ hnq₁ hnq₂

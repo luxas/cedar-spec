@@ -1971,26 +1971,26 @@ Compiling a well-typed expression should produce a term of the corresponding `Te
 assuming that the expression is well-formed in the symbolic environment.
 -/
 private theorem noQuantifier_set' {ls : List TypedExpr} {ty : CedarType} {x : TypedExpr}
-    (h : (TypedExpr.set ls ty).NoQuantifier = true) (hx : x ∈ ls) : x.NoQuantifier = true := by
-  simp only [TypedExpr.NoQuantifier, List.all_eq_true] at h
+    (h : (TypedExpr.set ls ty).SymCCSupported = true) (hx : x ∈ ls) : x.SymCCSupported = true := by
+  simp only [TypedExpr.SymCCSupported, List.all_eq_true] at h
   have := h ⟨x, by simpa using hx⟩ (by simp)
   simpa using this
 
 private theorem noQuantifier_call' {xfn : ExtFun} {args : List TypedExpr} {ty : CedarType} {x : TypedExpr}
-    (h : (TypedExpr.call xfn args ty).NoQuantifier = true) (hx : x ∈ args) : x.NoQuantifier = true := by
-  simp only [TypedExpr.NoQuantifier, List.all_eq_true] at h
+    (h : (TypedExpr.call xfn args ty).SymCCSupported = true) (hx : x ∈ args) : x.SymCCSupported = true := by
+  simp only [TypedExpr.SymCCSupported, List.all_eq_true] at h
   have := h ⟨x, by simpa using hx⟩ (by simp)
   simpa using this
 
 private theorem noQuantifier_record' {m : List (Attr × TypedExpr)} {ty : CedarType} {a : Attr} {x : TypedExpr}
-    (h : (TypedExpr.record m ty).NoQuantifier = true) (hx : (a, x) ∈ m) : x.NoQuantifier = true := by
-  simp only [TypedExpr.NoQuantifier, List.all_attach₂_snd, List.all_eq_true] at h
+    (h : (TypedExpr.record m ty).SymCCSupported = true) (hx : (a, x) ∈ m) : x.SymCCSupported = true := by
+  simp only [TypedExpr.SymCCSupported, List.all_attach₂_snd, List.all_eq_true] at h
   have := h (a, x) hx
   simpa using this
 
 theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : TypedExpr} :
   CompileWellTypedCondition tx Γ εnv →
-  tx.NoQuantifier →
+  tx.SymCCSupported →
   CompileWellTyped tx εnv
 := by
   intros h hnq
@@ -1999,7 +1999,7 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
   case var => exact compile_well_typed_var h
   case ite =>
     have ⟨h1, h2, h3⟩ := h.eliminate_ite
-    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
     obtain ⟨⟨hq1, hq2⟩, hq3⟩ := hnq
     apply compile_well_typed_ite
     any_goals apply CompileWellTyped.add_wf
@@ -2007,7 +2007,7 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals assumption
   case and =>
     have ⟨ha, hb⟩ := h.eliminate_or_and ?_
-    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
     obtain ⟨hqa, hqb⟩ := hnq
     apply (compile_well_typed_or_and ?_ ?_).right
     any_goals apply CompileWellTyped.add_wf
@@ -2016,7 +2016,7 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals simp
   case or =>
     have ⟨ha, hb⟩ := h.eliminate_or_and ?_
-    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
     obtain ⟨hqa, hqb⟩ := hnq
     apply (compile_well_typed_or_and ?_ ?_).left
     any_goals apply CompileWellTyped.add_wf
@@ -2025,14 +2025,14 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals simp
   case unaryApp =>
     have hcond := h.eliminate_unaryApp
-    simp only [TypedExpr.NoQuantifier] at hnq
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_unaryApp
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case binaryApp =>
     have ⟨ha, hb⟩ := h.eliminate_binaryApp
-    simp only [TypedExpr.NoQuantifier, Bool.and_eq_true] at hnq
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
     obtain ⟨hqa, hqb⟩ := hnq
     apply compile_well_typed_binaryApp
     any_goals apply CompileWellTyped.add_wf
@@ -2040,21 +2040,21 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals assumption
   case getAttr =>
     have hcond := h.eliminate_getAttr
-    simp only [TypedExpr.NoQuantifier] at hnq
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_getAttr
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case hasAttr =>
     have hcond := h.eliminate_hasAttr
-    simp only [TypedExpr.NoQuantifier] at hnq
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_hasAttr
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case extHasAttr =>
     have hcond := h.eliminate_extHasAttr
-    simp only [TypedExpr.NoQuantifier] at hnq
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_extHasAttr
     · apply CompileWellTyped.add_wf
       · apply compile_well_typed_on_wf_expr hcond hnq
@@ -2087,9 +2087,35 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
       apply hcond
       assumption
     assumption
-  case all =>
-    -- SymCC does not compile `.all` (Part B, D-33/D-34); excluded by `NoQuantifier`.
-    simp [TypedExpr.NoQuantifier] at hnq
+  case all x₁ p ty =>
+    -- D-72 step (4) `.all` arm. The `SymCCSupported` guard now ADMITS `.all` (it is
+    -- `x₁.SymCCSupported && p.NoItDependentIn`, not `false`), so this arm is no longer
+    -- vacuous. What it needs:
+    --   • the receiver `x₁` compiles well-typed  — via the ih (compile_well_typed_on_wf_expr),
+    --   • the D-70/D-71 compile guard passes      — `p.NoItDependentIn` from `hnq`,
+    --   • the per-element predicate compiles Bool  — the D-65 guard, from
+    --     `compilePred_well_typed` applied to the SOURCE predicate via h₄ + D-73b
+    --     (`p = normalize p₀`). That last piece is BLOCKED on D-74 (normalize is not yet
+    --     installed in `typeOfAll`, and `normalize_evaluatePred` / predicate soundness is
+    --     the open question), so it is left as a clearly named obligation with `skip`.
+    have ⟨hεnv, hwt, hwf⟩ := h
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
+    obtain ⟨hrecv, hnoit⟩ := hnq
+    cases hwt with
+    | all h₁ h₂ h₃ h₄ =>
+      -- Receiver compiles well-typed (quantifier-free fragment handled by the ih).
+      -- (CompileWellTypedCondition for x₁ is derivable from h: same εnv, h₁ : WellTyped x₁,
+      -- and x₁.toExpr ⊆ (.all x₁ p).toExpr for ValidRefsFor.) Named for the final assembly.
+      -- The remaining obligation — the stored predicate compiles to a Bool-typed term —
+      -- is exactly where `compilePred_well_typed` (dispatcher, done) meets D-74:
+      -- `compilePred p (someOf (anyAllItVar _)) εnv` succeeds with `(option.get _).typeOf = .bool`.
+      -- Under D-73b the stored `p` is `normalize p₀` and h₄ gives `typeOfPred p₀ … = .ok (typ,c')`
+      -- with `typ.typeOf = .bool _`; the dispatcher's conclusion is about `compilePred (normalize p₀)`,
+      -- which equals `compilePred p`. That identification (and the receiver assembly) is BLOCKED on
+      -- D-74 — left open:
+      have hall_arm : CompileWellTyped (.all x₁ p (.bool .anyBool)) εnv := by
+        skip
+      exact hall_arm
   decreasing_by
     repeat case _ =>
       simp [*]; omega

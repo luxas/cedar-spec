@@ -192,27 +192,6 @@ decreasing_by
     omega
 
 /--
-True iff a typed expression contains no `.all` quantifier node. The symbolic
-compiler (SymCC) supports exactly this fragment in Part A; the SymCC encoding of
-`.all` is Part B (D-33/D-34), so SymCC completeness is stated over this fragment.
--/
-public def TypedExpr.NoQuantifier : TypedExpr → Bool
-  | .lit _ _ => true
-  | .var _ _ => true
-  | .ite c t e _ => c.NoQuantifier && t.NoQuantifier && e.NoQuantifier
-  | .and a b _ => a.NoQuantifier && b.NoQuantifier
-  | .or a b _ => a.NoQuantifier && b.NoQuantifier
-  | .unaryApp _ e _ => e.NoQuantifier
-  | .binaryApp _ a b _ => a.NoQuantifier && b.NoQuantifier
-  | .getAttr e _ _ => e.NoQuantifier
-  | .hasAttr e _ _ => e.NoQuantifier
-  | .extHasAttr e _ _ _ => e.NoQuantifier
-  | .set ls _ => ls.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.NoQuantifier)
-  | .record m _ => m.attach₂.all (fun x => x.val.snd.NoQuantifier)
-  | .call _ args _ => args.attach.all (fun x => have := List.sizeOf_lt_of_mem x.property; x.val.NoQuantifier)
-  | .all _ _ _ => false
-
-/--
 True iff a typed expression is in the fragment SymCC's `compile` can analyze under
 D-70 option A: quantifier-free subexpressions are always supported, and an `.all`
 node is supported iff its receiver is supported and its predicate has no `it`-dependent

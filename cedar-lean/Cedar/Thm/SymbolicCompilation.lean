@@ -208,7 +208,7 @@ the type `TermType.ofType tx.typeOf`.
 theorem compile_well_typed {tx : TypedExpr} {Γ : TypeEnv} :
   Γ.WellFormed →
   TypedExpr.WellTyped Γ tx →
-  tx.NoQuantifier →
+  tx.SymCCSupported →
   ∃ t : Term,
     compile tx.toExpr (SymEnv.ofEnv Γ) = .ok t ∧
     t.WellFormed (SymEnv.ofEnv Γ).entities ∧
