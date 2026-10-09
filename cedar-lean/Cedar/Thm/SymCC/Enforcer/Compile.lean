@@ -1333,6 +1333,40 @@ private theorem compilePred_interpret_and_on_footprint {x₁ x₂ : PredExpr} {f
       have hih₂ := ih₂ hft hok₂
       simp only [pe_option_get_some, pe_ite_true, pe_ifSome_some hty₂, hih₂]
 
+private theorem compilePred_interpret_or_on_footprint {x₁ x₂ : PredExpr} {ft : Set Term} {it : Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {pt : Term} {elemTy : TermType}
+  (hI₁ : I₁.WellFormed εnv.entities) (hI₂ : I₂.WellFormed εnv.entities) (hwε : εnv.WellFormed)
+  (hitw : it.WellFormed εnv.entities) (hitty : it.typeOf = .option elemTy)
+  (hsm : εnv.SameOn ft I₁ I₂)
+  (hft : footprintPred (.or x₁ x₂) it εnv ⊆ ft)
+  (hok : compilePred (.or x₁ x₂) it εnv = .ok pt)
+  (ih₁ : ∀ {t₁}, footprintPred x₁ it εnv ⊆ ft → compilePred x₁ it εnv = .ok t₁ → t₁.interpret I₁ = t₁.interpret I₂)
+  (ih₂ : ∀ {t₂}, footprintPred x₂ it εnv ⊆ ft → compilePred x₂ it εnv = .ok t₂ → t₂.interpret I₁ = t₂.interpret I₂) :
+  pt.interpret I₁ = pt.interpret I₂
+:= by
+  replace ⟨t₁, hok₁, h₃⟩ := compilePred_or_ok_implies hok
+  split at h₃
+  · subst h₃
+    simp only [interpret_term_some, interpret_term_prim]
+  · rename_i hf
+    simp only [CompileOrSym] at h₃
+    replace ⟨ht₁, t₂, hok₂, hty₂, h₃⟩ := h₃
+    subst h₃
+    have hbf₁ := compilePred_wf hwε hitw hitty hok₁
+    have hbf₂ := compilePred_wf hwε hitw hitty hok₂
+    cases ht : decide (t₁ = .some (.bool false)) <;>
+    simp only [decide_eq_true_eq, decide_eq_false_iff_not] at ht <;>
+    simp only [footprintPred, footprintPred.ofBranch, hok₁] at hft
+    · simp only [Set.union_subset] at hft
+      have hih₁ := ih₁ hft.left.left hok₁
+      have hih₂ := ih₂ hft.right hok₂
+      exact interpret_ifSome_ifSome_ite_eq hI₁ hI₂
+        hbf₁.left (Term.WellFormed.some_wf wf_bool) hbf₂.left
+        ht₁ (by simp only [typeOf_term_some, typeOf_bool]) hty₂
+        hih₁ (by simp only [interpret_term_some, interpret_term_prim]) hih₂
+    · subst ht
+      have hih₂ := ih₂ hft hok₂
+      simp only [pe_option_get_some, pe_ite_false, pe_ifSome_some hty₂, hih₂]
+
 theorem compile_interpret_on_footprint {x : Expr} {ft : Set Term} {εnv : SymEnv} {I₁ I₂ : Interpretation} {t : Term}
   (hwε : εnv.WellFormedFor x)
   (hI₁ : I₁.WellFormed εnv.entities)
