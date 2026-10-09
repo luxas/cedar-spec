@@ -150,4 +150,55 @@ theorem ifSome_guard_congr {εs : SymEntities} {g t₂ t₃ : Term} {ty ety : Te
   · subst hw
     rw [hsome w rfl]
 
+/-- If some element folds its `or`-head to literal `true`, the whole `foldr or` is literal `true`. -/
+theorem foldr_or_true_of_mem {α} {g : α → Term} {ws : List α}
+    (h : ∃ w ∈ ws, g w = Term.prim (.bool true)) :
+    ws.foldr (fun w acc => Factory.or (g w) acc) (false : Term) = Term.prim (.bool true) := by
+  induction ws with
+  | nil => obtain ⟨_, hmem, _⟩ := h; simp at hmem
+  | cons hd tl ih =>
+    simp only [List.foldr_cons]
+    obtain ⟨w, hmem, hw⟩ := h
+    rcases List.mem_cons.mp hmem with rfl | htl
+    · rw [hw]; exact pe_or_true_left
+    · rw [ih ⟨w, htl, hw⟩]; exact pe_or_true_right
+
+/-- `foldr and` congruence when the per-element terms agree. -/
+theorem foldr_and_congr {α} {g₁ g₂ : α → Term} {ws : List α}
+    (h : ∀ w ∈ ws, g₁ w = g₂ w) :
+    ws.foldr (fun w acc => Factory.and (g₁ w) acc) (true : Term)
+      = ws.foldr (fun w acc => Factory.and (g₂ w) acc) (true : Term) := by
+  induction ws with
+  | nil => rfl
+  | cons hd tl ih =>
+    simp only [List.foldr_cons, h hd (by simp), ih (fun w hw => h w (by simp [hw]))]
+
+/-- Route A (D-68): the `set.all` fold tolerates swapping `option.get` for `option.get' I`
+in the value conjunction. If some element is `.none` the error disjunction is `true` and both
+`ite`s collapse to `noneOf .bool`; otherwise every element is `.some`, where `option.get = option.get' I`,
+so the value conjunctions agree. Stated over an abstract list `ws` of WF-literal option-`.bool` terms
+so both εnv cases (symbolic via `extInterp`, literal via plain `I`) instantiate it. -/
+theorem fold_ite_get_get'_congr {εs : SymEntities} {I : Interpretation} {ws : List Term}
+    (hw : ∀ w ∈ ws, w.WellFormedLiteral εs ∧ w.typeOf = .option .bool) :
+    Factory.ite (ws.foldr (fun w acc => Factory.or (Factory.not (Factory.isSome w)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (ws.foldr (fun w acc => Factory.and (Factory.option.get w) acc) (true : Term)))
+      = Factory.ite (ws.foldr (fun w acc => Factory.or (Factory.not (Factory.isSome w)) acc) (false : Term))
+        (Factory.noneOf .bool)
+        (Factory.someOf (ws.foldr (fun w acc => Factory.and (Factory.option.get' I w) acc) (true : Term))) := by
+  by_cases hcong : ∀ w ∈ ws, Factory.option.get w = Factory.option.get' I w
+  · -- value conjunctions agree elementwise
+    rw [foldr_and_congr hcong]
+  · -- some element differs ⇒ it must be `.none` (a `.some` gives option.get = option.get');
+    -- then the error disjunction is `true` and both ite's collapse to noneOf
+    simp only [Classical.not_forall, Classical.not_imp] at hcong
+    obtain ⟨w, hmem, hwne⟩ := hcong
+    rcases wfl_of_type_option_is_option (hw w hmem).left (hw w hmem).right with hn | ⟨w', hw', _⟩
+    · have herr : ws.foldr (fun w acc => Factory.or (Factory.not (Factory.isSome w)) acc) (false : Term)
+          = Term.prim (.bool true) := by
+        apply foldr_or_true_of_mem
+        exact ⟨w, hmem, by rw [hn, pe_isSome_none, pe_not_false]⟩
+      rw [herr, pe_ite_true, pe_ite_true]
+    · exact absurd (by rw [hw', pe_option_get_some, pe_option_get'_some]) hwne
+
 end Cedar.Thm
