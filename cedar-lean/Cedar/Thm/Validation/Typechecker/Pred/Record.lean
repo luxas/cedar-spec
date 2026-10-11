@@ -10,8 +10,10 @@ import Cedar.Thm.Validation.Typechecker.Record
 # Predicate type soundness — `.record` arm (Phase 9c, M-record)
 
 Mirror of `type_of_record_is_sound` (`Typechecker/Record.lean`) over
-`PredExpr`/`evaluatePred`/`typeOfPred`, in the WEAK form (D-94): no capability
-invariant, and the error side admits ANY error.
+`PredExpr`/`evaluatePred`/`typeOfPred`, in the full-mirror form (D-74 option A):
+takes `CapabilitiesInvariantPred c₁ it …` and concludes
+`GuardedCapabilitiesInvariantPred (.record axs) c₂ …` AND existence of a value of
+the inferred type. The error side admits ANY error (weak soundness, D-94).
 
 `typeOfPred (.record axs)` maps `typeOfPred` over the attr-exprs and builds a
 record type via `Map.make`; `evaluatePred (.record axs)` maps `evaluatePred` and
@@ -21,9 +23,13 @@ the expression proof — it is about `List.Forall₂ AttrValueHasAttrType` and i
 independent of HOW the values were produced. Only the inversion and the
 "evaluated values instance of the inferred types" bridge need pred twins.
 
-Because weak soundness admits any error, the error arm is trivial: an erroring
-`axs.mapM₂` makes `evaluatePred (.record axs)` error, and `EvaluatesToPred.error`
-closes the goal for any witness.
+The `.record` arm produces EMPTY output capabilities, so the guarded invariant is
+discharged by `empty_guarded_capabilities_invariant_pred`. Because weak soundness
+admits any error, the error arm needs only *a* witness of the inferred record
+type: an erroring `axs.mapM₂` makes `evaluatePred (.record axs)` error, and
+`EvaluatesToPred.error` closes the goal for any witness, which is assembled from
+the per-element induction hypotheses (each child type is inhabited by the value
+its IH produces).
 -/
 
 namespace Cedar.Thm
@@ -101,6 +107,7 @@ no capability hypothesis.
 -/
 theorem head_of_pred_vals_instance_of_head_of_types {xhd : Attr × PredExpr} {itTy : CedarType} {it : Value} {c₁ : Capabilities} {env : TypeEnv} {request : Request} {entities : Entities} {rhd : Attr × TypedExpr} {vhd : Attr × Value}
   (h₁ : TypeOfPredIsSound xhd.snd)
+  (hci : CapabilitiesInvariantPred c₁ it request entities)
   (h₂ : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
   (h₄ : AttrPredHasAttrType itTy c₁ env xhd rhd)
@@ -109,8 +116,8 @@ theorem head_of_pred_vals_instance_of_head_of_types {xhd : Attr × PredExpr} {it
 := by
   simp [TypeOfPredIsSound] at h₁
   replace ⟨h₄, _, h₆⟩ := h₄ ; rw [←h₄]
-  specialize h₁ h₂ hit h₆
-  have ⟨v, h₁, h₇⟩ := h₁
+  specialize h₁ hci h₂ hit h₆
+  have ⟨_, v, h₁, h₇⟩ := h₁
   simp [bindAttr] at h₅
   cases h₈ : evaluatePred xhd.snd it request entities <;> simp [h₈] at h₅
   simp [EvaluatesToPred, h₈] at h₁ ; subst h₁ h₅
@@ -122,6 +129,7 @@ Pred twin of `vals_instance_of_types`, weak form.
 -/
 theorem pred_vals_instance_of_types {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value} {c₁ : Capabilities} {env : TypeEnv} {request : Request} {entities : Entities} {rtx : List (Attr × TypedExpr)} {avs : List (Attr × Value)}
   (ih : ∀ a x, (a, x) ∈ axs → TypeOfPredIsSound x)
+  (hci : CapabilitiesInvariantPred c₁ it request entities)
   (h₂ : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
   (h₃ : List.Forall₂ (AttrPredHasAttrType itTy c₁ env) axs rtx)
@@ -141,74 +149,106 @@ theorem pred_vals_instance_of_types {axs : List (Attr × PredExpr)} {itTy : Ceda
     rename_i vhd vtl
     apply List.Forall₂.cons
     {
-      apply head_of_pred_vals_instance_of_head_of_types _ h₂ hit h₅ h₇
+      apply head_of_pred_vals_instance_of_head_of_types _ hci h₂ hit h₅ h₇
       apply ih xhd.fst xhd.snd
-      simp only [List.mem_cons, Prod.mk.injEq, true_or]
+      simp only [List.mem_cons, true_or]
     }
     {
-      apply @pred_vals_instance_of_types xtl itTy it c₁ env request entities rtl vtl _ h₂ hit h₆ h₈
+      apply @pred_vals_instance_of_types xtl itTy it c₁ env request entities rtl vtl _ hci h₂ hit h₆ h₈
       intro a x h₉ ; apply ih a x ; simp [h₉]
     }
 
 /--
-Error-branch inhabitant for the `.record` result type.
+Error-branch inhabitant for the `.record` result type, built from the per-element
+induction hypotheses rather than a type well-formedness lemma.
 
 Weak soundness still requires *a* witness value of the inferred record type on the
 error side (the value is discarded by `EvaluatesToPred.error`, but the existential
 `∃ v, … ∧ InstanceOfType env v ty.typeOf` demands one). The record type is
-`.record (Map.make (rty.map λ (a,tx) => (a, .required tx.typeOf)))`; it is inhabited
-by `type_is_inhabited_record` once the type is well-formed, which reduces to each
-child `tx.typeOf.WellFormed env`.
+`.record (Map.make (rty.map λ (a,tx) => (a, .required tx.typeOf)))`.
 
-The per-child type well-formedness is the predicate twin of
-`typechecked_has_well_formed_type` (`Thm/WellTyped/Expr/WF.lean`) and is the SAME
-missing prerequisite that `Pred/GetAttr.lean` / `Pred/HasAttr.lean` need for their
-own error-side inhabitants. It belongs in `Pred/Basic.lean` (as e.g.
-`type_of_pred_result_type_wf : env.WellFormed → InstanceOfType env it itTy →
-typeOfPred p itTy c env = .ok (tx, c') → tx.typeOf.WellFormed env`), proved by the
-pred analogue of `typechecked_is_well_typed_after_lifting`; it cannot be stated in
-this arm file without editing `Pred/Basic.lean`. Everything else in this file is
-green; this is the single remaining obligation.
+Instead of reconstructing well-formedness of each child type (which would require a
+pred twin of `typechecked_has_well_formed_type` in `Pred/Basic.lean`, forbidden
+here), we observe that every child already typed (`h₅ : Forall₂ AttrPredHasAttrType
+axs rty`) and `TypeOfPredIsSound` therefore *produces* a value instance of each
+child type. Collecting those witnesses gives a `Forall₂ AttrValueHasAttrType` over
+the required-typed children, which `mk_vals_instance_of_mk_types` turns into a
+record instance — exactly the OK-path construction, but with the witnesses coming
+from the IHs instead of the actual (erroring) evaluation. This needs no capability
+plumbing beyond `hci`, which it threads into each element IH.
 -/
 theorem type_of_pred_record_type_is_inhabited {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value}
     {c₁ : Capabilities} {env : TypeEnv} {rty : List (Attr × TypedExpr)} {request : Request} {entities : Entities}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
+    (ih : ∀ a x, (a, x) ∈ axs → TypeOfPredIsSound x)
     (h₅ : List.Forall₂ (AttrPredHasAttrType itTy c₁ env) axs rty) :
     ∃ v, InstanceOfType env v (CedarType.record (Map.make (rty.map λ (a, tx) => (a, .required tx.typeOf)))) := by
-  -- Each inferred child type is well-formed (the missing pred-WF prerequisite),
-  -- hence the whole record type is well-formed and `type_is_inhabited` closes it.
-  apply type_is_inhabited h₂.wf_env
-  exact type_of_pred_record_result_type_wf h₂ hit h₅
+  -- First collect, by induction on the inversion `Forall₂`, a list of attr values
+  -- that is `Forall₂ AttrValueHasAttrType` over the required-typed children.
+  suffices h : ∃ avs : List (Attr × Value),
+      List.Forall₂ (AttrValueHasAttrType (env := env)) avs (rty.map λ (a, tx) => (a, .required tx.typeOf)) by
+    have ⟨avs, hforall⟩ := h
+    refine ⟨Value.record (Map.make avs), ?_⟩
+    apply mk_vals_instance_of_mk_types
+    let p := fun (v : Value) (qty : QualifiedType) => InstanceOfType env v qty.getType
+    have h₈ := List.canonicalize_preserves_forallᵥ p avs (rty.map λ (a, tx) => (a, .required tx.typeOf))
+    simp [List.Forallᵥ] at h₈
+    exact h₈ hforall
+  -- The collection, by induction on `h₅`.
+  induction h₅
+  case nil => exact ⟨[], by simp [List.map_nil]⟩
+  case cons xhd rhd xtl rtl h₆ h₇ ihtl =>
+    have ⟨vtl, hvtl⟩ := ihtl (by intro a x hx; exact ih a x (by simp [hx]))
+    -- the head element types, so its IH gives a value instance of the head type.
+    obtain ⟨hkey, c', h₈⟩ := h₆
+    have ihhd : TypeOfPredIsSound xhd.snd :=
+      ih xhd.fst xhd.snd (by simp only [List.mem_cons, true_or])
+    have hsound := ihhd (itTy := itTy) (it := it) (c₁ := c₁) (c₂ := c')
+      (env := env) (ty := rhd.snd) (request := request) (entities := entities)
+      hci h₂ hit h₈
+    obtain ⟨_, vhd, _, hinst⟩ := hsound
+    refine ⟨(rhd.fst, vhd) :: vtl, ?_⟩
+    simp only [List.map_cons]
+    apply List.Forall₂.cons _ hvtl
+    simp only [AttrValueHasAttrType, Qualified.getType]
+    exact ⟨trivial, hinst⟩
 
 /--
-`.record` predicate soundness (pred twin of `type_of_record_is_sound`), WEAK form
-(D-94). On success every attr value is an instance of the inferred required type,
-so the built record is an instance of the record type; on any error the whole
-expression errors, which `EvaluatesToPred.error` admits for any witness.
+`.record` predicate soundness (pred twin of `type_of_record_is_sound`), full-mirror
+form (D-74 option A). The `.record` arm produces EMPTY output capabilities, so the
+guarded invariant is discharged by `empty_guarded_capabilities_invariant_pred`.
+On success every attr value is an instance of the inferred required type, so the
+built record is an instance of the record type; on any error the whole expression
+errors, which `EvaluatesToPred.error` admits for any witness, the witness being
+drawn from the per-element IHs.
 -/
 theorem type_of_pred_record_is_sound {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
     (h₃ : typeOfPred (.record axs) itTy c₁ env = Except.ok (ty, c₂))
     (ih : ∀ a x, (a, x) ∈ axs → TypeOfPredIsSound x) :
+    GuardedCapabilitiesInvariantPred (.record axs) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.record axs) it request entities v ∧ InstanceOfType env v ty.typeOf := by
-  have ⟨_, rty, h₄, h₅⟩ := type_of_pred_record_inversion h₃
-  subst h₄
+  have ⟨hc, rty, h₄, h₅⟩ := type_of_pred_record_inversion h₃
+  subst hc h₄
+  refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
   simp only [TypedExpr.typeOf]
   simp only [EvaluatesToPred, evaluatePred]
   let f := fun (x : Attr × PredExpr) => bindAttr x.fst (evaluatePred x.snd it request entities)
   rw [List.mapM₂_eq_mapM f]
   cases h₆ : (axs.mapM f) <;> simp only [Except.bind_err, Except.bind_ok]
   case error err =>
-    have ⟨v, hv⟩ := type_of_pred_record_type_is_inhabited h₂ hit h₅
+    have ⟨v, hv⟩ := type_of_pred_record_type_is_inhabited hci h₂ hit ih h₅
     refine ⟨v, Or.inl ⟨err, by simp only [f] at h₆; simp only [h₆]⟩, hv⟩
   case ok avs =>
     refine ⟨Value.record (Map.make avs), Or.inr rfl, ?_⟩
     apply mk_vals_instance_of_mk_types
     let p := fun (v : Value) (qty : QualifiedType) => InstanceOfType env v qty.getType
-    have h₇ := pred_vals_instance_of_types ih h₂ hit h₅ (by simp only [f] at h₆; exact h₆)
+    have h₇ := pred_vals_instance_of_types ih hci h₂ hit h₅ (by simp only [f] at h₆; exact h₆)
     have h₈ := List.canonicalize_preserves_forallᵥ p avs (rty.map λ (a, tx) => (a, .required tx.typeOf))
     simp [List.Forallᵥ] at h₈
     exact h₈ h₇
