@@ -449,6 +449,23 @@ reverts red drafts (the learned rule — spawn a fresh worker or drive the file 
   the same shape (tag capabilities). The `.item`/`.lit`/`.var`/`.unaryApp`/`.record`/`.call` arms do
   NOT hit this (unaryApp/record/call output `∅` caps and read none from `c`).
 
+- **D-P9c-12 — `typeOfPred_normalize` is TYPE-preserving only, NOT cap-preserving (M4→M5 lynchpin,
+  LEAD worker #2, 2026-10-11).** §5.4 step 1 stores `normalize p₀` in the typed `.all` node, so the
+  `WellTyped.all` `h₄` obligation and `compilePred_well_typed` must be fed a typing of the NORMALIZED
+  predicate; the bridge is `typeOfPred (normalize p₀) = typeOfPred p₀`. That equality is **FALSE on
+  the capability component**: `normalize` folds a constant bool `.ite`/`.and`/`.or` and may do so
+  inside a record/entity-typed operand of a `.getAttr`/`.hasAttr`/`.binaryApp` (e.g.
+  `(.ite const rec1 rec2).getAttr a`), changing that operand's `toCapKey` and hence the capability
+  `typeOfGetAttr`/`typeOfHasAttr`/`typeOfBinaryApp` store keyed by it — so output `c'` can differ.
+  The **TYPE** never depends on `toCapKey` (Phase-6 lesson: expr args affect only Bool annotations +
+  compile success, never the compiled TYPE), and D-39's `typeOfAll` discards the predicate's output
+  caps. Both the `h₄` obligation (`typ.typeOf = .bool b`) and `compilePred_well_typed`'s conclusion
+  (`t.typeOf = .option (ofType typ.typeOf)`) depend only on the type. **So M5 wires against the
+  type-preserving form** `typeOfPred p₀ itTy c env = .ok (typ,c') → ∃ typ' c'',
+  typeOfPred (PredExpr.normalize p₀ itTy c env) itTy c env = .ok (typ', c'') ∧ typ'.typeOf = typ.typeOf`
+  — NOT a full equality. Proof is structural (M4-sized); the fold arms pin the folded branch's bool
+  type via `type_of_pred_is_sound`. Keep `PredExpr.Normal` consistent but do not state a cap-equality.
+
 **Milestones (9c):**
 - **M1** — foundation: `EvaluatesToPred`, `TypeOfPredIsSound`, prove `.item`/`.lit`/`.var`; stub the
   recursive arms as separate lemmas; dispatcher assembled. Validates the mirror strategy.

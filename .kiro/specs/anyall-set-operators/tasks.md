@@ -462,6 +462,33 @@ bottom-up:
   lemma (b) quantifier-boundary entry, M5 wiring (Spec: `typeOfAll` stores `normalize p₀`, flip
   `TypedExpr.SymCCSupported (.all …)` off `false`, restore the real `compile_well_typed` `.all` arm;
   fix `type_of_preserves_evaluation_results` `.all` via M4) + D-79, M6 green bar.
+
+  **UPDATE 4 (fresh LEAD worker #2, 2026-10-11 ~17:30):** **M4 `normalize_evaluatePred` is GREEN and
+  axiom-clean** (`#print axioms` = `[propext, Classical.choice, Quot.sound]`), committed `574fe0f`.
+  Closed all 9 residual spots: `.record`/`.call` fuse the normalized `map₂`/`map₁` through the
+  evaluator's `mapM₂`/`mapM₁` via explicit `map₂_eq_map`/`map₁_eq_map` + `mapM₂_eq_mapM` + `mapM_map`,
+  then `mapM_congr`/`congrArg` + the IH element-wise; `.and`/`.ite` folds reduce by
+  `conv => rhs; rw [evaluatePred]` to unfold the RHS node (plain `simp [evaluatePred]` does NOT unfold —
+  `evaluatePred` is well-founded-recursive), then the bool-value split with `↓reduceIte`; robust
+  `.bool`-type extraction inverts `typeOfAnd`/`typeOfIf` by `split` (bool arms via `assumption`, the
+  err arm via `simp only [err, reduceCtorEq]`).
+
+  **D-P9c-12 (DESIGN FINDING, blocks M5 — the lynchpin `typeOfPred_normalize`):** the PLAN §5 claim
+  that `typeOfPred` "re-types the normalized predicate identically" is TRUE only for the **TYPE**
+  component, NOT capabilities. `normalize` folds a constant `.ite`/`.and`/`.or` (bool-typed) and may
+  do so INSIDE a record/entity-typed operand of a `.getAttr`/`.hasAttr`/`.binaryApp` (e.g.
+  `(.ite const rec1 rec2).getAttr a`), which changes that operand's `toCapKey`, hence the capability
+  that `typeOfGetAttr`/`typeOfHasAttr`/`typeOfBinaryApp` store keyed by it — so the output `c'` CAN
+  differ between source and normalized. The TYPE never depends on `toCapKey` (matches the Phase-6
+  lesson: "expr args affect only Bool annotations + compile success, never the compiled TYPE"), and
+  D-39's `typeOfAll` DROPS the predicate's output caps (returns the outer `c`). The `WellTyped.all`
+  `h₄` and `compilePred_well_typed`'s conclusion both need only `typ.typeOf = .bool b` / the term type,
+  never `c'`. **Therefore the correct, provable lemma to wire M5 is the TYPE-preserving form:**
+  `typeOfPred p₀ itTy c env = .ok (typ,c') → ∃ typ' c'', typeOfPred (PredExpr.normalize p₀ itTy c env)
+  itTy c env = .ok (typ', c'') ∧ typ'.typeOf = typ.typeOf`. A full (type+cap) `typeOfPred_normalize`
+  equality is FALSE and must not be stated. Next worker: prove this type-preserving form (structural,
+  M4-sized; the `.and`/`.or`/`.ite` fold arms use `type_of_pred_is_sound` to pin the folded branch's
+  bool type), then wire §5.4 steps 1–6 against it.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
