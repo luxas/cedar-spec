@@ -120,16 +120,24 @@ theorem normalize_evaluatePred {p : PredExpr} {itTy : CedarType} {it : Value}
     cases hm : axs.mapM₂ (λ x => (typeOfPred x.1.snd itTy c env).map (λ (ty, _) => (x.1.fst, ty)))
       <;> simp only [hm, Except.bind_err, Except.bind_ok, reduceCtorEq] at hty
     simp only [PredExpr.normalize, evaluatePred]
-    rw [List.mapM₂_eq_mapM, List.map₂_eq_map, List.mapM_map]
-    rw [List.mapM₂_eq_mapM (fun x => bindAttr x.fst (evaluatePred x.snd it request entities))]
-    congr 1
-    apply List.map_congr_left
+    -- RHS: collapse `mapM₂`/`map₂` wrappers to plain `mapM`/`map` (projection-form bodies).
+    rw [show (axs.map₂ (fun x => (x.1.fst, PredExpr.normalize x.1.snd itTy c env)))
+          = axs.map (fun p : Attr × PredExpr => (p.fst, PredExpr.normalize p.snd itTy c env))
+        from List.map₂_eq_map (fun p : Attr × PredExpr => (p.fst, PredExpr.normalize p.snd itTy c env))]
+    rw [List.mapM₂_eq_mapM (fun p : Attr × PredExpr => bindAttr p.fst (evaluatePred p.snd it request entities)),
+        List.mapM₂_eq_mapM (fun p : Attr × PredExpr => bindAttr p.fst (evaluatePred p.snd it request entities)),
+        List.mapM_map]
+    apply congrArg (f := fun r => r >>= fun avs => Except.ok (Value.record (Map.make avs)))
+    apply List.mapM_congr
     intro x hx
     obtain ⟨a, e⟩ := x
     have hety : ∃ b, (typeOfPred e itTy c env).map (λ (ty, _) => (a, ty)) = Except.ok b := by
-      rw [List.mapM₂_eq_mapM (λ x => (typeOfPred x.snd itTy c env).map (λ (ty, _) => (x.fst, ty)))] at hm
+      simp only [List.mapM₂_eq_mapM
+        (λ (x : Attr × PredExpr) =>
+          Except.map (fun x₁ : (TypedExpr × Capabilities) => (x.fst, x₁.fst)) (typeOfPred x.snd itTy c env))] at hm
       have := List.mapM_ok_implies_all_ok hm (a, e) hx
-      obtain ⟨b, _, hb⟩ := this; exact ⟨b, hb⟩
+      obtain ⟨b, _, hb⟩ := this
+      exact ⟨b, by simpa only [Except.map] using hb⟩
     obtain ⟨b, hety⟩ := hety
     cases he : typeOfPred e itTy c env <;> simp only [he, Except.map, reduceCtorEq] at hety
     rename_i r
@@ -142,12 +150,15 @@ theorem normalize_evaluatePred {p : PredExpr} {itTy : CedarType} {it : Value}
     cases hm : xs.mapM₁ (λ x => justType (typeOfPred x.1 itTy c env))
       <;> simp only [hm, Except.bind_err, Except.bind_ok, reduceCtorEq] at hty
     simp only [PredExpr.normalize, evaluatePred]
-    rw [List.map₁_eq_map, List.mapM₁_eq_mapM, List.mapM₁_eq_mapM, List.mapM_map]
-    congr 1
-    apply List.map_congr_left
+    rw [List.map₁_eq_map (fun p : PredExpr => PredExpr.normalize p itTy c env),
+        List.mapM₁_eq_mapM (fun p : PredExpr => evaluatePred p it request entities),
+        List.mapM₁_eq_mapM (fun p : PredExpr => evaluatePred p it request entities),
+        List.mapM_map]
+    apply congrArg (f := fun r => r >>= fun vs => call f vs)
+    apply List.mapM_congr
     intro x hx
     have hety : ∃ b, justType (typeOfPred x itTy c env) = Except.ok b := by
-      rw [List.mapM₁_eq_mapM (λ x => justType (typeOfPred x itTy c env))] at hm
+      simp only [List.mapM₁_eq_mapM (λ x => justType (typeOfPred x itTy c env))] at hm
       have := List.mapM_ok_implies_all_ok hm x hx
       obtain ⟨b, _, hb⟩ := this; exact ⟨b, hb⟩
     obtain ⟨b, hety⟩ := hety
@@ -170,9 +181,14 @@ theorem normalize_evaluatePred {p : PredExpr} {itTy : CedarType} {it : Value}
     · -- `.bool .ff` left: normalize folds to `x₁'`; eval of `.and` short-circuits.
       rename_i hff
       rcases pred_ff_eval_false_or_err hnr hitwf hci hwfenv hit hx₁ hff with hfe | ⟨err, hfe⟩
-      · simp only [evaluatePred, ih₁, hfe, Result.as, Coe.coe, Value.asBool, Except.bind_ok,
-          Bool.not_false, if_true]
-      · simp only [evaluatePred, ih₁, hfe, Result.as, Coe.coe, Value.asBool, Except.bind_err]
+      · rw [ih₁]
+        conv => rhs; rw [evaluatePred]
+        rw [hfe]
+        simp only [Result.as, Coe.coe, Value.asBool, Except.bind_ok, Bool.not_false, ↓reduceIte]
+      · rw [ih₁]
+        conv => rhs; rw [evaluatePred]
+        rw [hfe]
+        simp only [Result.as, Coe.coe, Value.asBool, Except.bind_err]
     · -- non-ff: `.and x₁' x₂'`. Case on x₁'s evaluation; x₂/x₂' only run when x₁ = true.
       rename_i hnotff
       simp only [evaluatePred, ih₁]
@@ -182,29 +198,26 @@ theorem normalize_evaluatePred {p : PredExpr} {itTy : CedarType} {it : Value}
         -- x₁ is Bool-typed, so v₁ = .prim (.bool b₁)
         have ⟨_, w₁, hw₁, hwi₁⟩ := type_of_pred_is_sound hnr hitwf hci hwfenv hit hx₁
         have ⟨bty₁, hbty₁⟩ : ∃ bty, r₁.1.typeOf = .bool bty := by
-          -- from typeOfAnd's inversion the left operand is bool-typed
+          -- `typeOfAnd` succeeds only when the left operand is `.bool _`.
           simp only [typeOfAnd] at hty
-          split at hty <;> first | (rename_i hb; exact ⟨_, hb⟩) | simp only [reduceCtorEq] at hty
+          split at hty
+          · exact ⟨_, by assumption⟩
+          · exact ⟨_, by assumption⟩
+          · simp only [err, reduceCtorEq] at hty
         rw [hbty₁] at hwi₁
         simp only [EvaluatesToPred, he₁] at hw₁
         rcases hw₁ with ⟨err, hw₁⟩ | hw₁
         · simp only [reduceCtorEq] at hw₁
         · rw [Except.ok.injEq] at hw₁; subst hw₁
           have ⟨b₁, hb₁⟩ := instance_of_bool_is_bool hwi₁; subst hb₁
-          have hci₂ : CapabilitiesInvariantPred (c ∪ r₁.2) it request entities := by
-            by_cases hbtrue : b₁ = true
-            · subst hbtrue
-              exact capability_union_invariant_pred hci (ig₁ (by simp only [he₁]))
-            · -- b₁ = false ⇒ x₂' is never evaluated below, so hci₂ is unused; still must
-              -- supply it. Use union with x₁'s guarded output — but the guard fails, so
-              -- fall back: the and short-circuits, so we actually don't need x₂'s IH.
-              simp only [Bool.not_eq_true] at hbtrue; subst hbtrue
-              simp only [Result.as, Coe.coe, Value.asBool, Bool.not_false, if_true]
-              exact capability_union_invariant_pred hci (empty_capabilities_invariant_pred _ _ _)
-          have ih₂ := normalize_evaluatePred (p := x₂) hnr hitwf hci₂ hwfenv hit ⟨r₂.1, r₂.2, hx₂⟩
           cases b₁
-          · simp only [Result.as, Coe.coe, Value.asBool, Bool.not_false, if_true]
-          · simp only [Result.as, Coe.coe, Value.asBool, Bool.not_true, if_false, ih₂]
+          · -- b₁ = false: `.and` short-circuits to `.ok false`; x₂'/x₂ never run.
+            simp only [Result.as, Coe.coe, Value.asBool, Except.bind_ok, Bool.not_false, ↓reduceIte]
+          · -- b₁ = true: both reduce to evaluating the right operand; use ih₂.
+            have hci₂ : CapabilitiesInvariantPred (c ∪ r₁.2) it request entities :=
+              capability_union_invariant_pred hci (ig₁ (by simp only [he₁]))
+            have ih₂ := normalize_evaluatePred (p := x₂) hnr hitwf hci₂ hwfenv hit ⟨r₂.1, r₂.2, hx₂⟩
+            simp only [Result.as, Coe.coe, Value.asBool, Except.bind_ok, Bool.not_true, ↓reduceIte, ih₂]
   | .or x₁ x₂ =>
     obtain ⟨tx, c', hty⟩ := hok
     simp only [typeOfPred] at hty
@@ -262,8 +275,9 @@ theorem normalize_evaluatePred {p : PredExpr} {itTy : CedarType} {it : Value}
       · simp only [hfe, Result.as, Coe.coe, Value.asBool, Except.bind_err, evaluatePred, ih₁]
     · -- general condition: `.ite x₁' t' e'`, both branches kept.
       rw [key]
+      conv => rhs; rw [evaluatePred]
       cases he₁ : evaluatePred x₁ it request entities with
-      | error e => simp only [Result.as, Coe.coe, Value.asBool, he₁, Except.bind_err, evaluatePred, ih₁]
+      | error e => simp only [Result.as, Coe.coe, Value.asBool, he₁, Except.bind_err]
       | ok v₁ =>
         have ⟨_, w₁, hw₁, hwi₁⟩ := type_of_pred_is_sound hnr hitwf hci hwfenv hit hx₁
         simp only [EvaluatesToPred, he₁] at hw₁
@@ -273,16 +287,18 @@ theorem normalize_evaluatePred {p : PredExpr} {itTy : CedarType} {it : Value}
           -- need v₁ Bool; from the general (non-tt/ff) branch, condition type is bool anyBool
           have ⟨bty₁, hbty₁⟩ : ∃ bty, r₁.1.typeOf = .bool bty := by
             simp only [typeOfIf] at hty
-            split at hty <;> first
-              | (rename_i hb; exact ⟨_, hb⟩)
-              | (rename_i hb; exact ⟨_, hb⟩)
-              | simp only [reduceCtorEq] at hty
+            split at hty
+            · exact ⟨_, by assumption⟩
+            · exact ⟨_, by assumption⟩
+            · exact ⟨_, by assumption⟩
+            · simp only [err, reduceCtorEq] at hty
           rw [hbty₁] at hwi₁
           have ⟨b₁, hb₁⟩ := instance_of_bool_is_bool hwi₁; subst hb₁
           cases b₁
-          · simp only [Result.as, Coe.coe, Value.asBool, Bool.false_eq_true, if_false, evaluatePred, ih₁, ih₃]
+          · simp only [Result.as, Coe.coe, Value.asBool, Except.bind_ok, Bool.false_eq_true,
+              ↓reduceIte, ih₃]
           · have ih₂ := normalize_evaluatePred (p := x₂) hnr hitwf (hcond_tt he₁) hwfenv hit ⟨r₂.1, r₂.2, hx₂⟩
-            simp only [Result.as, Coe.coe, Value.asBool, if_true, evaluatePred, ih₁, ih₂]
+            simp only [Result.as, Coe.coe, Value.asBool, Except.bind_ok, ↓reduceIte, ih₂]
 termination_by sizeOf p
 decreasing_by
   all_goals simp_wf
