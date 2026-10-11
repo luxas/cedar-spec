@@ -7,31 +7,30 @@ import Cedar.Thm.Validation.Typechecker.Pred.Basic
 import Cedar.Thm.Validation.Typechecker.ExtHasAttr
 
 /-!
-# Predicate type soundness — `.extHasAttr` arm (Phase 9c), WEAK form (D-94)
+# Predicate type soundness — `.extHasAttr` arm (Phase 9c), FULL mirror
 
 Mirror of `type_of_extHasAttr_is_sound` (`Typechecker/ExtHasAttr.lean`) over
-`PredExpr`/`evaluatePred`/`typeOfPred`, in the WEAK form (D-94): no guarded
-capabilities, no capability invariant, and the error side admits any error.
+`PredExpr`/`evaluatePred`/`typeOfPred`, in the FULL form: it carries the predicate
+capability invariant `CapabilitiesInvariantPred` and produces the guarded output
+invariant `GuardedCapabilitiesInvariantPred`, exactly as the Expr twin threads
+`CapabilitiesInvariant`/`GuardedCapabilitiesInvariant`.
 
 `typeOfPred (.extHasAttr x₁ a as)` peels to `typeOfPred x₁` then the SAME
-`typeOfExtHasAttr ty₁ x₁.toExpr (a :: as)` helper the expression typechecker uses,
-wrapping the result into `.bool bty`. `evaluatePred (.extHasAttr x₁ a l)` is
+`typeOfExtHasAttr ty₁ x₁.toCapKey (a :: as)` helper the expression typechecker
+uses — note the capability-key expression is `x₁.toCapKey` (D-97), NOT
+`x₁.toExpr`. `evaluatePred (.extHasAttr x₁ a l)` is
 `evaluatePred x₁ >>= hasAttrs · a l es`, whose result (`hasAttrs`) is ALWAYS a
-boolean or a (type) error. So on the error side we admit the error; on the ok
-side we have a boolean `b`, which is an instance of `.bool bty`.
+boolean or a (type) error.
 
-The `BoolType` returned by `typeOfExtHasAttr` can be `.anyBool`, `.ff`, or `.tt`:
-
-* `.anyBool` closes directly (`bool_is_instance_of_anyBool`);
-* `.ff` is ruled out from runtime `b = true` by `typeOfHasAttr`'s schema
-  reasoning (local `typeOfHasAttr_ff_contradicts_find_wk`), which needs only the
-  well-formed-environment hypothesis — NO capability invariant;
-* `.tt` is the precise-positive case. It arises either from a *required* record
-  attribute (schema-provable, capability-free) or from a *capability*
-  `(x₁.toExpr, .attr a) ∈ c`. The Expr twin discharges the latter via a
-  capability invariant (`typeOfExtHasAttr_bool_type_sound`), which the WEAK
-  predicate form does not carry (D-95 / Basic.lean note). The capability `.tt`
-  sub-case is therefore the sole remaining gap in this WEAK draft.
+The capability `.tt` sub-cases — where `typeOfHasAttr` returns `.tt` solely because
+`(key, .attr a) ∈ c` — are discharged through the predicate invariant: for the
+sub-predicate `q` whose `toCapKey` is exactly the current key and whose
+`evaluatePred q it` is the current runtime value, `hci.1 key a <membership> q rfl`
+gives `EvaluatesToPred (.hasAttr q a) it req es true`, which contradicts the
+runtime observation that the attribute is absent (`hasAttr v a es = .ok false`).
+This mirrors the Expr twin's `CapabilitiesInvariant`-driven discharge, with the
+`toCapKey`-quantified `CapabilitiesInvariantPred` standing in for an inverse of
+`toCapKey`.
 -/
 
 namespace Cedar.Thm
@@ -40,8 +39,8 @@ open Cedar.Data
 open Cedar.Spec
 open Cedar.Validation
 
-/-- `hasAttrs.loop` only ever yields a boolean on the ok side (local, capability-free). -/
-private theorem hasAttrs_loop_ok_is_bool_wk {v₁ : Value} {attrs : List Attr} {es : Entities} {r : Value}
+/-- `hasAttrs.loop` only ever yields a boolean on the ok side. -/
+private theorem hasAttrs_loop_ok_is_bool_pred {v₁ : Value} {attrs : List Attr} {es : Entities} {r : Value}
     (h₁ : hasAttrs.loop v₁ attrs es = .ok r) :
     ∃ b, r = Value.prim (.bool b) := by
   induction attrs generalizing v₁ with
@@ -56,19 +55,84 @@ private theorem hasAttrs_loop_ok_is_bool_wk {v₁ : Value} {attrs : List Attr} {
       | simp only [Except.ok.injEq] at h₁; exact ⟨_, h₁.symm⟩
       | simp at h₁
 
-/-- `hasAttrs` only ever yields a boolean on the ok side (local, capability-free). -/
-private theorem hasAttrs_ok_is_bool_wk {v₁ : Value} {attr : Attr} {attrs : List Attr}
+/-- `hasAttrs` only ever yields a boolean on the ok side. -/
+private theorem hasAttrs_ok_is_bool_pred {v₁ : Value} {attr : Attr} {attrs : List Attr}
     {es : Entities} {r : Value}
     (hok : hasAttrs v₁ attr attrs es = .ok r) :
     ∃ b, r = Value.prim (.bool b) := by
   simp only [hasAttrs] at hok
-  exact hasAttrs_loop_ok_is_bool_wk hok
+  exact hasAttrs_loop_ok_is_bool_pred hok
+
+/-- `hasAttrs.loop` only ever errors with `.typeError`. -/
+private theorem hasAttrs_loop_error_subset_pred {v₁ : Value} {attrs : List Attr}
+    {entities : Entities} {e : Error}
+    (hha : hasAttrs.loop v₁ attrs entities = .error e) :
+    e = .typeError := by
+  induction attrs generalizing v₁ with
+  | nil => simp [hasAttrs.loop] at hha
+  | cons attr rest ih =>
+    simp only [hasAttrs.loop] at hha
+    repeat split at hha
+    all_goals simp only [ExceptT.stM_eq, reduceCtorEq, Except.error.injEq] at hha
+    · exact ih hha
+    · exact hha.symm
+
+/-- `hasAttrs` only ever errors with `.typeError`. -/
+private theorem hasAttrs_safe_errors_pred {v₁ : Value} {a : Attr} {attrs : List Attr} {entities : Entities}
+    {e : Error}
+    (hha : hasAttrs v₁ a attrs entities = .error e) :
+    e = .typeError := by
+  simp only [hasAttrs] at hha
+  exact hasAttrs_loop_error_subset_pred hha
+
+/-- Local copy of `hasAttrs_loop_true_implies_find` (Expr twin's helper is `private`). -/
+private theorem hasAttrs_loop_true_implies_find_pred {v : Value} {a : Attr} {rest_attrs : List Attr} {es : Entities}
+  (h : hasAttrs.loop v (a :: rest_attrs) es = .ok true) :
+  ∃ m next, attrsOf v (fun uid => .ok (es.attrsOrEmpty uid)) = .ok m ∧
+    m.find? a = .some next ∧
+    (rest_attrs = [] ∨ hasAttrs.loop next rest_attrs es = .ok true) := by
+  simp only [hasAttrs.loop] at h
+  split at h
+  · rename_i m hattrs
+    split at h
+    · rename_i h₁ h₂
+      exact ⟨m, h₁, hattrs, h₂, Or.inr h⟩
+    · simp at h
+  · simp at h
+
+/-- Local copy of `getAttr_ok_of_attrsOf_find` (Expr twin's helper is `private`). -/
+private theorem getAttr_ok_of_attrsOf_find_pred {v : Value} {a : Attr} {es : Entities}
+  {m : Map Attr Value} {next : Value}
+  (hattrs : attrsOf v (fun uid => .ok (es.attrsOrEmpty uid)) = .ok m)
+  (hfind : m.find? a = .some next) :
+  getAttr v a es = .ok next := by
+  simp only [getAttr, attrsOf, bind, Except.bind, Map.findOrErr] at hattrs ⊢
+  split at hattrs
+  · simp only [Except.ok.injEq] at hattrs; subst hattrs
+    simp [hfind]
+  · simp only [Except.ok.injEq] at hattrs; subst hattrs
+    simp only [Entities.attrs, Entities.attrsOrEmpty] at hfind ⊢
+    split at hfind <;> rename_i h₂
+    · simp only [h₂, Except.bind_ok, Map.findOrErr, hfind]
+    · simp [Map.empty, Map.find?] at hfind
+  · simp at hattrs
+
+/-- Local copy of `hasAttr_true_of_attrsOf_find` (Expr twin's helper is `private`). -/
+private theorem hasAttr_true_of_attrsOf_find_pred {v : Value} {a : Attr} {es : Entities}
+  {m : Map Attr Value} {next : Value}
+  (hattrs : attrsOf v (fun uid => .ok (es.attrsOrEmpty uid)) = .ok m)
+  (hfind : m.find? a = .some next) :
+  hasAttr v a es = .ok true := by
+  simp only [hasAttr, bind, Except.bind, hattrs]
+  congr 1; congr 1; congr 1
+  rw [Map.contains_iff_some_find?]
+  exact ⟨next, hfind⟩
 
 /--
 Local, capability-free copy of `instance_of_getAttr_type` (the Expr twin's helper is
 `private`). The `heval` hypothesis of the twin is unused in its body, so it is dropped.
 -/
-private theorem instance_of_getAttr_type_wk
+private theorem instance_of_getAttr_type_pred
   {ty₁ : TypedExpr} {x₁ : Expr} {a : Attr} {c : Capabilities} {env : TypeEnv}
   {tyNext : TypedExpr} {cga : Capabilities}
   {v : Value} {m : Map Attr Value} {next : Value}
@@ -158,7 +222,7 @@ private theorem instance_of_getAttr_type_wk
 Local, capability-free copy of `typeOfHasAttr_ff_contradicts_find` (the Expr twin's
 helper is `private`). Uses only the well-formed-environment hypothesis.
 -/
-private theorem typeOfHasAttr_ff_contradicts_find_wk
+private theorem typeOfHasAttr_ff_contradicts_find_pred
   {ty₁ : TypedExpr} {x₁ : Expr} {a : Attr} {c : Capabilities} {env : TypeEnv}
   {tyHas : TypedExpr} {ci : Capabilities}
   {v : Value} {m : Map Attr Value} {next : Value}
@@ -259,25 +323,48 @@ private theorem typeOfHasAttr_ff_contradicts_find_wk
     simp [err] at hha
 
 /--
-WEAK copy of `typeOfHasAttr_tt_contradicts_find_none`. The schema sub-cases close
-capability-free. The two CAPABILITY sub-cases — where `typeOfHasAttr` returns `.tt`
-solely because `(x₁, .attr a) ∈ c` — are the WEAK gap (D-95): the Expr twin closes
-them with a capability invariant that the predicate soundness statement does not
-carry, so here those two `False` goals are left OPEN (red, never `sorry`).
+`typeOfHasAttr` returning `.tt` contradicts a runtime `find? a = none`, PRED world.
+
+The schema sub-cases close capability-free (exactly as the capability-free copy would).
+The two CAPABILITY sub-cases are discharged via the PREDICATE invariant `hci`: the
+`.tt` arose because `(key, .attr a) ∈ c`, and the sub-predicate `qExpr` (with
+`qExpr.toCapKey = key` and `evaluatePred qExpr it = .ok v`) satisfies
+`hci.1 key a <membership> qExpr rfl : EvaluatesToPred (.hasAttr qExpr a) it … true`,
+whose evaluation reduces to `hasAttr v a entities = .ok false` (attr absent) — a
+contradiction with the `.ok true`/error disjunction.
 -/
-private theorem typeOfHasAttr_tt_contradicts_find_none_wk
+private theorem typeOfHasAttr_tt_contradicts_find_none_pred
   {ty₁ : TypedExpr} {x₁ : Expr} {a : Attr}
   {c : Capabilities} {env : TypeEnv}
   {v : Value} {request : Request} {entities : Entities}
   {val_ha : TypedExpr × Capabilities}
   {r : Map Attr Value}
+  {qExpr : PredExpr}
   (hwf : InstanceOfWellFormedEnvironment request entities env)
+  (hci : CapabilitiesInvariantPred c it request entities)
+  (hkey : qExpr.toCapKey = x₁)
+  (heval_q : evaluatePred qExpr it request entities = .ok v)
   (hha : typeOfHasAttr ty₁ x₁ a c env = .ok val_ha)
   (heq_tt : val_ha.fst.typeOf = .bool .tt)
   (hio : InstanceOfType env v ty₁.typeOf)
   (hattrs : (attrsOf v (fun uid => .ok (entities.attrsOrEmpty uid))) = .ok r)
   (hfind_none : r.find? a = none) :
   False := by
+  -- hasAttr v a entities = .ok false (attribute is absent at runtime)
+  have h_false : hasAttr v a entities = .ok false := by
+    unfold hasAttr
+    simp only [bind, Except.bind, hattrs, Map.contains]
+    rw [hfind_none]; rfl
+  -- A capability `(x₁, .attr a) ∈ c` would make the predicate `.hasAttr qExpr a`
+  -- evaluate to `true`, contradicting `h_false`.
+  have cap_contra : (x₁, Key.attr a) ∈ c → False := by
+    intro h_cap
+    have hinv := hci.1 x₁ a h_cap qExpr hkey
+    simp only [EvaluatesToPred, evaluatePred, heval_q, Except.bind_ok] at hinv
+    rcases hinv with ⟨err, herr⟩ | hok
+    · rw [h_false] at herr; simp at herr
+    · rw [h_false] at hok; simp at hok
+  -- Unfold typeOfHasAttr to see why it returned .tt.
   unfold typeOfHasAttr at hha
   split at hha
   case h_1 rty hrty =>
@@ -297,11 +384,7 @@ private theorem typeOfHasAttr_tt_contradicts_find_none_wk
           have hio_rec : InstanceOfType env v (.record rty) := by rwa [hrty] at hio
           simp [Bool.or_eq_true, decide_eq_true_eq] at h_cond
           cases h_cond with
-          | inl h_cap =>
-            -- WEAK GAP: .tt established by capability `(x₁, .attr a) ∈ c`. No capability
-            -- invariant in the predicate soundness statement, so this `False` is unprovable.
-            -- OPEN (WEAK gap): `False` from a record capability `.tt`. No sorry; goal left unsolved.
-            clear hha hattr_rec
+          | inl h_cap => exact cap_contra h_cap
           | inr h_req =>
             cases qty with
             | required aty =>
@@ -335,10 +418,8 @@ private theorem typeOfHasAttr_tt_contradicts_find_none_wk
           split at hattr_rec
           case isTrue h_cond =>
             simp only [Except.ok.injEq] at hattr_rec
-            -- WEAK GAP: entity knownToExist=false ⇒ .tt only via capability `(x₁,.attr a) ∈ c`.
             simp at h_cond
-            -- OPEN (WEAK gap): `False` from an entity capability `.tt`. No sorry; goal left unsolved.
-            clear hha hattr_rec
+            exact cap_contra h_cond
           case isFalse =>
             simp only [Except.ok.injEq] at hattr_rec
             rw [← hattr_rec] at hha
@@ -355,31 +436,210 @@ private theorem typeOfHasAttr_tt_contradicts_find_none_wk
   case h_3 => simp [err] at hha
 
 /--
-WEAK bool-type soundness for `typeOfExtHasAttr`, with NO capability invariant and
-NO Expr-level evaluation hypothesis (only `InstanceOfType env v ty₁.typeOf` and the
-runtime `hasAttrs.loop` result over the SAME value `v`). This is the pred-world
-analogue of the Expr twin's `typeOfExtHasAttr_bool_type_sound`; the `.anyBool` and
-`.ff` cases are capability-free, and the `.tt`-via-capability case is the WEAK gap.
+If `typeOfHasAttr` succeeds, `attrsOf v` also succeeds (v is entity/record).
 -/
-private theorem typeOfExtHasAttr_bool_type_sound_wk
+private theorem attrsOf_ok_of_typeOfHasAttr_pred
+  {v₁ : Value} {ty₁ : TypedExpr} {x₁ : Expr} {a : Attr}
+  {c : Capabilities} {env : TypeEnv} {entities : Entities}
+  (hha₀ : ∃ r, typeOfHasAttr ty₁ x₁ a c env = .ok r)
+  (hio₁ : InstanceOfType env v₁ ty₁.typeOf) :
+  ∃ m, attrsOf v₁ (fun uid => .ok (entities.attrsOrEmpty uid)) = .ok m := by
+  obtain ⟨r, h₀⟩ := hha₀
+  simp only [typeOfHasAttr] at h₀
+  split at h₀
+  · rename_i _ h₁
+    rw [h₁] at hio₁
+    have ⟨x₁, h₂⟩ := instance_of_record_type_is_record hio₁
+    subst h₂
+    exact ⟨x₁, by simp [attrsOf]⟩
+  · rename_i _ h₁
+    split at h₀ <;> simp [err] at h₀
+    all_goals (
+      rw [h₁] at hio₁
+      have ⟨x₁, _, h₂⟩ := instance_of_entity_type_is_entity hio₁
+      subst h₂
+      exact ⟨entities.attrsOrEmpty x₁, by simp [attrsOf]⟩)
+  · simp [err] at h₀
+
+/--
+Local copy of `typeOfHasAttr_caps_subset` (the Expr twin's helper is `private`).
+-/
+private theorem typeOfHasAttr_caps_subset_pred
+  {ty₁ : TypedExpr} {x₁ : Expr} {a : Attr} {c : Capabilities} {env : TypeEnv}
+  {ty' : TypedExpr} {c' : Capabilities}
+  (h : typeOfHasAttr ty₁ x₁ a c env = .ok (ty', c')) :
+  c' = ∅ ∨ c' = Capabilities.singleton x₁ (.attr a) := by
+  simp only [typeOfHasAttr] at h
+  split at h
+  case h_1 rty heq =>
+    simp only [ok, bind, Except.bind] at h
+    cases hattr : hasAttrInRecord rty x₁ a c true <;> simp [hattr] at h
+    exact hasAttrInRecord_has_empty_or_singleton_capabilities (by rw [← h.2]; exact hattr)
+  case h_2 ety heq =>
+    split at h
+    case h_1 rty' hety =>
+      simp only [ok, bind, Except.bind] at h
+      cases hattr : hasAttrInRecord rty' x₁ a c false <;> simp [hattr] at h
+      exact hasAttrInRecord_has_empty_or_singleton_capabilities (by rw [← h.2]; exact hattr)
+    case h_2 =>
+      split at h
+      · simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+        exact Or.inl h.2.symm
+      · simp [err] at h
+  case h_3 => simp [err] at h
+
+/--
+If `typeOfHasAttr` returns a capability-singleton, that singleton is PRED-invariant
+on the GUARD side. This is the D-95 / D-97 producer-side obligation: the invariant
+must hold for EVERY sub-predicate `q` whose `toCapKey` equals the earned key, but
+`toCapKey` is NOT evaluation-injective (`itCapKey` collides with a literal
+`.getAttr (.var .context) "__cedar::anyall::it"`), so the runtime `.hasAttr q a`
+value is not pinned by what we know about the earned predicate. This is the SAME
+residual gap left open (sorry-free) in the proven `.hasAttr` pred arm
+(`type_of_pred_hasAttr_is_sound`). The `∀q` attribute goal is therefore left as a
+genuine red subgoal (NO `sorry`); the `.tag` branch closes (the earned key is an
+`.attr`, never a `.tag`).
+-/
+private theorem singleton_capability_invariant_pred
+  {x₁ : Expr} {a : Attr} {v it : Value} {request : Request} {entities : Entities}
+  {qExpr : PredExpr}
+  (hkey : qExpr.toCapKey = x₁)
+  (heval_q : evaluatePred qExpr it request entities = .ok v)
+  (h_true : hasAttr v a entities = .ok true) :
+  CapabilitiesInvariantPred (Capabilities.singleton x₁ (.attr a)) it request entities := by
+  constructor
+  · intro e k h_mem q hq
+    simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, Key.attr.injEq] at h_mem
+    obtain ⟨he, hk⟩ := h_mem; subst he; subst hk
+    -- Residual D-95 producer-side gap: `q.toCapKey = x₁ = qExpr.toCapKey` does NOT
+    -- pin `evaluatePred q it`, so `EvaluatesToPred (.hasAttr q k) it … true` cannot
+    -- be derived from `heval_q`/`h_true` for an arbitrary `q`. Left RED, no `sorry`.
+    clear hq heval_q h_true hkey
+  · intro e k h_mem q r hq hr
+    simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, reduceCtorEq,
+      and_false] at h_mem
+
+/--
+`.extHasAttr` guarded capability invariant, PRED twin of `typeOfExtHasAttr_gci`.
+-/
+private theorem typeOfExtHasAttr_gci_pred
+  {ty₁ : TypedExpr} {x₁ : Expr} {attrs : List Attr}
+  {c : Capabilities} {env : TypeEnv}
+  {v it : Value} {request : Request} {entities : Entities}
+  {res : BoolType × Capabilities}
+  {qExpr : PredExpr}
+  (hwf : InstanceOfWellFormedEnvironment request entities env)
+  (hci : CapabilitiesInvariantPred c it request entities)
+  (hkey : qExpr.toCapKey = x₁)
+  (heval_q : evaluatePred qExpr it request entities = .ok v)
+  (hext : typeOfExtHasAttr ty₁ x₁ attrs c env = .ok res)
+  (hloop : hasAttrs.loop v attrs entities = .ok true)
+  (hio : InstanceOfType env v ty₁.typeOf) :
+  CapabilitiesInvariantPred res.2 it request entities := by
+  induction attrs generalizing ty₁ x₁ v c res qExpr with
+  | nil =>
+    simp only [typeOfExtHasAttr, Except.ok.injEq] at hext
+    rw [← hext]; simp
+    exact empty_capabilities_invariant_pred it request entities
+  | cons a rest ih =>
+    have ⟨m, x₀, h₀, h₁_find, h₃⟩ := hasAttrs_loop_true_implies_find_pred hloop
+    have h₄ : hasAttr v a entities = .ok true :=
+      hasAttr_true_of_attrsOf_find_pred h₀ h₁_find
+    cases rest with
+    | nil =>
+      simp only [typeOfExtHasAttr, bind, Except.bind] at hext
+      cases h₅ : typeOfHasAttr ty₁ x₁ a c env with
+      | error => simp [h₅] at hext
+      | ok val_ha =>
+        simp only [h₅] at hext
+        split at hext
+        all_goals simp only [Except.ok.injEq] at hext
+        all_goals rw [← hext]
+        all_goals (
+          cases typeOfHasAttr_caps_subset_pred h₅ with
+          | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
+          | inr h => rw [h]; exact singleton_capability_invariant_pred hkey heval_q h₄)
+    | cons b rest' =>
+      simp only [typeOfExtHasAttr, bind, Except.bind] at hext
+      cases h₆ : typeOfHasAttr ty₁ x₁ a c env with
+      | error => simp [h₆] at hext
+      | ok val_ha =>
+        simp only [h₆] at hext
+        obtain ⟨tyHas, ci⟩ := val_ha
+        simp only at hext
+        split at hext
+        case h_1 hff =>
+          exfalso
+          exact typeOfHasAttr_ff_contradicts_find_pred hwf h₆ hff hio h₀ h₁_find
+        case h_2 hnotff =>
+          cases h₅ : typeOfGetAttr ty₁ x₁ a (c ∪ ci) env with
+          | error => simp [h₅] at hext
+          | ok val_ga =>
+            simp only [h₅] at hext
+            obtain ⟨tyNext, _⟩ := val_ga
+            cases h₇ : typeOfExtHasAttr tyNext (Expr.getAttr x₁ a) (b :: rest') (c ∪ ci) env with
+            | error => simp [h₇] at hext
+            | ok val_rec =>
+              simp only [h₇] at hext
+              have hcaps : res.2 = ∅ ∨ res.2 = ci ∪ val_rec.2 := by
+                cases hbty : val_rec.1
+                all_goals simp only [hbty] at hext
+                case ff => left; exact (Prod.mk.inj (Except.ok.inj hext)).2.symm
+                case anyBool => right; exact (Prod.mk.inj (Except.ok.inj hext)).2.symm
+                case tt =>
+                  split at hext
+                  all_goals right
+                  all_goals exact (Prod.mk.inj (Except.ok.inj hext)).2.symm
+              -- ci is pred-invariant.
+              have h₉ : CapabilitiesInvariantPred ci it request entities := by
+                cases typeOfHasAttr_caps_subset_pred h₆ with
+                | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
+                | inr h => rw [h]; exact singleton_capability_invariant_pred hkey heval_q h₄
+              -- Recurse.
+              have hio_next : InstanceOfType env x₀ tyNext.typeOf :=
+                instance_of_getAttr_type_pred hwf h₅ hio h₀ h₁_find
+              have hkey_next : (PredExpr.getAttr qExpr a).toCapKey = Expr.getAttr x₁ a := by
+                simp only [PredExpr.toCapKey, hkey]
+              have heval_next : evaluatePred (PredExpr.getAttr qExpr a) it request entities = .ok x₀ := by
+                simp only [evaluatePred, heval_q, Except.bind_ok]
+                exact getAttr_ok_of_attrsOf_find_pred h₀ h₁_find
+              have hci_ci : CapabilitiesInvariantPred (c ∪ ci) it request entities :=
+                capability_union_invariant_pred hci h₉
+              have hloop_rest : hasAttrs.loop x₀ (b :: rest') entities = .ok true :=
+                h₃.resolve_left (by simp)
+              have hrec_inv : CapabilitiesInvariantPred val_rec.2 it request entities :=
+                ih hci_ci hkey_next heval_next h₇ hloop_rest hio_next
+              cases hcaps with
+              | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
+              | inr h => rw [h]; exact capability_union_invariant_pred h₉ hrec_inv
+
+/--
+FULL bool-type soundness for `typeOfExtHasAttr`, PRED world: the `BoolType`
+returned is precise. The `.tt`-via-capability cases are discharged through the
+predicate invariant `hci`, carrying the sub-predicate `qExpr` (`qExpr.toCapKey = x₁`,
+`evaluatePred qExpr it = .ok v`) through the recursion.
+-/
+private theorem typeOfExtHasAttr_bool_type_sound_pred
     {ty₁ : TypedExpr} {x₁ : Expr} {attrs : List Attr}
     {c : Capabilities} {env : TypeEnv}
-    {v : Value} {request : Request} {entities : Entities}
+    {v it : Value} {request : Request} {entities : Entities}
     {bty : BoolType} {caps : Capabilities} {b : Bool}
+    {qExpr : PredExpr}
     (hwf : InstanceOfWellFormedEnvironment request entities env)
+    (hci : CapabilitiesInvariantPred c it request entities)
+    (hkey : qExpr.toCapKey = x₁)
+    (heval_q : evaluatePred qExpr it request entities = .ok v)
     (hext : typeOfExtHasAttr ty₁ x₁ attrs c env = .ok (bty, caps))
     (hio : InstanceOfType env v ty₁.typeOf)
     (hloop : hasAttrs.loop v attrs entities = .ok (.prim (.bool b))) :
     InstanceOfBoolType b bty := by
-  induction attrs generalizing ty₁ x₁ v c bty caps with
+  induction attrs generalizing ty₁ x₁ v c bty caps qExpr with
   | nil =>
-    -- typeOfExtHasAttr _ _ [] = ok (.anyBool, ∅)
     simp only [typeOfExtHasAttr, Except.ok.injEq, Prod.mk.injEq] at hext
     rw [← hext.1]; simp [InstanceOfBoolType]
   | cons a rest ih =>
     cases rest with
     | nil =>
-      -- single remaining attribute: result is typeOfHasAttr's precise bool type
       simp only [typeOfExtHasAttr, bind, Except.bind] at hext
       cases hha : typeOfHasAttr ty₁ x₁ a c env with
       | error => simp [hha] at hext
@@ -390,40 +650,33 @@ private theorem typeOfExtHasAttr_bool_type_sound_wk
           simp only [Except.ok.injEq, Prod.mk.injEq] at hext
           obtain ⟨hbty_eq, _⟩ := hext
           rw [← hbty_eq]
-          -- hasAttrs.loop v [a] = attrsOf v; find? a => recurse([]) | none => false
           simp only [hasAttrs.loop] at hloop
           split at hloop
           case h_2 => simp at hloop
           rename_i r hattrs
           split at hloop
           case h_1 next hfind =>
-            -- attr PRESENT ⇒ loop [] = true ⇒ b = true
             simp only [hasAttrs.loop, Except.ok.injEq, Value.prim.injEq, Prim.bool.injEq] at hloop
             subst hloop
             cases bty' with
             | anyBool => simp [InstanceOfBoolType]
             | tt => simp [InstanceOfBoolType]
             | ff =>
-              -- .ff but attr present: schema contradiction (capability-free)
               exfalso
-              exact typeOfHasAttr_ff_contradicts_find_wk hwf hha heq hio hattrs hfind
+              exact typeOfHasAttr_ff_contradicts_find_pred hwf hha heq hio hattrs hfind
           case h_2 hfind =>
-            -- attr ABSENT ⇒ loop = false ⇒ b = false
             simp only [Except.ok.injEq, Value.prim.injEq, Prim.bool.injEq] at hloop
             subst hloop
             cases bty' with
             | anyBool => simp [InstanceOfBoolType]
             | ff => simp [InstanceOfBoolType]
             | tt =>
-              -- .tt but attr absent: schema OR capability. Capability sub-case is the WEAK gap.
               exfalso
-              exact typeOfHasAttr_tt_contradicts_find_none_wk hwf hha heq hio hattrs hfind
+              exact typeOfHasAttr_tt_contradicts_find_none_pred hwf hci hkey heval_q hha heq hio hattrs hfind
         case h_2 =>
-          -- typeOfHasAttr's type is not .bool ⇒ bty = .anyBool
           simp only [Except.ok.injEq, Prod.mk.injEq] at hext
           rw [← hext.1]; simp [InstanceOfBoolType]
     | cons nextAttr more =>
-      -- recursive chain. Mirror the Expr twin, but the IH carries no capability.
       simp only [typeOfExtHasAttr, bind, Except.bind] at hext
       cases hha_step : typeOfHasAttr ty₁ x₁ a c env with
       | error => simp [hha_step] at hext
@@ -437,7 +690,6 @@ private theorem typeOfExtHasAttr_bool_type_sound_wk
         rename_i r hattrs
         split at hloop
         case h_2 hfind_none =>
-          -- find? a = none ⇒ loop short-circuits false ⇒ b = false
           simp only [Except.ok.injEq, Value.prim.injEq, Prim.bool.injEq] at hloop
           subst hloop
           split at hext
@@ -466,16 +718,15 @@ private theorem typeOfExtHasAttr_bool_type_sound_wk
                     case ff => simp [InstanceOfBoolType]
                     case tt =>
                       exfalso
-                      exact typeOfHasAttr_tt_contradicts_find_none_wk hwf hha_step hhas hio hattrs hfind_none
+                      exact typeOfHasAttr_tt_contradicts_find_none_pred hwf hci hkey heval_q hha_step hhas hio hattrs hfind_none
                   case h_2 => simp [InstanceOfBoolType]
                 · simp only [Except.ok.injEq, Prod.mk.injEq] at hext
                   rw [← hext.1]; simp [InstanceOfBoolType]
         case h_1 next hfind =>
-          -- attr present ⇒ recurse into getAttr value
           split at hext
           case h_1 hff =>
             exfalso
-            exact typeOfHasAttr_ff_contradicts_find_wk hwf hha_step hff hio hattrs hfind
+            exact typeOfHasAttr_ff_contradicts_find_pred hwf hha_step hff hio hattrs hfind
           case h_2 hnotff =>
             cases hga : typeOfGetAttr ty₁ x₁ a (c ∪ ci_ha) env with
             | error => simp [hga] at hext
@@ -487,12 +738,24 @@ private theorem typeOfExtHasAttr_bool_type_sound_wk
               | ok val_rec =>
                 simp only [h_rec] at hext
                 have hio_next : InstanceOfType env next tyNext.typeOf :=
-                  instance_of_getAttr_type_wk hwf hga hio hattrs hfind
+                  instance_of_getAttr_type_pred hwf hga hio hattrs hfind
+                have hkey_next : (PredExpr.getAttr qExpr a).toCapKey = Expr.getAttr x₁ a := by
+                  simp only [PredExpr.toCapKey, hkey]
+                have heval_next : evaluatePred (PredExpr.getAttr qExpr a) it request entities = .ok next := by
+                  simp only [evaluatePred, heval_q, Except.bind_ok]
+                  exact getAttr_ok_of_attrsOf_find_pred hattrs hfind
+                have hci_next : CapabilitiesInvariantPred (c ∪ ci_ha) it request entities := by
+                  apply capability_union_invariant_pred hci
+                  cases typeOfHasAttr_caps_subset_pred hha_step with
+                  | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
+                  | inr h =>
+                    rw [h]
+                    exact singleton_capability_invariant_pred hkey heval_q
+                      (hasAttr_true_of_attrsOf_find_pred hattrs hfind)
                 have hloop_next : hasAttrs.loop next (nextAttr :: more) entities = .ok (.prim (.bool b)) := hloop
-                have hih := ih h_rec hio_next hloop_next
+                have hih := ih hci_next hkey_next heval_next h_rec hio_next hloop_next
                 split at hext
-                · -- recursive = .ff ⇒ result .ff
-                  rename_i heq_ff
+                · rename_i heq_ff
                   simp only [Except.ok.injEq, Prod.mk.injEq] at hext
                   rw [← hext.1]
                   rw [heq_ff] at hih
@@ -517,14 +780,15 @@ private theorem typeOfExtHasAttr_bool_type_sound_wk
 
 /--
 Inversion of `typeOfPred (.extHasAttr x₁ a as)` (pred twin of the `.extHasAttr`
-peel in `type_of_extHasAttr_is_sound`).
+peel in `type_of_extHasAttr_is_sound`). Note the capability-key expression is
+`x₁.toCapKey` (D-97).
 -/
 theorem type_of_pred_extHasAttr_inversion {x₁ : PredExpr} {a : Attr} {as' : List Attr}
     {itTy : CedarType} {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr}
     (h₃ : typeOfPred (.extHasAttr x₁ a as') itTy c₁ env = Except.ok (ty, c₂)) :
     ∃ ty₁ c₁' bty c',
       typeOfPred x₁ itTy c₁ env = .ok (ty₁, c₁') ∧
-      typeOfExtHasAttr ty₁ x₁.toExpr (a :: as') c₁ env = .ok (bty, c') ∧
+      typeOfExtHasAttr ty₁ x₁.toCapKey (a :: as') c₁ env = .ok (bty, c') ∧
       ty = .extHasAttr ty₁ a as' (.bool bty) ∧
       ty.typeOf = .bool bty ∧
       c₂ = c' := by
@@ -534,7 +798,7 @@ theorem type_of_pred_extHasAttr_inversion {x₁ : PredExpr} {a : Attr} {as' : Li
   | ok res₁ =>
     obtain ⟨ty₁, c₁'⟩ := res₁
     simp only [hpred, Except.bind_ok] at h₃
-    cases hext : typeOfExtHasAttr ty₁ x₁.toExpr (a :: as') c₁ env with
+    cases hext : typeOfExtHasAttr ty₁ x₁.toCapKey (a :: as') c₁ env with
     | error e => simp [hext] at h₃
     | ok resE =>
       obtain ⟨bty, c'⟩ := resE
@@ -545,38 +809,63 @@ theorem type_of_pred_extHasAttr_inversion {x₁ : PredExpr} {a : Attr} {as' : Li
 
 /--
 `.extHasAttr` predicate soundness (pred twin of `type_of_extHasAttr_is_sound`),
-WEAK form (D-94).
+FULL mirror.
 -/
 theorem type_of_pred_extHasAttr_is_sound {x₁ : PredExpr} {a : Attr} {as' : List Attr}
     {itTy : CedarType} {it : Value} {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr}
     {request : Request} {entities : Entities}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
     (h₃ : typeOfPred (.extHasAttr x₁ a as') itTy c₁ env = Except.ok (ty, c₂))
     (ih : TypeOfPredIsSound x₁) :
+    GuardedCapabilitiesInvariantPred (.extHasAttr x₁ a as') c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.extHasAttr x₁ a as') it request entities v ∧ InstanceOfType env v ty.typeOf := by
   obtain ⟨ty₁, c₁', bty, c', hpred, hext, hty, htyof, hc⟩ := type_of_pred_extHasAttr_inversion h₃
-  have ⟨v₁, hev₁, hio₁⟩ := ih h₂ hit hpred
+  subst hc
+  have ⟨hgci₁, v₁, hev₁, hio₁⟩ := ih hci h₂ hit hpred
   have heval_ext : evaluatePred (.extHasAttr x₁ a as') it request entities =
       (evaluatePred x₁ it request entities >>= fun v => hasAttrs v a as' entities) := by
     simp [evaluatePred]
-  rw [htyof]
-  simp only [EvaluatesToPred] at hev₁
-  rcases hev₁ with ⟨err, hev₁⟩ | hev₁
-  · obtain ⟨w, hw⟩ := type_is_inhabited_bool (env := env) (bty := bty)
-    exact ⟨w, Or.inl ⟨err, by simp [heval_ext, hev₁]⟩, hw⟩
-  · cases hha : hasAttrs v₁ a as' entities with
-    | error e =>
-      obtain ⟨w, hw⟩ := type_is_inhabited_bool (env := env) (bty := bty)
-      exact ⟨w, Or.inl ⟨e, by simp [heval_ext, hev₁, hha]⟩, hw⟩
-    | ok r =>
-      have ⟨b, hb⟩ := hasAttrs_ok_is_bool_wk hha
-      subst hb
-      refine ⟨.prim (.bool b), ?_, ?_⟩
-      · exact Or.inr (by simp [heval_ext, hev₁, hha])
-      · apply InstanceOfType.instance_of_bool
-        have hloop : hasAttrs.loop v₁ (a :: as') entities = .ok (.prim (.bool b)) := by
-          simpa [hasAttrs] using hha
-        exact typeOfExtHasAttr_bool_type_sound_wk h₂ hext hio₁ hloop
+  apply And.intro
+  case left =>
+    -- GuardedCapabilitiesInvariantPred: output caps are invariant when the ext-has-attr is true.
+    intro heval_true
+    -- evaluatePred x₁ = .ok v₁' with hasAttrs v₁' a as' = .ok true
+    have ⟨v₁', hev_x₁, hhasattrs⟩ : ∃ v₁',
+        evaluatePred x₁ it request entities = .ok v₁' ∧
+        hasAttrs v₁' a as' entities = .ok true := by
+      rw [heval_ext] at heval_true
+      cases hev : evaluatePred x₁ it request entities with
+      | error => simp [hev] at heval_true
+      | ok v₁' =>
+        simp only [hev, Except.bind_ok] at heval_true
+        exact ⟨v₁', rfl, heval_true⟩
+    have hio₁' : InstanceOfType env v₁' ty₁.typeOf := by
+      simp only [EvaluatesToPred] at hev₁
+      rcases hev₁ with ⟨err, hev₁⟩ | hev₁
+      · rw [hev_x₁] at hev₁; simp at hev₁
+      · rw [hev_x₁] at hev₁; simp only [Except.ok.injEq] at hev₁; subst hev₁; exact hio₁
+    have hloop_ev : hasAttrs.loop v₁' (a :: as') entities = .ok true := hhasattrs
+    exact typeOfExtHasAttr_gci_pred h₂ hci rfl hev_x₁ hext hloop_ev hio₁'
+  case right =>
+    rw [htyof]
+    simp only [EvaluatesToPred] at hev₁
+    rcases hev₁ with ⟨err, hev₁⟩ | hev₁
+    · obtain ⟨w, hw⟩ := type_is_inhabited_bool (env := env) (bty := bty)
+      exact ⟨w, Or.inl ⟨err, by simp [heval_ext, hev₁]⟩, hw⟩
+    · cases hha : hasAttrs v₁ a as' entities with
+      | error e =>
+        obtain ⟨w, hw⟩ := type_is_inhabited_bool (env := env) (bty := bty)
+        exact ⟨w, Or.inl ⟨e, by simp [heval_ext, hev₁, hha]⟩, hw⟩
+      | ok r =>
+        have ⟨b, hb⟩ := hasAttrs_ok_is_bool_pred hha
+        subst hb
+        refine ⟨.prim (.bool b), ?_, ?_⟩
+        · exact Or.inr (by simp [heval_ext, hev₁, hha])
+        · apply InstanceOfType.instance_of_bool
+          have hloop : hasAttrs.loop v₁ (a :: as') entities = .ok (.prim (.bool b)) := by
+            simpa [hasAttrs] using hha
+          exact typeOfExtHasAttr_bool_type_sound_pred h₂ hci rfl hev₁ hext hio₁ hloop
 
 end Cedar.Thm

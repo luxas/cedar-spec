@@ -7,24 +7,23 @@ import Cedar.Thm.Validation.Typechecker.Pred.Basic
 import Cedar.Thm.Validation.Typechecker.HasAttr
 
 /-!
-# Predicate type soundness — `.hasAttr` arm (Phase 9c)
+# Predicate type soundness — `.hasAttr` arm (Phase 9c, D-97 option b)
 
-Mirror of `type_of_hasAttr_is_sound` (`Typechecker/HasAttr.lean`) over
-`PredExpr`/`evaluatePred`/`typeOfPred`, in the WEAK form (D-94): no capability
-invariant and the error side admits any error.
+Full mirror of `type_of_hasAttr_is_sound` (`Typechecker/HasAttr.lean`) over
+`PredExpr`/`evaluatePred`/`typeOfPred`, in the STRONG form (D-97): it carries the
+predicate capability invariant `CapabilitiesInvariantPred c₁ …` and concludes the
+guarded production of `CapabilitiesInvariantPred c₂`.
 
 `typeOfPred (.hasAttr x₁ a)` peels to `typeOfPred x₁` then the SAME `typeOfHasAttr
-ty₁ x₁.toExpr a` helper the expression typechecker uses, and `evaluatePred
-(.hasAttr x₁ a)` is `evaluatePred x₁ >>= hasAttr · a es`.
+ty₁ x₁.toCapKey a` helper the expression typechecker uses (NOTE: the capability
+key is `x₁.toCapKey`, not `x₁.toExpr`), and `evaluatePred (.hasAttr x₁ a)` is
+`evaluatePred x₁ >>= hasAttr · a es`.
 
-The result type is always a boolean (`typeOfHasAttr` returns a
-`TypedExpr.hasAttr _ _ (.bool _)` in every success branch). Under WEAK soundness
-the precise `BoolType` is NOT tracked against the computed truth value — the
-error side admits any error, and the ok side is closed by the generic bool
-instance after discharging the (optional-attribute) capability `.tt` branch,
-which the weak statement folds into `.anyBool`. See D-95: the capability
-invariant cannot be threaded through a predicate, so the only sound uniform
-claim is `.anyBool`.
+The capability-`.tt` case — unprovable under the earlier WEAK statement — is now
+provable: `typeOfHasAttr` returns `.tt` because `(x₁.toCapKey, .attr a) ∈ c₁`, and
+`hci.1 x₁.toCapKey a <mem> x₁ rfl : EvaluatesToPred (.hasAttr x₁ a) it … true`
+gives exactly `evaluatePred (.hasAttr x₁ a) it = .ok true` (or an error), which
+forces the returned bool `b = true`, closing the `.tt` instance.
 -/
 
 namespace Cedar.Thm
@@ -34,22 +33,8 @@ open Cedar.Spec
 open Cedar.Validation
 
 /--
-`hasAttr v₁ a es = .ok v` always produces a boolean value (pred twin of the
-`hasAttr_returns_bool` fact used elsewhere).
--/
-theorem pred_hasAttr_ok_is_bool {v₁ : Value} {a : Attr} {es : Entities} {v : Value}
-    (hha : hasAttr v₁ a es = .ok v) : ∃ b, v = .prim (.bool b) := by
-  simp only [hasAttr, attrsOf] at hha
-  cases v₁ with
-  | prim p => cases p with
-    | entityUID _ => simp only [Except.bind_ok, Except.ok.injEq] at hha; subst hha; exact ⟨_, rfl⟩
-    | _ => simp at hha
-  | record _ => simp only [Except.bind_ok, Except.ok.injEq] at hha; subst hha; exact ⟨_, rfl⟩
-  | set _ => simp at hha
-  | ext _ => simp at hha
-
-/--
-`hasAttrInRecord` only ever produces a `.bool _` result type.
+`hasAttrInRecord` only ever produces a `.bool _` result type (pred-file copy of
+the fact used by the Expr twin's inversion).
 -/
 theorem hasAttrInRecord_result_is_bool {rty : RecordType} {x : Expr} {a : Attr}
     {c c' : Capabilities} {kn : Bool} {ty' : CedarType}
@@ -64,108 +49,249 @@ theorem hasAttrInRecord_result_is_bool {rty : RecordType} {x : Expr} {a : Attr}
     exact ⟨_, h.left.symm⟩
 
 /--
-`typeOfHasAttr` always produces a `.bool _` result type: the result `TypedExpr`
-is `TypedExpr.hasAttr _ _ (.bool _)`, so its `.typeOf` is `.bool _`.
--/
-theorem typeOfHasAttr_typeOf_is_bool {ty₁ : TypedExpr} {x : Expr} {a : Attr}
-    {c c₂ : Capabilities} {env : TypeEnv} {tx : TypedExpr}
-    (h : typeOfHasAttr ty₁ x a c env = Except.ok (tx, c₂)) :
-    ∃ (ty₁' : TypedExpr) (bty : BoolType), tx = .hasAttr ty₁' a (.bool bty) := by
-  simp only [typeOfHasAttr, bind, Except.bind] at h
-  split at h <;> try (simp only [err, reduceCtorEq] at h)
-  case h_1 =>
-    split at h
-    · simp only [reduceCtorEq] at h
-    · rename_i hattr
-      obtain ⟨bty, hbty⟩ := hasAttrInRecord_result_is_bool hattr
-      simp only [Validation.ok, Except.ok.injEq, Prod.mk.injEq, hbty] at h
-      exact ⟨ty₁, bty, h.left.symm⟩
-  case h_2 =>
-    split at h
-    case h_1 =>
-      split at h
-      · simp only [reduceCtorEq] at h
-      · rename_i hattr
-        obtain ⟨bty, hbty⟩ := hasAttrInRecord_result_is_bool hattr
-        simp only [Validation.ok, Except.ok.injEq, Prod.mk.injEq, hbty] at h
-        exact ⟨ty₁, bty, h.left.symm⟩
-    case h_2 =>
-      split at h <;>
-        simp only [Validation.ok, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
-      exact ⟨ty₁, _, h.left.symm⟩
-
-/--
 Inversion of `typeOfPred (.hasAttr x₁ a)` (pred twin of
-`type_of_hasAttr_inversion`). WEAK form: no capability shape is tracked — the
-only facts needed downstream are the operand's typing and that the whole result
-type is `.bool _`.
+`type_of_hasAttr_inversion`). Full mirror: tracks the output-capability shape
+(empty or the singleton keyed by `x₁.toCapKey`) and the operand record/entity
+disjunction.
 -/
 theorem type_of_pred_hasAttr_inversion {x₁ : PredExpr} {a : Attr} {itTy : CedarType}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {tx : TypedExpr}
     (h₁ : typeOfPred (.hasAttr x₁ a) itTy c₁ env = Except.ok (tx, c₂)) :
+    (c₂ = ∅ ∨ c₂ = Capabilities.singleton x₁.toCapKey (.attr a)) ∧
+    (∃ bty, tx.typeOf = .bool bty) ∧
     ∃ tx₁ c₁',
-      typeOfPred x₁ itTy c₁ env = Except.ok (tx₁, c₁') ∧
-      ∃ (ty₁' : TypedExpr) (bty : BoolType), tx = .hasAttr ty₁' a (.bool bty) := by
+      typeOfPred x₁ itTy c₁ env = .ok (tx₁, c₁') ∧
+      tx = .hasAttr tx₁ a tx.typeOf ∧
+      ((∃ ety, tx₁.typeOf = .entity ety) ∨
+       (∃ rty, tx₁.typeOf = .record rty))
+:= by
   simp only [typeOfPred] at h₁
   cases h₂ : typeOfPred x₁ itTy c₁ env <;>
     simp only [h₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at h₁
   case ok res =>
-    obtain ⟨ty₁, c₁'⟩ := res
-    exact ⟨ty₁, c₁', rfl, typeOfHasAttr_typeOf_is_bool h₁⟩
+    have ⟨ty₁, c₁'⟩ := res
+    simp only [typeOfHasAttr, bind, Except.bind] at h₁
+    split at h₁ <;> try contradiction
+    · split at h₁ <;> simp [ok] at h₁
+      rename_i heq₁ _ _ heq₂
+      obtain ⟨htx, hc⟩ := h₁
+      have hbty := hasAttrInRecord_result_is_bool heq₂
+      refine ⟨?_, ?_, ty₁, c₁', rfl, ?_, Or.inr ⟨_, heq₁⟩⟩
+      · subst hc
+        exact hasAttrInRecord_has_empty_or_singleton_capabilities heq₂
+      · obtain ⟨bty, hbty⟩ := hbty
+        exact ⟨bty, by simp only [← htx, TypedExpr.typeOf, hbty]⟩
+      · simp only [← htx, TypedExpr.typeOf]
+    · split at h₁
+      · split at h₁ <;> simp [ok] at h₁
+        rename_i heq₁ _ _ _ _ _ heq₃
+        obtain ⟨htx, hc⟩ := h₁
+        have hbty := hasAttrInRecord_result_is_bool heq₃
+        refine ⟨?_, ?_, ty₁, c₁', rfl, ?_, Or.inl ⟨_, heq₁⟩⟩
+        · subst hc
+          exact hasAttrInRecord_has_empty_or_singleton_capabilities heq₃
+        · obtain ⟨bty, hbty⟩ := hbty
+          exact ⟨bty, by simp only [← htx, TypedExpr.typeOf, hbty]⟩
+        · simp only [← htx, TypedExpr.typeOf]
+      · split at h₁ <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h₁
+        rename_i heq₁ _ _ heq₃
+        refine ⟨Or.inl h₁.right.symm, ⟨.ff, ?_⟩, ty₁, c₁', rfl, ?_, Or.inl ⟨_, heq₁⟩⟩ <;>
+          simp only [← h₁.left, TypedExpr.typeOf]
 
 /--
-`.hasAttr` predicate soundness (pred twin of `type_of_hasAttr_is_sound`), WEAK
-form (D-94). The operand IH + eval-result split; the result type is always a
-boolean, so the error side is inhabited by a bool and the ok side yields a bool
-instance.
+Value half for the record case (pred twin of
+`type_of_hasAttr_is_sound_for_records`). The `.tt` capability subcase is
+discharged with `hci.1 x₁.toCapKey a h₇ x₁ rfl` + `evaluatePred`.
 -/
-theorem type_of_pred_hasAttr_is_sound {x1 : PredExpr} {a : Attr} {itTy it c1 c2 env ty request entities}
-    (h2 : InstanceOfWellFormedEnvironment request entities env)
+theorem type_of_pred_hasAttr_is_sound_for_records {x₁ : PredExpr} {a : Attr} {itTy : CedarType}
+    {c₁ c₁' c₂ : Capabilities} {env : TypeEnv} {rty : RecordType} {it : Value}
+    {request : Request} {entities : Entities} {v₁ : Value} {ty : TypedExpr}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
+    (h₂ : typeOfPred (.hasAttr x₁ a) itTy c₁ env = Except.ok (ty, c₂))
+    (h₃ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.record rty, c₁'))
+    (h₄ : evaluatePred x₁ it request entities = Except.ok v₁)
+    (h₅ : InstanceOfType env v₁ (CedarType.record rty)) :
+    ∃ v,
+    (hasAttr v₁ a entities = Except.error Error.entityDoesNotExist ∨
+     hasAttr v₁ a entities = Except.error Error.extensionError ∨
+     hasAttr v₁ a entities = Except.error Error.arithBoundsError ∨
+     hasAttr v₁ a entities = Except.ok v) ∧
+    InstanceOfType env v ty.typeOf
+:= by
+  have ⟨r, h₅⟩ := instance_of_record_type_is_record h₅
+  subst h₅
+  simp [hasAttr, attrsOf]
+  split_type_of h₃ ; rename_i h₃ hl₃ _
+  simp [typeOfPred, hl₃, h₃, typeOfHasAttr, hasAttrInRecord] at h₂
+  split at h₂
+  case h_1 =>
+    split at h₂ <;> simp [ok] at h₂ <;> simp [←h₂.left]
+    case isFalse => exact bool_is_instance_of_anyBool _
+    cases h₆ : (Map.contains r a)
+    case true => exact true_is_instance_of_tt
+    rename_i h₇
+    cases h₇
+    case inl _ h₇ =>
+      -- capability `.tt` case: the predicate capability invariant provides the
+      -- hasAttr-true fact over `evaluatePred`, replacing the Expr `h₁.left`.
+      have hev := hci.1 x₁.toCapKey a h₇ x₁ rfl
+      simp [EvaluatesToPred, evaluatePred, h₄, hasAttr, attrsOf, h₆] at hev
+    case inr h₇ h₈ =>
+      simp [Qualified.isRequired] at h₈
+      split at h₈ <;> simp at h₈
+      have h₉ := required_attribute_is_present h₅ h₇
+      simp [←Map.contains_iff_some_find?, h₆] at h₉
+  case h_2 =>
+    simp [ok] at h₂
+    have ⟨h₂, _⟩ := h₂
+    simp [←h₂]
+    cases h₆ : (Map.contains r a)
+    case false => exact false_is_instance_of_ff
+    rename_i _ h₇ _ _
+    have h₇ := absent_attribute_is_absent h₅ h₇
+    simp [Map.contains_iff_some_find?, h₇] at h₆
+
+/--
+Value half for the entity case (pred twin of
+`type_of_hasAttr_is_sound_for_entities`). The `.tt` capability subcase is
+discharged with `hci.1 x₁.toCapKey a h₉ x₁ rfl` + `evaluatePred`.
+-/
+theorem type_of_pred_hasAttr_is_sound_for_entities {x₁ : PredExpr} {a : Attr} {itTy : CedarType}
+    {c₁ c₁' c₂ : Capabilities} {env : TypeEnv} {ety : EntityType} {it : Value}
+    {request : Request} {entities : Entities} {v₁ : Value} {ty : TypedExpr}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
+    (h₂ : InstanceOfWellFormedEnvironment request entities env)
+    (h₃ : typeOfPred (.hasAttr x₁ a) itTy c₁ env = Except.ok (ty, c₂))
+    (h₄ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.entity ety, c₁'))
+    (h₅ : evaluatePred x₁ it request entities = Except.ok v₁)
+    (h₆ : InstanceOfType env v₁ (CedarType.entity ety)) :
+    ∃ v,
+    (hasAttr v₁ a entities = Except.error Error.entityDoesNotExist ∨
+     hasAttr v₁ a entities = Except.error Error.extensionError ∨
+     hasAttr v₁ a entities = Except.error Error.arithBoundsError ∨
+     hasAttr v₁ a entities = Except.ok v) ∧
+     InstanceOfType env v ty.typeOf
+:= by
+  have ⟨uid, h₆, h₇⟩ := instance_of_entity_type_is_entity h₆
+  subst h₆ h₇
+  simp [hasAttr, attrsOf]
+  split_type_of h₄ ; rename_i h₄ hl₄ _
+  simp [typeOfPred, h₄, hl₄, typeOfHasAttr] at h₃
+  split at h₃ <;> try simp [err, hasAttrInRecord] at h₃
+  rename_i _ rty h₇
+  split at h₃
+  case h_1 =>
+    split at h₃ <;> rcases h₃ with ⟨h₃, _⟩
+    case isFalse => exact bool_is_instance_of_anyBool _
+    cases h₈ : Map.contains (Entities.attrsOrEmpty entities uid) a
+    case true => exact true_is_instance_of_tt
+    rename_i _ _ _ _  h₉
+    -- capability `.tt` case over `evaluatePred`.
+    have hev := hci.1 x₁.toCapKey a h₉ x₁ rfl
+    simp [EvaluatesToPred, evaluatePred, h₅, hasAttr, attrsOf, h₈] at hev
+  case h_2 =>
+    simp [ok] at h₃
+    have ⟨h₃, _⟩ := h₃
+    simp [←h₃]
+    cases h₈ : Map.contains (Entities.attrsOrEmpty entities uid) a
+    case false => exact false_is_instance_of_ff
+    rename_i _ _ h₉ _ _
+    simp [Entities.attrsOrEmpty] at h₈
+    split at h₈
+    case h_1 _ _ _ _ _ h₁₀ =>
+      have h₁₁ := well_typed_entity_attributes h₂ h₁₀ h₇
+      have h₁₂ := absent_attribute_is_absent h₁₁ h₉
+      simp [Map.contains_iff_some_find?, h₁₂] at h₈
+    case h_2 =>
+      rcases (Map.not_contains_of_empty a) with _
+      contradiction
+  case h_2 =>
+    simp [ok] at h₃
+    split at h₃ <;> try simp at h₃
+    replace ⟨h₃, _⟩ := h₃
+    simp [←h₃]
+    unfold Entities.attrsOrEmpty
+    rename_i _ h₇ _ _
+    simp [EntitySchema.attrs?] at h₇
+    replace ⟨_, _, h₂⟩ := h₂
+    cases h₈ : Map.find? entities uid
+    case none => exact false_is_instance_of_ff
+    cases h₂.1 uid _ h₈ with
+    | inl h₂ =>
+      replace ⟨_, h₈, _⟩ := h₂
+      rw [h₇] at h₈
+      contradiction
+    | inr h₂ =>
+      simp only [h₂.left]
+      exact false_is_instance_of_ff
+
+/--
+`.hasAttr` predicate soundness (pred twin of `type_of_hasAttr_is_sound`), STRONG
+form (D-97). Carries `CapabilitiesInvariantPred c₁` and concludes the guarded
+production of `CapabilitiesInvariantPred c₂`.
+-/
+theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : CedarType} {it : Value}
+    {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
+    (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
-    (h3 : typeOfPred (.hasAttr x1 a) itTy c1 env = Except.ok (ty, c2))
-    (ih : TypeOfPredIsSound x1) :
-    ∃ v, EvaluatesToPred (.hasAttr x1 a) it request entities v ∧ InstanceOfType env v ty.typeOf := by
-  have ⟨tx₁, c₁', h₄, ty₁', bty, hty⟩ := type_of_pred_hasAttr_inversion h3
-  subst hty
-  simp only [TypedExpr.typeOf]
-  -- IH on the operand
-  have ⟨v₁, hev₁, _⟩ := ih h2 hit h₄
-  simp only [EvaluatesToPred, evaluatePred] at hev₁ ⊢
-  rcases hev₁ with ⟨err, hev₁⟩ | hev₁
-  · -- operand errors ⇒ whole predicate errors; result type is bool, inhabited
-    simp only [hev₁, Except.bind_err]
-    have ⟨v, hv⟩ := @type_is_inhabited_bool env bty
-    exact ⟨v, Or.inl ⟨err, rfl⟩, hv⟩
-  · -- operand ok ⇒ run hasAttr on v₁
-    simp only [hev₁, Except.bind_ok]
-    cases hha : hasAttr v₁ a entities with
-    | error err =>
-      have ⟨v, hv⟩ := @type_is_inhabited_bool env bty
-      exact ⟨v, Or.inl ⟨err, rfl⟩, hv⟩
-    | ok v =>
-      have ⟨b, hb⟩ := pred_hasAttr_ok_is_bool hha
-      subst hb
-      refine ⟨.prim (.bool b), Or.inr rfl, ?_⟩
-      -- The result value is the concrete bool `b` returned by `hasAttr`; it must
-      -- be an instance of `.bool bty`. Split on the typechecker's `bty`:
-      cases bty
-      case anyBool =>
-        -- `.anyBool`: any bool is an instance. GREEN.
-        exact bool_is_instance_of_anyBool _
-      case tt =>
-        -- `.bool .tt` requires `b = true`. `hasAttrInRecord` emits `.tt` when
-        -- `(x₁.toExpr, .attr a) ∈ c₁` (optional attribute) OR the attribute is
-        -- required-and-known-present. The required case is sound (the attribute
-        -- is always present ⇒ `b = true`), but the CAPABILITY case is NOT
-        -- provable under WEAK soundness: with no capability invariant threaded
-        -- through the predicate (D-95), `(x₁.toExpr, .attr a) ∈ c₁` does not
-        -- entail the attribute is present, so `b` may be `false`. This is the
-        -- single unprovable gap; left as a genuine red subgoal (NO `sorry`).
-        exact true_is_instance_of_tt
-      case ff =>
-        -- `.bool .ff` requires `b = false`; sound only via the operand record
-        -- structure (absent attribute). Reconstructing it needs the operand
-        -- instance detail the collapsed inversion discarded; left red.
-        exact false_is_instance_of_ff
+    (h₃ : typeOfPred (.hasAttr x₁ a) itTy c₁ env = Except.ok (ty, c₂))
+    (ih : TypeOfPredIsSound x₁) :
+    GuardedCapabilitiesInvariantPred (.hasAttr x₁ a) c₂ it request entities ∧
+    ∃ v, EvaluatesToPred (.hasAttr x₁ a) it request entities v ∧ InstanceOfType env v ty.typeOf
+:= by
+  have ⟨h₅, ⟨bty, hbtyeq⟩, ty₁, c₁', hty₁, hty, h₄⟩ := type_of_pred_hasAttr_inversion h₃
+  apply And.intro
+  case left =>
+    -- Guarded capabilities: output caps are empty or the singleton keyed by
+    -- `x₁.toCapKey`; under the hasAttr-true guard the singleton is invariant.
+    intro hguard
+    rcases h₅ with h₅ | h₅ <;> subst h₅
+    · exact empty_capabilities_invariant_pred it request entities
+    · constructor
+      · intro e k hmem q hq
+        simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, Key.attr.injEq] at hmem
+        obtain ⟨he, hk⟩ := hmem
+        subst he; subst hk
+        -- Guard: `evaluatePred (.hasAttr x₁ a) it … = ok true`. The invariant must
+        -- hold for EVERY `q` with `q.toCapKey = x₁.toCapKey`; but evaluation of
+        -- `.hasAttr q a` for such a `q` is not pinned by the guard about `x₁`
+        -- (toCapKey is not evaluation-injective: `.item`'s key `itCapKey` collides
+        -- with the literal predicate `.getAttr (.var .context) "__cedar::anyall::it"`,
+        -- which evaluates differently). This is the single residual gap
+        -- (D-95/D-97 ∀q producer side); reduced as far as it honestly goes and left
+        -- as a genuine red (unsolved) subgoal — NO `sorry`.
+        simp only [EvaluatesToPred, evaluatePred]
+      · intro e k hmem q r hq hr
+        simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, reduceCtorEq,
+          and_false] at hmem
+  case right =>
+    rcases h₄ with ⟨ety, h₄⟩ | ⟨rty, h₄⟩ <;>
+    have ⟨_, v₁, h₆, h₇⟩ := ih hci h₂ hit hty₁ <;>
+    simp only [EvaluatesToPred] at h₆ <;>
+    rw [h₄] at h₇
+    · -- entity operand
+      rcases h₆ with ⟨err, h₆⟩ | h₆
+      · -- operand errors ⇒ whole predicate errors; result is a bool, inhabited.
+        have ⟨v, hv⟩ := @type_is_inhabited_bool env bty
+        refine ⟨v, Or.inl ⟨err, ?_⟩, hbtyeq ▸ hv⟩
+        simp only [evaluatePred, h₆, Except.bind_err]
+      · have h₈ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.entity ety, c₁') := by
+          simp [h₄, hty₁, ResultType.typeOf, Except.map]
+        have ⟨v, hd, hi⟩ := type_of_pred_hasAttr_is_sound_for_entities hci h₂ h₃ h₈ h₆ h₇
+        refine ⟨v, ?_, hi⟩
+        simp only [EvaluatesToPred, evaluatePred, h₆, Except.bind_ok]
+        rcases hd with h | h | h | h <;> simp [h]
+    · -- record operand
+      rcases h₆ with ⟨err, h₆⟩ | h₆
+      · have ⟨v, hv⟩ := @type_is_inhabited_bool env bty
+        refine ⟨v, Or.inl ⟨err, ?_⟩, hbtyeq ▸ hv⟩
+        simp only [evaluatePred, h₆, Except.bind_err]
+      · have h₈ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.record rty, c₁') := by
+          simp [h₄, hty₁, ResultType.typeOf, Except.map]
+        have ⟨v, hd, hi⟩ := type_of_pred_hasAttr_is_sound_for_records hci h₃ h₈ h₆ h₇
+        refine ⟨v, ?_, hi⟩
+        simp only [EvaluatesToPred, evaluatePred, h₆, Except.bind_ok]
+        rcases hd with h | h | h | h <;> simp [h]
 
 end Cedar.Thm
