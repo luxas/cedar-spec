@@ -57,11 +57,32 @@ The baseline unroll is capped at N ≤ 64 (its N-way conjunction overflows the
 Cedar parser past that, D-P8-size), so N = 128 carries a quantified row only; it
 is the cliff onset now folded into the headline sweep (N-1).
 
-Both curves grow super-linearly in N (≈ N^1.6 over this range), and the encoding
-delta grows with N (8 → 93 ms through N=64): the two-`set.filter` comprehension
-costs cvc5 progressively more as the number of reasoned-about members rises, but
-it is a *modest fraction* of the total — most of the cost is the
-membership/arithmetic reasoning the baseline also pays.
+Both curves grow super-linearly in N, but **not as a single power law — the
+curve accelerates.** The quantified median has no one clean exponent; its *local*
+exponent (the slope between consecutive points, `log(t₂/t₁) / log(N₂/N₁)`) rises
+monotonically across the range:
+
+| N interval | quantified (ms) | local exponent |
+|---|---|---:|
+| 1 → 2 | 9 → 11 | 0.29 |
+| 2 → 4 | 11 → 16 | 0.54 |
+| 4 → 8 | 16 → 31 | 0.95 |
+| 8 → 16 | 31 → 82 | 1.40 |
+| 16 → 32 | 82 → 285 | 1.80 |
+| 32 → 64 | 285 → 1049 | 1.88 |
+| 64 → 128 | 1049 → 4494 | 2.10 |
+
+So cvc5's solve time is **sub-linear at small N (~N^0.3 near N=1..2), crosses
+~N^1 around N≈4..8, and steepens to ~N^1.9 by N=32..64 and ~N^2.1 by
+N=64..128** — a cost that grows faster the larger the set, not the fixed `N^1.6`
+a single label would suggest. The baseline tracks the same accelerating shape
+(local exponent 0.74 → 2.00 across N=1..64), so the acceleration is the
+membership/arithmetic reasoning both shapes pay, not an artifact of the
+`set.filter` encoding. The encoding delta `Δ = quantified − baseline` grows with
+N (8 → 93 ms through N=64): the two-`set.filter` comprehension costs cvc5
+progressively more as the number of reasoned-about members rises, but it stays a
+*modest fraction* of the total — most of the cost is the membership/arithmetic
+reasoning the baseline also pays.
 
 ## 2. The cliff — where cvc5 degrades (`data/cliff-setsize.json`)
 
