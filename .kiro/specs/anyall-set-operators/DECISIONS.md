@@ -189,3 +189,68 @@ whole SymTest suite 2422/2422. The optimized SymCCOpt path still rejects `.all` 
 (All.lean:59) fails; (b) drop the encoder `set.all` quantifierError filter → `AnyAll.e2e` model
 validation fails; (c) compiler fold `and`→`or` → `compile_all_fold_result_wf` (WF.lean:1258) fails.
 Details in `members/default/phase5b/m5-prep-2026-10-09.md`.
+
+## D-94 (2026-10-11, Phase 9c) — predicate type soundness is WEAK (no capability invariant)
+
+`type_of_pred_is_sound` (D-74 option A) is stated as **weak soundness**:
+
+> well-typed predicate + element value of the static element type ⇒ evaluation
+> yields a value that is an instance of the result type, OR **any** error.
+
+`EvaluatesToPred` admits any error (`∃ err, evaluatePred … = .error err`), and
+`TypeOfPredIsSound` carries **no** `CapabilitiesInvariant` hypothesis and **no**
+`GuardedCapabilitiesInvariant` conclusion — unlike the expression
+`type_of_is_sound`, which rules out `attrDoesNotExist`/`typeError` via the
+capability invariant.
+
+**Why this is enough.** Every downstream D-74-A consumer needs only value-level
+facts: `normalize_evaluatePred`'s `.and`/ff→left (and `.or`/tt, `.ite`) folds need
+"a `.bool .ff`-typed sub-predicate evaluates to `false` or errors (never `true`)",
+which `instance_of_ff_is_false` + any-error soundness delivers; the real
+`compile_well_typed` `.all` arm needs `compilePred_well_typed` (already proved) +
+the normalized form; D-79 needs the same ff/tt facts; and Part-A
+`type_of_all_is_sound` already admits `quantifierError` via `evalAll`'s dynamic
+`.as Bool` cast, so it is unchanged. Resolves **D-P9c-5** option (c).
+
+## D-95 (2026-10-11, Phase 9c) — OPEN follow-up: `itExpr` capability collision (Lean↔Rust parity)
+
+Strong (capability-tracking) predicate soundness is **false as the spec stands**,
+because `itExpr := .var .principal` (`Cedar/Spec/Expr.lean`) and `typeOfAll`
+passes the OUTER capabilities `c` into `typeOfPred`. So a capability
+`(principal, "a")` established by `principal has "a"` OUTSIDE the quantifier is
+consulted for `it.a` INSIDE the predicate (because `it.toExpr = principal`), and
+dually an `it has "a"` capability inside is keyed `(principal, "a")`. The Rust
+validator keys `it` as the reserved unknown `__cedar::anyall::it` (D-21/D-44),
+which cannot collide — so Lean (accepts) and Rust (rejects) can **disagree** on
+e.g. `principal has "a" && context.s.all(it.a == 1)`.
+
+This is a Lean-spec precision/parity bug surfaced by the proof attempt, **not**
+fixed in 9c (D-94 sidesteps it with weak soundness). **Recommended fix for a
+later branch:** make `itExpr` collision-free (e.g.
+`.getAttr (.var .context) "__cedar::anyall::it"`, a reserved name the Rust schema
+validator already refuses — NOT a string-literal extension arg, since
+`typeOfCall` parses those), and add the shape to the Phase-6 generator. See the
+D-95 validator check outcome recorded alongside this entry.
+
+**D-95 validator check (2026-10-11).** Confirmed the disagreement at the
+key/code level (cheaper and more decisive than a dual schema harness, which needs
+a multi-minute `cargo` build):
+
+- **Rust** keys `it` as the reserved **`Unknown`** named `IT_SENTINEL =
+  "__cedar::anyall::it"` (`cedar/cedar-policy-core/src/ast/pred.rs:53`,
+  `is_it_sentinel`). A `principal has "a"` capability is keyed by the `principal`
+  expression, which is a DIFFERENT key from the `it` unknown, so it cannot satisfy
+  `it.a`. For the policy `principal has "a" && context.s.all(it.a == 1)` with `a`
+  OPTIONAL on the element entity type, Rust's typecheck of `it.a` sees no
+  capability for the `it` unknown ⇒ **reject** (optional attr read without
+  capability).
+- **Lean** keys `it` as `itExpr = .var .principal`
+  (`cedar-lean/Cedar/Spec/Expr.lean`), the SAME expression as `principal`. The
+  outer capability `(.var .principal, .attr "a")` from `principal has "a"` IS
+  `(itExpr, .attr "a")`, so `typeOfPred (.getAttr .item "a")` finds the capability
+  and the read typechecks ⇒ **accept**.
+- **Verdict: the two validators DISAGREE** on this shape (Lean accepts, Rust
+  rejects). This is the parity bug D-95 names. Confirmed by source inspection of
+  both key schemes rather than a built dual harness; the recommended fix
+  (collision-free `itExpr`) is deferred to a later branch and NOT implemented in
+  9c, which uses weak soundness (D-94) and does not depend on capability parity.

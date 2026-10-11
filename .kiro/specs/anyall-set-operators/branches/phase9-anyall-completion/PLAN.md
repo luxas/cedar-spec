@@ -427,7 +427,7 @@ reverts red drafts (the learned rule — spawn a fresh worker or drive the file 
   SymCC lesson). So each arm is a near-copy of its Expr twin with `typeOf→typeOfPred`,
   `evaluate→evaluatePred`, inheriting the per-op helpers (`typeOfUnaryApp`, `typeOfBinaryApp`,
   `typeOfGetAttr`, `typeOfHasAttr`, …) which `typeOfPred` calls identically on `.toExpr` args.
-- **D-P9c-5 — CAPABILITY THREADING is the real difficulty in `.getAttr`/`.hasAttr`/`.binaryApp`
+- **D-P9c-5 — RESOLVED option (c) → D-94 (2026-10-11).** CAPABILITY THREADING is the real difficulty in `.getAttr`/`.hasAttr`/`.binaryApp`
   (found while scoping M2; §5.2 under-specified this).** The Expr `.getAttr`/`.hasAttr` soundness
   leans on `capability_implies_entity_attribute` / `capability_implies_record_attribute`, which read
   `(x₁, .attr a) ∈ c` as `EvaluatesTo (.hasAttr x₁ a) request entities true` — i.e. capabilities are
