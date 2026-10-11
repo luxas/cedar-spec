@@ -418,7 +418,8 @@ public inductive TypedExpr.WellTyped (env : TypeEnv) : TypedExpr → Prop
   (h₂ : x₁.typeOf = .set τ)
   (h₃ : PredExpr.WellTyped env p)
   (h₄ : ∃ p₀ itTy c c' typ, p = PredExpr.normalize p₀ itTy c env ∧
-          Cedar.Validation.typeOfPred p₀ itTy c env = .ok (typ, c') ∧ ∃ b, typ.typeOf = .bool b) :
+          Cedar.Validation.typeOfPred p₀ itTy c env = .ok (typ, c') ∧ ∃ b, typ.typeOf = .bool b ∧
+          τ = itTy.liftBoolTypes) :
   WellTyped env (.all x₁ p (.bool .anyBool))
 
 end Cedar.Thm

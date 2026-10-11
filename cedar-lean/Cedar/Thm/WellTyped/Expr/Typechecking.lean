@@ -1903,7 +1903,7 @@ theorem typechecked_is_well_typed_after_lifting
           exact TypedExpr.WellTyped.all (hᵢ hᵢr)
             (by rw [type_of_after_lifted_is_lifted, hset, CedarType.liftBoolTypes])
             (normalize_wellTyped (typeOfPred_implies_wellTyped hpred))
-            ⟨p, _, xcap.filter (Capability.isClean), typc.2, typc.1, rfl, hpred, _, hbool⟩
+            ⟨p, _, xcap.filter (Capability.isClean), typc.2, typc.1, rfl, hpred, _, hbool, rfl⟩
       · simp only [err, reduceCtorEq] at h
 
 end Cedar.Thm
