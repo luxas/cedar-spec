@@ -31,7 +31,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 6 | `phase6-anyall-drt-differential` | DONE — review-clean (rounds 1+2; F-1..F-7 all fixed); see `branches/phase6-anyall-drt-differential/OUTCOMES.md` |
 | 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
 | 7 | `phase7-anyall-docs` | DONE — review converged (R1: 2 findings fixed, docsrs badge + a local path; R2: NO ACTIONABLE FINDINGS); see `branches/phase7-anyall-docs/OUTCOMES.md`. A1–E1 done: rustdoc (`anyall` in both `lib.rs`, enriched `Expr::all`/`any`, runnable gated doctest on `SetTermInQuantifier`), CHANGELOGs (`cedar-policy` + `cedar-policy-symcc`; core has none), Lean doc comments verified (already complete), `cedar-drt` README `anyall` section, paste-ready `docs/language-reference-anyall.md` + `docs/CEDAR-DOCS-HANDOFF.md`, design.md Phase-7 feature-summary/open-items section, OQ-1 cross-link. D-84/85/86. Doctests 34→35; rustdoc adds no new diagnostics (pre-existing repo doc-lint debt only). |
-| 8 | `phase8-anyall-cvc5-benchmarks` | IN-PROGRESS — PLAN + hand-measured data point committed; see `branches/phase8-anyall-cvc5-benchmarks/PLAN.md`. Harness = new `anyall`-gated `bench=false` bin in `cedar-drt/fuzz` (reuses `symcc.rs` `local_solver()` 1 GB cap + cvc5 + generator). Hand point: symbolic `context.ports.all(it>0)` vs `all(it>=0)` → cvc5 SAT in ≈0.032 s (prod path) / ≈0.029 s (raw D-52 `set.filter`/`HO_ALL`). |
+| 8 | `phase8-anyall-cvc5-benchmarks` | IMPLEMENTED (review follows) — harness `cedar-drt/fuzz/fuzz_targets/anyall_symcc_bench.rs` (`anyall`-gated `bench=false` bin, un-opt verbs, D-P8-nonvac `set.filter`/`HO_ALL` gate). Full sweep: 114 rows, 0 vacuous, repeats=3, wall ≈10 s (D-87 cap 5400 s not exhausted). Set-size is the only steep axis (7→1049 ms, N=0→64); cliff at N≈128→192 where the 1 GiB cap OOMs (`data/cliff-setsize.json`). Other six dimensions flat (≤15 ms). Smoke=27 rows in ~1 s. See `branches/phase8-anyall-cvc5-benchmarks/{PLAN,RESULTS}.md` + `data/`. Prereq: fixed `cedar-lean-ffi` proto mapper's missing `.all` TPE-residual arm. |
 
 ---
 
@@ -302,11 +302,19 @@ remains the only narrowed piece, behind the D-74-interim, pending D-74 (option A
 
 ## Phase 8 — cvc5 runtime benchmarks (LAST — empirical analyzability characterization)
 
-> **Status: IN-PROGRESS — PLAN committed.** Plan + the single hand-measured data point are on
-> `phase8-anyall-cvc5-benchmarks`; see `branches/phase8-anyall-cvc5-benchmarks/PLAN.md` (work items
-> P0–P9, dimensions, gating, the D-68 symbolic-receiver constraint, baseline isolation, smoke/full
-> configs, review checklist, and the one user fork: the full-sweep wall-clock budget). No code
-> beyond P0 yet.
+> **Status: IMPLEMENTED (review follows).** PLAN + the hand-measured data point (P0) and the
+> harness (P1–P7) are on `phase8-anyall-cvc5-benchmarks`; see
+> `branches/phase8-anyall-cvc5-benchmarks/PLAN.md` (work items P0–P9, dimensions, gating, the D-68
+> symbolic-receiver constraint, baseline isolation, smoke/full configs, review checklist) and
+> `RESULTS.md` (the numeric write-up + `data/`). The `anyall`-gated `bench=false` bin
+> `cedar-drt/fuzz/fuzz_targets/anyall_symcc_bench.rs` implements T8.1 (harness + 300 s/query timeout
+> + 1 GiB cap + CSV/JSON + smoke/full configs), T8.2 (all seven dimensions), and T8.3 (RESULTS.md
+> report; the optional regression-threshold guardrail is noted as a later add). Un-opt verbs are
+> pinned (D-P8-unopt/D-77); every quantified row asserts a `set.filter`/`HO_ALL` term (D-P8-nonvac,
+> 0 vacuous). Full sweep: 114 rows, repeats=3, wall ≈10 s under the D-87 90-min cap; set-size is the
+> only steep axis (7→1049 ms, N=0→64) and the cliff is N≈128→192 (1 GiB-cap OOM). P9 (docs rebase +
+> OUTCOMES) still pending (runs after Phase 7 lands). A prerequisite commit fixed the `cedar-lean-ffi`
+> proto mapper's missing `.all` TPE-residual arm, which had blocked the whole `--features anyall` build.
 
 
 Motivation: RFC 0021 explicitly flagged that these operators "will likely have a negative
