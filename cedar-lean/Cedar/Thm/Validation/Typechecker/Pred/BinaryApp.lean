@@ -335,28 +335,77 @@ theorem type_of_pred_binaryApp_is_sound {op₂ : BinaryOp} {x₁ x₂ : PredExpr
   -- `eq`: result bool; precise .tt/.ff via literal/entity reasoning.
   case eq =>
     exact type_of_pred_eq_is_sound htb hev₁ hev₂ hinst₁ hinst₂
-  -- `mem`: result `.bool (typeOfInₑ/ₛ …)`; `.anyBool` default closes, the precise
-  -- action-descendent `.tt`/`.ff` cases need the entity-store reasoning of the
-  -- Expr `Mem.lean`. Left as a RED structured gap (no `sorry`).
-  -- `mem`: result `.bool (typeOfInₑ/ₛ …)`. The result type is a bool with empty
-  -- caps; the precise `.tt`/`.ff`/`.anyBool` match from `typeOfInₑ`/`typeOfInₛ`
-  -- against the entity store mirrors `Typechecker/BinaryApp/Mem.lean`. Left as a
-  -- RED structured gap (no `sorry`): the final value instance is unproven.
+  -- `mem`: result `.bool (typeOfInₑ/ₛ …)`, empty caps. The value side mirrors
+  -- `Typechecker/BinaryApp/Mem.lean` via the SupportB value lemmas; the operand
+  -- values and typings come from the IHs. `PredExpr` has no `.set`, so the
+  -- action-literal arm of `typeOfInₛ` is unreachable (handled inside the lemma).
   case mem =>
-    have hbool : (∃ bty, ty.typeOf = .bool bty) ∧ c₂ = ∅ := by
-      simp only [typeOfBinaryApp] at htb
-      split at htb <;>
-        first
-        | contradiction
-        | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at htb ;
-           obtain ⟨h, hc⟩ := htb ; subst h ; exact ⟨⟨_, rfl⟩, hc.symm⟩)
-        | (simp only [ok, err, reduceCtorEq] at htb)
-    obtain ⟨⟨bty, hty⟩, hc⟩ := hbool
-    subst hc; rw [hty]
-    refine ⟨empty_guarded_capabilities_invariant_pred,
-      evalPred_binaryApp_bool hev₁ hev₂ (fun w happ => ?_)⟩
-    -- RED (unsolved, no sorry): `InstanceOfType env w (.bool bty)` for the precise
-    -- `bty` produced by `typeOfInₑ`/`typeOfInₛ` needs the entity-store reasoning.
+    simp only [typeOfBinaryApp] at htb
+    cases hety₁ : tx₁.typeOf with
+    | entity ety₁ =>
+      rw [hety₁] at hinst₁
+      have ⟨uid₁, hty₁eq, hvv₁⟩ := instance_of_entity_type_is_entity hinst₁
+      cases hety₂ : tx₂.typeOf with
+      | entity ety₂ =>
+        simp only [hety₁, hety₂, ok, Except.ok.injEq, Prod.mk.injEq] at htb
+        obtain ⟨htyeq, hceq⟩ := htb
+        subst hceq
+        rw [hety₂] at hinst₂
+        have ⟨uid₂, hty₂eq, hvv₂⟩ := instance_of_entity_type_is_entity hinst₂
+        subst hvv₁ hvv₂
+        rcases hev₁ with ⟨e₁, hev₁⟩ | hev₁
+        · have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env (typeOfInₑ ety₁ ety₂ x₁.toCapKey x₂.toCapKey env)
+          exact ⟨empty_guarded_capabilities_invariant_pred, w₀,
+            Or.inl ⟨e₁, by simp only [evaluatePred, hev₁, Except.bind_err]⟩,
+            by rw [← htyeq]; exact hw₀⟩
+        rcases hev₂ with ⟨e₂, hev₂⟩ | hev₂
+        · have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env (typeOfInₑ ety₁ ety₂ x₁.toCapKey x₂.toCapKey env)
+          exact ⟨empty_guarded_capabilities_invariant_pred, w₀,
+            Or.inl ⟨e₂, by simp only [evaluatePred, hev₁, hev₂, Except.bind_ok, Except.bind_err]⟩,
+            by rw [← htyeq]; exact hw₀⟩
+        refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
+        cases happ : apply₂ .mem (Value.prim (Prim.entityUID uid₁)) (Value.prim (Prim.entityUID uid₂)) entities with
+        | error e =>
+          have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env (typeOfInₑ ety₁ ety₂ x₁.toCapKey x₂.toCapKey env)
+          exact ⟨w₀, Or.inl ⟨e, by simp only [evaluatePred, hev₁, hev₂, happ, Except.bind_ok]⟩,
+            by rw [← htyeq]; exact hw₀⟩
+        | ok w =>
+          refine ⟨w, Or.inr (by simp only [evaluatePred, hev₁, hev₂, happ, Except.bind_ok]), ?_⟩
+          rw [← htyeq]
+          exact apply₂_mem_entity_instance_of_inₑ h₂ hev₁ hev₂ hty₁eq hty₂eq happ
+      | set elemTy =>
+        cases helem : elemTy with
+        | entity ety₂ =>
+          simp only [hety₁, hety₂, helem, ok, Except.ok.injEq, Prod.mk.injEq] at htb
+          obtain ⟨htyeq, hceq⟩ := htb
+          subst hceq
+          rw [hety₂, helem] at hinst₂
+          have ⟨vs, hvseq, _⟩ := instance_of_set_type_is_set hinst₂
+          subst hvseq hvv₁
+          rcases hev₁ with ⟨e₁, hev₁⟩ | hev₁
+          · have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env (typeOfInₛ ety₁ ety₂ x₁.toCapKey x₂.toCapKey env)
+            exact ⟨empty_guarded_capabilities_invariant_pred, w₀,
+              Or.inl ⟨e₁, by simp only [evaluatePred, hev₁, Except.bind_err]⟩,
+              by rw [← htyeq]; exact hw₀⟩
+          rcases hev₂ with ⟨e₂, hev₂⟩ | hev₂
+          · have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env (typeOfInₛ ety₁ ety₂ x₁.toCapKey x₂.toCapKey env)
+            exact ⟨empty_guarded_capabilities_invariant_pred, w₀,
+              Or.inl ⟨e₂, by simp only [evaluatePred, hev₁, hev₂, Except.bind_ok, Except.bind_err]⟩,
+              by rw [← htyeq]; exact hw₀⟩
+          refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
+          obtain ⟨vl⟩ := vs
+          cases happ : apply₂ .mem (Value.prim (Prim.entityUID uid₁)) (Value.set (Set.mk vl)) entities with
+          | error e =>
+            have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env (typeOfInₛ ety₁ ety₂ x₁.toCapKey x₂.toCapKey env)
+            exact ⟨w₀, Or.inl ⟨e, by simp only [evaluatePred, hev₁, hev₂, happ, Except.bind_ok]⟩,
+              by rw [← htyeq]; exact hw₀⟩
+          | ok w =>
+            refine ⟨w, Or.inr (by simp only [evaluatePred, hev₁, hev₂, happ, Except.bind_ok]), ?_⟩
+            rw [← htyeq]
+            exact apply₂_mem_set_instance_of_inₛ h₂ hty₁eq hinst₂ happ
+        | _ => simp only [hety₁, hety₂, helem, err, reduceCtorEq] at htb
+      | _ => simp only [hety₁, hety₂, err, reduceCtorEq] at htb
+    | _ => simp only [hety₁, err, reduceCtorEq] at htb
 
   -- `hasTag`: result from `typeOfHasTag`. The output cap is empty (`.ff`/`.tt`
   -- branches) or a singleton tag capability (`.anyBool` branch). The capability

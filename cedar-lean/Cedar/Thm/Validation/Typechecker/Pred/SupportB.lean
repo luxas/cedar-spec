@@ -93,7 +93,7 @@ theorem apply₂_mem_entity_instance_of_inₑ {x₁ x₂ : PredExpr} {it : Value
 `.mem` with a set right operand. Because `PredExpr` has no `.set`,
 `entityUIDs? x₂.toCapKey = none`, so `typeOfInₛ` collapses to its schema
 `.anyBool`/`.ff` arm. Mirror of the surviving arm of `type_of_mem_is_soundₛ`. -/
-theorem apply₂_mem_set_instance_of_inₛ {x₁ x₂ : PredExpr} {it : Value} {euid₁ : EntityUID}
+theorem apply₂_mem_set_instance_of_inₛ {x₁ x₂ : PredExpr} {euid₁ : EntityUID}
     {vs : List Value} {w : Value} {env : TypeEnv} {ety₁ ety₂ : EntityType}
     {request : Request} {entities : Entities}
     (hwf : InstanceOfWellFormedEnvironment request entities env)
