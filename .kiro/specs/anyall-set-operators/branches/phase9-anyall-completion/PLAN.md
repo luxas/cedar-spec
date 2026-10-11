@@ -405,6 +405,39 @@ to line up (dispatcher mismatch) — this is the exact F2 gap, now a caught regr
 9c's base (Phase-5B pattern); rotate the worker conversation if runs shrink to <1 lemma each and it
 reverts red drafts (the learned rule — spawn a fresh worker or drive the file directly).
 
+### 5.6 Implementation decisions (9c implementer, 2026-10-11)
+
+- **D-P9c-1 — `type_of_pred_is_sound` statement shape.** Stated as a `TypeOfPredIsSound (p : PredExpr)`
+  predicate (mirroring `TypeOfIsSound`) carrying the extra hypothesis `InstanceOfType env it itTy`
+  (the §5.2 "it enters as a value" fact), and a `type_of_pred_is_sound : ∀ {p}, TypeOfPredIsSound p`
+  dispatcher proved by structural recursion on `p` (`termination_by sizeOf p`), exactly like
+  `type_of_is_sound`. Per-arm lemmas live in `Cedar/Thm/Validation/Typechecker/Pred/<Op>.lean` so
+  independent arms can be proved in parallel.
+- **D-P9c-2 — `EvaluatesToPred`.** Mirrors `EvaluatesTo` with the SAME three allowed errors
+  (`entityDoesNotExist`/`extensionError`/`arithBoundsError`) — no `quantifierError` disjunct, since
+  `evaluatePred` never produces it (the `*_ne_qerr` lemmas in `All.lean` certify this; §5.1 note).
+- **D-P9c-3 — the capability invariant is NOT predicate-indexed (§5.2 confirmed early).** The
+  ordinary `CapabilitiesInvariant c request entities` is reused unchanged; the only new hypothesis is
+  `InstanceOfType env it itTy`. `GuardedCapabilitiesInvariant` is stated over `p.toExpr` (the Expr
+  reconstruction), since capabilities are keyed by Expr and `typeOfPred` already threads `x₁.toExpr`.
+- **D-P9c-4 — straight-line arms mirror the Expr proofs directly, NOT via a type-level bridge.**
+  A `typeOfPred p itTy c env = typeOf p.toExpr c env` bridge is FALSE (the `.item` arm types as
+  `.var .principal itTy`, whereas `typeOf itExpr = typeOf (.var .principal)` yields the request's
+  principal type — they differ in the type component, the same source-vs-normalized hazard as the
+  SymCC lesson). So each arm is a near-copy of its Expr twin with `typeOf→typeOfPred`,
+  `evaluate→evaluatePred`, inheriting the per-op helpers (`typeOfUnaryApp`, `typeOfBinaryApp`,
+  `typeOfGetAttr`, `typeOfHasAttr`, …) which `typeOfPred` calls identically on `.toExpr` args.
+
+**Milestones (9c):**
+- **M1** — foundation: `EvaluatesToPred`, `TypeOfPredIsSound`, prove `.item`/`.lit`/`.var`; stub the
+  recursive arms as separate lemmas; dispatcher assembled. Validates the mirror strategy.
+- **M2** — straight-line arms: `.unaryApp`, `.binaryApp`, `.getAttr`, `.hasAttr`, `.extHasAttr`,
+  `.record`, `.call` (parallelizable; copy the Expr proofs).
+- **M3** — hard arms: `.and`, `.or`, `.ite` (capability threading + `instance_of_{tt,ff,anyBool}`).
+- **M4** — `normalize_evaluatePred` from M1–M3.
+- **M5** — wiring §5.4 (steps 1–6) + D-79 fold-once + restored `compile_well_typed` `.all` arm.
+- **M6** — green bar §5.5, non-vacuity + mutation evidence, `#print axioms`.
+
 ---
 
 ## 6. `phase9d-anyall-set-footprint` — D-70 option B (set-typed footprints)
