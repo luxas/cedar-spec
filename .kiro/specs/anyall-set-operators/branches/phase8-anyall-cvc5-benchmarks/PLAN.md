@@ -248,9 +248,9 @@ default build path — all of it is `#[cfg(feature = "anyall")]` and in a `bench
 - **Env (D-13 host quirk) for building/running in the OUTER worktree's DRT:**
   `export PATH="$HOME/.cargo/bin:$HOME/.elan/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"`;
   `unset LD_PRELOAD`; `export CVC5=/home/linuxbrew/.linuxbrew/bin/cvc5`;
-  for the nested Rust: `CARGO_TARGET_DIR=/local/home/luxask/code/wt/p8/cedar/target-p8`;
+  for the nested Rust: `CARGO_TARGET_DIR=<worktree>/cedar/target-p8`;
   for cedar-drt builds in the outer worktree: a separate target dir
-  `/local/home/luxask/code/wt/p8/target-p8` (both added to each worktree's `.git/info/exclude`).
+  `<worktree>/target-p8` (both added to each worktree's `.git/info/exclude`).
 - **Compile + solve (un-optimized, the `.all`-supported path):**
   `Validator::new(schema)` → `WellTypedPolicies::from_policies(&pset, &req_env, schema)` (1-pset
   verbs) or `WellTypedPolicy::from_policy` (single policy) → `SymEnv::new(schema, &req_env)` →
