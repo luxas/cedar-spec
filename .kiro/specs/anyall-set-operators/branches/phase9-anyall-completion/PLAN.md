@@ -642,3 +642,30 @@ producer (`toCapKey` injective exactly on `NoReservedItAccess` predicates). Stil
 `ofCapKey_toCapKey`'s getAttr/list cases; the `well-typed-under-NoReservedItKey ⇒ NoReservedItAccess`
 lemma; the outer→predicate invariant entry lemma at the quantifier boundary (`evaluatePred q it =
 evaluate q.toExpr` on it-free `q`); then re-thread the arms, dispatcher, M4, M5, M6.
+
+
+### 5.9 D-P9c-8 / D-P9c-9 — fresh-worker progress (2026-10-11)
+
+**D-P9c-8 — `type_of_pred_implies_wf_type` is the remaining support lemma for the `.getAttr`
+record-receiver error-side witness.** The weak-soundness existential `∃ v, InstanceOfType env v
+ty.typeOf` needs `ty.typeOf` inhabited, hence well-formed, on the branch where the sub-expression
+ERRORS and the attribute is OPTIONAL (the required case is witnessed from the IH value instance; the
+entity-receiver case gets WF from the schema via `wf_env_implies_wf_attrs`). `InstanceOfType` alone
+does not yield record-type WF (an absent optional attr's type is unconstrained by the value).
+Resolution: add `type_of_pred_implies_wf_type` (predicate twin of `typechecked_has_well_formed_type`),
+carrying `env.WellFormed` + `itTy.WellFormed env` (threaded at the `typeOfAll` boundary, where `itTy`
+is the set element type, WF by set-type inversion). Bounded structural induction over `typeOfPred`:
+`.item` → `itTy.WellFormed env`; every other arm reuses the SAME per-op type helper, so output WF
+follows from operand WF. Left as the single open obligation for `.getAttr` (2 red spots, no sorry).
+
+**D-P9c-9 — the ofCapKey single-fact invariant ELIMINATES the former ∀q producer-side gap
+(D-95/D-96/D-97).** With `CapabilitiesInvariantPred` keyed through `PredExpr.ofCapKey` (approach A,
+§5.8), the producer side of every attr/tag arm proves one fact about `ofCapKey e` instead of a fact
+for every `q` with `q.toCapKey = e`. Support lemma (a) `type_of_pred_implies_no_reserved` (§5.1 step
+1, LANDED GREEN) gives `x.NoReservedItAccess` from the typing, so `ofCapKey_toCapKey` rewrites
+`ofCapKey x.toCapKey = x` and the producer/consumer sites close about `x` directly. This is why
+`.hasAttr` is now fully GREEN and `.extHasAttr`'s producer closes. The residual in `.extHasAttr` is
+the reserved-attr-NAME exclusion for `ofCapKey (.getAttr x₁ a)` when `a` could be the reserved key: a
+well-typed ext-has-attr never names the reserved attr (Rust's schema parser refuses `__cedar` names),
+but that needs an attr-name `NoReservedItAccess` premise threaded through `typeOfExtHasAttr`, deferred
+(2 red spots, no sorry).

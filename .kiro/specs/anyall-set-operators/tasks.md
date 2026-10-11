@@ -421,6 +421,20 @@ bottom-up:
   red draft (inversion field-shaping). Remaining: finish the production side + `.and`/`.or`/`.ite` +
   dispatcher + M4 `normalize_evaluatePred` + M5 wiring + M6. D-74 interim guard still in place.
   _Satisfies (when complete):_ 5.1 (completeness), 6.4 (F2 dead-code debt).
+  **UPDATE (fresh LEAD worker, 2026-10-11, D-P9c-7 approach A continued):** the ofCapKey invariant
+  closed the production-side ∀q gap. Landed GREEN this run: support lemma (a)
+  `type_of_pred_implies_no_reserved` (well-typed-under-`NoReservedItKey` ⇒ `NoReservedItAccess`,
+  `Pred/Basic.lean`), and the `.record` + `.hasAttr` arms (producer closed via the ofCapKey
+  single-fact invariant — the former ∀q D-95/D-97 gap is GONE). Reduced to sorry-free red drafts:
+  `.getAttr` 6→2 (only the record-receiver optional-attr error-side type-WF, needs
+  `type_of_pred_implies_wf_type`, D-P9c-8), `.extHasAttr` 7→2 (only the ext-has-attr reserved-attr-name
+  exclusion in `ofCapKey`-of-`.getAttr`), `.binaryApp` 4→3 (`.mem`/`.hasTag`/`.getTag` mirror whole
+  Expr proofs). `.and` inversion FIXED (peel the x₂ bind before the typeOfAnd split); its main theorem
+  body is partial (bool-case shaping). All arms sorry-free; `lake build Cedar` still 616 jobs GREEN.
+  Remaining: finish `.and` main theorem + `.or`/`.ite` (reuse the fixed inversion shape), `.call`
+  (102-err restart from Record's shape), the two support lemmas (`type_of_pred_implies_wf_type` for
+  `.getAttr`; ext-has-attr attr-name `NoReservedItAccess` for `.extHasAttr`), the tag arms, dispatcher
+  `type_of_pred_is_sound`, M4, M5, M6.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
