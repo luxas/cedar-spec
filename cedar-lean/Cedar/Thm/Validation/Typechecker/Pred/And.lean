@@ -26,14 +26,14 @@ open Cedar.Validation
 theorem type_of_pred_and_inversion {x₁ x₂ : PredExpr} {itTy : CedarType} {c c' : Capabilities}
     {env : TypeEnv} {tx : TypedExpr}
     (h₁ : typeOfPred (.and x₁ x₂) itTy c env = Except.ok (tx, c')) :
-    ∃ tx₁ bty₁ c₁,
+    ∃ tx₁ bty₁ c₁ tx₂ c₂,
       typeOfPred x₁ itTy c env = .ok (tx₁, c₁) ∧
       tx₁.typeOf = .bool bty₁ ∧
+      typeOfPred x₂ itTy (c ∪ c₁) env = .ok (tx₂, c₂) ∧
       if bty₁ = BoolType.ff
       then tx = tx₁ ∧ c' = ∅
-      else ∃ bty tx₂ bty₂ c₂,
+      else ∃ bty bty₂,
         tx = (.and tx₁ tx₂ (.bool bty)) ∧
-        typeOfPred x₂ itTy (c ∪ c₁) env = .ok (tx₂, c₂) ∧
         tx₂.typeOf = .bool bty₂ ∧
         if bty₂ = BoolType.ff
         then bty = BoolType.ff ∧ c' = ∅
@@ -42,30 +42,31 @@ theorem type_of_pred_and_inversion {x₁ x₂ : PredExpr} {itTy : CedarType} {c 
   simp_do_let (typeOfPred x₁ itTy c env) as h₂ at h₁
   rename_i res₁
   obtain ⟨tr₁, cr₁⟩ := res₁
+  simp_do_let (typeOfPred x₂ itTy (c ∪ cr₁) env) as h₂b at h₁
+  rename_i res₂
+  obtain ⟨tr₂, cr₂⟩ := res₂
   simp only [typeOfAnd, List.empty_eq] at h₁
   split at h₁ <;> simp only [ok, err, Except.ok.injEq, reduceCtorEq] at h₁
   case h_1 h₃ =>
-    refine ⟨tr₁, BoolType.ff, cr₁, rfl, h₃, ?_⟩
+    refine ⟨tr₁, BoolType.ff, cr₁, tr₂, cr₂, rfl, h₃, h₂b, ?_⟩
     simp only [↓reduceIte]
-    exact Prod.mk.inj h₁
+    obtain ⟨ht, hc⟩ := Prod.mk.inj h₁
+    exact ⟨ht.symm, hc.symm⟩
   case h_2 bty₁ h₃ h₄ =>
-    refine ⟨tr₁, bty₁, cr₁, rfl, h₄, ?_⟩
+    refine ⟨tr₁, bty₁, cr₁, tr₂, cr₂, rfl, h₄, h₂b, ?_⟩
     rw [if_neg h₃]
-    cases h₅ : typeOfPred x₂ itTy (c ∪ cr₁) env <;> simp only [h₅, Except.bind_ok,
-      Except.bind_err, reduceCtorEq] at h₁
-    rename_i res₂
-    obtain ⟨tr₂, cr₂⟩ := res₂
+    simp only [bind, Except.bind] at h₁
     split at h₁ <;> simp only [ok, err, Except.ok.injEq, reduceCtorEq, Prod.mk.injEq] at h₁ <;>
     have ⟨hty, hc⟩ := h₁ <;> subst hty hc
     case h_1 hty₂ =>
-      exact ⟨.ff, tr₂, .ff, cr₂, rfl, rfl, hty₂, by simp⟩
+      exact ⟨.ff, .ff, rfl, hty₂, by simp⟩
     case h_2 hty₂ =>
-      refine ⟨bty₁, tr₂, BoolType.tt, cr₂, rfl, rfl, hty₂, ?_⟩
+      refine ⟨bty₁, BoolType.tt, rfl, hty₂, ?_⟩
       cases bty₁
       case ff => exact absurd rfl h₃
       all_goals simp [lubBool]
     case h_3 bty₂ h₆ h₇ hty₂ =>
-      refine ⟨.anyBool, tr₂, bty₂, cr₂, rfl, rfl, hty₂, ?_⟩
+      refine ⟨.anyBool, bty₂, rfl, hty₂, ?_⟩
       have hbty₂ : bty₂ = .anyBool := by cases bty₂ <;> simp at h₆ h₇ ⊢
       subst hbty₂
       rw [if_neg (by simp)]
@@ -83,7 +84,7 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
     (ih₂ : TypeOfPredIsSound x₂) :
     GuardedCapabilitiesInvariantPred (.and x₁ x₂) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.and x₁ x₂) it request entities v ∧ InstanceOfType env v tx.typeOf := by
-  have ⟨tx₁, bty₁, rc₁, h₄, h₅, h₆⟩ := type_of_pred_and_inversion h₃
+  have ⟨tx₁, bty₁, rc₁, tx₂, rc₂, h₄, h₅, h₄b, h₆⟩ := type_of_pred_and_inversion h₃
   have ⟨ig₁, v₁, ih₁₂, ih₁₃⟩ := ih₁ hnr hci h₂ hit h₄
   rw [h₅] at ih₁₃
   have ⟨b₁, hb₁⟩ := instance_of_bool_is_bool ih₁₃
@@ -117,10 +118,10 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
           have := instance_of_tt_is_true (by rw [← h₅] at ih₁₃; exact ih₁₃)
           simp_all)))
         case isFalse =>
-          replace ⟨bty, tx₂, bty₂, rc₂, htx, htx₂, hty₂, h₆⟩ := h₆
+          replace ⟨bty, bty₂, htx, hty₂, h₆⟩ := h₆
           have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
             capability_union_invariant_pred hci hprod₁
-          have ⟨ig₂, _, _, _⟩ := ih₂ hnr hci₂ h₂ hit htx₂
+          have ⟨ig₂, _, _, _⟩ := ih₂ hnr hci₂ h₂ hit h₄b
           have hprod₂ : CapabilitiesInvariantPred rc₂ it request entities := ig₂ hx₂
           split at h₆ <;> (have ⟨_, hc⟩ := h₆; subst hc)
           · exact empty_capabilities_invariant_pred it request entities
@@ -142,7 +143,7 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
         refine ⟨Value.prim (.bool false), Or.inr ?_, false_is_instance_of_ff⟩
         simp only [evaluatePred, Result.as, Coe.coe, Value.asBool, ih₁₂]
     case isFalse h₇ =>
-      replace ⟨bty, tx₂, bty₂, rc₂, htx, htx₂, hty₂, h₆⟩ := h₆
+      replace ⟨bty, bty₂, htx, hty₂, h₆⟩ := h₆
       subst htx
       simp only [TypedExpr.typeOf]
       rcases ih₁₂ with ⟨err, ih₁₂⟩ | ih₁₂
@@ -158,7 +159,7 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
         case true =>
           have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
             capability_union_invariant_pred hci (ig₁ ih₁₂)
-          have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci₂ h₂ hit htx₂
+          have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci₂ h₂ hit h₄b
           rw [hty₂] at ih₂₃
           rcases ih₂₂ with ⟨err₂, ih₂₂⟩ | ih₂₂
           · refine ⟨_, EvaluatesToPred.error ?_, type_is_inhabited_bool.choose_spec⟩
