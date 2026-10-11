@@ -43,14 +43,13 @@ theorem type_of_pred_and_inversion {x₁ x₂ : PredExpr} {itTy : CedarType} {c 
   rename_i res₁
   obtain ⟨tr₁, cr₁⟩ := res₁
   simp only [typeOfAnd, List.empty_eq] at h₁
-  split at h₁ <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h₁
+  split at h₁ <;> simp only [ok, err, Except.ok.injEq, reduceCtorEq] at h₁
   case h_1 h₃ =>
-    have ⟨ hl₁, hr₁ ⟩ := h₁
-    subst hl₁ hr₁
-    refine ⟨tr₁, BoolType.ff, cr₁, h₂, h₃, ?_⟩
-    simp only [↓reduceIte, and_self]
+    refine ⟨tr₁, BoolType.ff, cr₁, rfl, h₃, ?_⟩
+    simp only [↓reduceIte]
+    exact Prod.mk.inj h₁
   case h_2 bty₁ h₃ h₄ =>
-    refine ⟨tr₁, bty₁, cr₁, h₂, h₄, ?_⟩
+    refine ⟨tr₁, bty₁, cr₁, rfl, h₄, ?_⟩
     rw [if_neg h₃]
     cases h₅ : typeOfPred x₂ itTy (c ∪ cr₁) env <;> simp only [h₅, Except.bind_ok,
       Except.bind_err, reduceCtorEq] at h₁
@@ -59,14 +58,14 @@ theorem type_of_pred_and_inversion {x₁ x₂ : PredExpr} {itTy : CedarType} {c 
     split at h₁ <;> simp only [ok, err, Except.ok.injEq, reduceCtorEq, Prod.mk.injEq] at h₁ <;>
     have ⟨hty, hc⟩ := h₁ <;> subst hty hc
     case h_1 hty₂ =>
-      exact ⟨.ff, tr₂, .ff, cr₂, rfl, h₅, hty₂, by simp⟩
+      exact ⟨.ff, tr₂, .ff, cr₂, rfl, rfl, hty₂, by simp⟩
     case h_2 hty₂ =>
-      refine ⟨bty₁, tr₂, BoolType.tt, cr₂, rfl, h₅, hty₂, ?_⟩
+      refine ⟨bty₁, tr₂, BoolType.tt, cr₂, rfl, rfl, hty₂, ?_⟩
       cases bty₁
       case ff => exact absurd rfl h₃
       all_goals simp [lubBool]
     case h_3 bty₂ h₆ h₇ hty₂ =>
-      refine ⟨.anyBool, tr₂, bty₂, cr₂, rfl, h₅, hty₂, ?_⟩
+      refine ⟨.anyBool, tr₂, bty₂, cr₂, rfl, rfl, hty₂, ?_⟩
       have hbty₂ : bty₂ = .anyBool := by cases bty₂ <;> simp at h₆ h₇ ⊢
       subst hbty₂
       rw [if_neg (by simp)]
