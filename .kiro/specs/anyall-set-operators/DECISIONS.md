@@ -372,3 +372,23 @@ Deliberately NOT done: adding `NoReservedItKey` as a new hypothesis to
 `type_of_preserves_evaluation_results` or its TPE/SymCC callers (they get it from
 `env.WellFormed`). Regression: a CedarUnitTests case asserts a schema whose
 context declares `__cedar::anyall::it` is rejected by the environment validator.
+
+## D-99 (2026-10-11, Phase 9c) — RESOLVES the entry-lemma-(b) quantifier boundary (filter clean keys)
+
+**Decision (orchestrator).** The quantifier-boundary entry lemma — building
+`CapabilitiesInvariantPred` for a set element from the outer `CapabilitiesInvariant` —
+is unsound as a for-ALL-keys statement, because `PredExpr.ofCapKey` collapses `.all`/`.set`
+subterms (and the reserved access) of an outer cap key to `.item`, so the bridge
+`evaluatePred (ofCapKey e) it = evaluate e` fails on such keys. Chosen fix: FILTER at the
+boundary, leaving the proved 14-arm Pred chain and `CapabilitiesInvariantPred` untouched.
+
+- `Expr.isCleanCapKey e := (ofCapKey e).toCapKey == e && ¬ (ofCapKey e).mentionsIt` and
+  `Capability.isClean (e,k) := e.isCleanCapKey && (k is .tag x → x.isCleanCapKey)`.
+- `typeOfAll` types and normalizes the predicate under `c.filter Capability.isClean`;
+  the stored predicate is `normalize p τ (c.filter clean) env`; returned caps stay `c` (D-39).
+- Acceptance-preserving: a `PredExpr` is set-/all-free and (under `NoReservedItKey`) reserved-
+  free, so its own `toCapKey` — all it ever consults — is always clean; no usable capability
+  is dropped. Rust does not filter but accepts identically; the validation DRT confirms parity.
+- Entry lemma `entry_capabilities_invariant_pred` proved via the it-free bridge
+  `evaluatePred_eq_evaluate_toExpr` on clean keys. `type_of_preserves_evaluation_results` `.all`
+  now closes (GREEN, axiom-clean); `lake build Cedar` 648 jobs.
