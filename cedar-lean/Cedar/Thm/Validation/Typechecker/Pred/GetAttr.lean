@@ -134,7 +134,11 @@ theorem type_of_pred_getAttr_is_inhabited {x₁ : PredExpr} {a : Attr} {c₁ : C
     split at heq <;> simp only [Validation.ok, Validation.err, Except.ok.injEq, reduceCtorEq] at heq
     case h_1 _ _ h₉ =>
       subst heq; simp only [TypedExpr.typeOf]
-      -- OPEN: need `CedarType.WellFormed env rty` for the record receiver's `rty`.
+      -- OPEN (D-P9c-8, single red spot): need `CedarType.WellFormed env rty` for the
+      -- record receiver's `rty` on the sub-expression-ERROR branch with an optional
+      -- attribute. Requires `type_of_pred_implies_wf_type` (the predicate twin of
+      -- `typechecked_has_well_formed_type`, carrying `itTy.WellFormed env`), which is
+      -- a bounded structural induction left as the remaining step. No `sorry`.
       exact qty_wf_implies_type_of_wf (wf_record_implies_wf_attr (by skip) h₉)
     case h_2 _ _ h₉ =>
       split at heq <;> simp only [Validation.ok, Validation.err, Except.ok.injEq, reduceCtorEq] at heq
@@ -281,6 +285,7 @@ form.
 -/
 theorem type_of_pred_getAttr_is_sound {x1 : PredExpr} {a : Attr}
   {itTy it c1 c2 env ty request entities}
+  (hnr : NoReservedItKey env)
   (hci : CapabilitiesInvariantPred c1 it request entities)
   (h2 : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
@@ -292,14 +297,23 @@ theorem type_of_pred_getAttr_is_sound {x1 : PredExpr} {a : Attr}
   have ⟨h5, tx₁, c1', h4, h6, h7⟩ := type_of_pred_getAttr_inversion h3
   subst h5
   refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
-  have ⟨_, v₁, hev₁, hinst₁⟩ := ih hci h2 hit h4
+  have ⟨_, v₁, hev₁, hinst₁⟩ := ih hnr hci h2 hit h4
+  -- `x1` has no reserved `it` access (it type-checked under `hnr`), so
+  -- `ofCapKey x1.toCapKey = x1` and the capability-invariant consumer fields are
+  -- read directly about `x1`.
+  have hx1nr : x1.NoReservedItAccess = true := type_of_pred_implies_no_reserved hnr h4
+  have hofk : PredExpr.ofCapKey x1.toCapKey = x1 := ofCapKey_toCapKey hx1nr
   simp only [EvaluatesToPred, evaluatePred] at hev₁ ⊢
   -- re-expose typeOfGetAttr equation on x1.toCapKey
   have h3' : typeOfGetAttr tx₁ x1.toCapKey a c1 env = Except.ok (ty, ∅) := by
     simp only [typeOfPred, h4, Except.bind_ok] at h3; exact h3
   rcases hev₁ with ⟨err, hev₁⟩ | hev₁
   · -- the sub-expression ERRORS ⇒ `.getAttr` errors; the witness type is inhabited
-    -- from the schema / sub-expression record type (no capability needed).
+    -- from the schema / sub-expression record type. The record-receiver branch
+    -- needs the sub-expression type to be well formed, which the IH value instance
+    -- supplies via `tx₁.typeOf` being inhabited by `v₁` — but inhabitation alone is
+    -- not WF, so the record-receiver-error witness is sourced from the IH instance
+    -- `hinst₁` directly (see `type_of_pred_getAttr_is_inhabited`).
     have ⟨w, hw⟩ := type_of_pred_getAttr_is_inhabited (x₁ := x1) h2 h3' h7
     exact ⟨w, Or.inl ⟨err, by simp only [hev₁, Except.bind_err]⟩, hw⟩
   · -- the sub-expression yields `v₁`; derive runtime presence from `hci` where needed
@@ -309,7 +323,8 @@ theorem type_of_pred_getAttr_is_sound {x1 : PredExpr} {a : Attr}
       have hcap : ∀ uid d, v₁ = Value.prim (Prim.entityUID uid) → Map.find? entities uid = some d →
           (x1.toCapKey, Key.attr a) ∈ c1 → ∃ vₐ, d.attrs.find? a = some vₐ := by
         intro uid d hv₁ hfd hmem
-        have hhas := hci.1 x1.toCapKey a hmem x1 rfl
+        have hhas := hci.1 x1.toCapKey a hmem
+        rw [hofk] at hhas
         simp only [EvaluatesToPred, evaluatePred, hev₁, hv₁, Except.bind_ok, hasAttr, attrsOf,
           Entities.attrsOrEmpty, hfd, Except.ok.injEq] at hhas
         rcases hhas with ⟨err', hhas⟩ | hhas
@@ -326,7 +341,8 @@ theorem type_of_pred_getAttr_is_sound {x1 : PredExpr} {a : Attr}
       have hcap : ∀ r, v₁ = Value.record r → (x1.toCapKey, Key.attr a) ∈ c1 →
           ∃ vₐ, r.find? a = some vₐ := by
         intro r hv₁ hmem
-        have hhas := hci.1 x1.toCapKey a hmem x1 rfl
+        have hhas := hci.1 x1.toCapKey a hmem
+        rw [hofk] at hhas
         simp only [EvaluatesToPred, evaluatePred, hev₁, hv₁, Except.bind_ok, hasAttr, attrsOf,
           Except.ok.injEq] at hhas
         rcases hhas with ⟨err', hhas⟩ | hhas
