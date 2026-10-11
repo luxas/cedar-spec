@@ -5,6 +5,7 @@
 
 import Cedar.Thm.Validation.Typechecker.Pred.Basic
 import Cedar.Thm.Validation.Typechecker.Pred.SupportC
+import Cedar.Thm.Validation.Typechecker.Pred.SupportA
 import Cedar.Thm.Validation.Typechecker.IfThenElse
 
 /-!
@@ -106,13 +107,11 @@ theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType}
       obtain ⟨h₂b, hty, hc⟩ := h₇
       refine ⟨fun h => absurd (by rw [pred_ite_eval_err₁ hcerr] at h; exact h) (by simp), ?_⟩
       rw [hty]
-      -- The then-branch's result type is inhabited. Its well-formedness is the
-      -- OPEN pred-output-type-WF obligation (D-P9c-8, arm A's
-      -- `type_of_pred_implies_wf_type`): this is the only `.ite` path where the
-      -- condition ERRORS under a `.tt`-typed condition, so x₂'s caps-dependent
-      -- result type cannot be re-derived under `hci` alone. Left OPEN (red, no
-      -- `sorry`); every other `.ite` path is fully discharged.
-      have hwf₂ : CedarType.WellFormed env tx₂.typeOf := by skip
+      -- The then-branch's result type is well formed (D-P9c-8, SupportA
+      -- `type_of_pred_implies_wf_type`, carrying `itTy.WellFormed env`), hence
+      -- inhabited — the error-side witness on the condition-errors-under-`.tt` path.
+      have hwf₂ : CedarType.WellFormed env tx₂.typeOf :=
+        type_of_pred_implies_wf_type h₂.1 hitwf h₂b
       have ⟨v₂, hv₂⟩ := type_is_inhabited h₂.1 hwf₂
       exact ⟨v₂, EvaluatesToPred.error (pred_ite_eval_err₁ hcerr), hv₂⟩
     case ff =>
