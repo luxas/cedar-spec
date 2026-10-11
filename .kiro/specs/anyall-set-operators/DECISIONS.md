@@ -212,7 +212,7 @@ the normalized form; D-79 needs the same ff/tt facts; and Part-A
 `type_of_all_is_sound` already admits `quantifierError` via `evalAll`'s dynamic
 `.as Bool` cast, so it is unchanged. Resolves **D-P9c-5** option (c).
 
-## D-95 (2026-10-11, Phase 9c) — OPEN follow-up: `itExpr` capability collision (Lean↔Rust parity)
+## D-95 (2026-10-11, Phase 9c) — OPEN follow-up: `itExpr` capability collision (Lean↔Rust parity) — RESOLVED-BY D-97
 
 Strong (capability-tracking) predicate soundness is **false as the spec stands**,
 because `itExpr := .var .principal` (`Cedar/Spec/Expr.lean`) and `typeOfAll`
@@ -255,7 +255,7 @@ a multi-minute `cargo` build):
   (collision-free `itExpr`) is deferred to a later branch and NOT implemented in
   9c, which uses weak soundness (D-94) and does not depend on capability parity.
 
-## D-96 (2026-10-11, Phase 9c) — BLOCKER: weak soundness does NOT discharge the capability-`.tt` attr/tag arms
+## D-96 (2026-10-11, Phase 9c) — BLOCKER: weak soundness does NOT discharge the capability-`.tt` attr/tag arms — RESOLVED-BY D-97
 
 Found while proving the `.hasAttr`/`.getAttr`/`.extHasAttr`/`.binaryApp .hasTag`/
 `.binaryApp .getTag` arms of `type_of_pred_is_sound` under D-94 weak soundness.
@@ -302,3 +302,45 @@ This is the recommended path for completing D-74 A; it should be done in a
 dedicated change (it touches `itExpr` and must re-green the whole SymCC `.all`
 chain that depends on `itExpr`'s identity, D-21/D-44), NOT bolted onto 9c, whose
 brief explicitly said "do NOT implement the itExpr change in 9c".
+
+## D-97 (2026-10-11, Phase 9c) — RESOLVES D-95/D-96: collision-free `it` capability key + predicate capability invariant
+
+Supersedes D-94's weak-only approach (which D-96 showed is insufficient) and
+closes the D-95 parity bug at its source, IN 9c (the earlier "do not touch
+`itExpr` in 9c" guidance is withdrawn).
+
+**(a) Collision-free capability key (M0, landed green).** The root cause of
+D-95/D-96 is that `it`'s capabilities shared a key with request variables
+(`itExpr = .var .principal`). Fix: `PredExpr.toCapKey` (`Cedar/Spec/Expr.lean`),
+identical to `toExpr` except `.item ↦ itCapKey = .getAttr (.var .context)
+"__cedar::anyall::it"` (the reserved name Rust refuses, mirroring
+`IT_SENTINEL`). `typeOfPred` now passes `toCapKey` (never `toExpr`) as the
+capability-key argument to `typeOfHasAttr`/`typeOfGetAttr`/`typeOfExtHasAttr`/
+`typeOfBinaryApp`. An `it`-rooted attr/tag capability therefore can never collide
+with `(principal, …)`, so `principal has "a" && context.s.all(it.a == 1)` no
+longer types `it.a` as a capability-`.tt` — Lean now rejects it (optional attr
+read with no `it`-rooted capability), matching Rust. `itExpr` and the
+`toExpr`-based typed-AST reconstruction are UNCHANGED, so the SymCC `.all` chain
+is untouched except two mechanical fixes in `compilePred_well_typed`
+(`WellTyped.lean`: the extHasAttr key arg, and `predExpr_toCapKey_eq_lit` for the
+binaryApp lit side conditions). `lake build Cedar` green (616 jobs);
+`CedarSymTests` 1216/1216; `CedarUnitTests` 466/466.
+
+**Side condition.** The reserved key is producible by ordinary typing only if the
+context record type declares an attribute literally named
+`__cedar::anyall::it`. A decidable `TypeEnv` well-formedness predicate ruling that
+out is taken as a hypothesis where the capability-invariant bridge needs it; Lean
+schemas are a spec and the DRT generator never emits reserved names.
+
+**(b) Predicate capability invariant (option b).** `TypeOfPredIsSound` becomes the
+true mirror of `TypeOfIsSound`: it takes `CapabilitiesInvariantPred c it request
+entities` (the `it`-bound analogue of `CapabilitiesInvariant`, over `evaluatePred`
+and `toCapKey` keys) and concludes `EvaluatesToPred` (keeping D-94's any-error
+admission — free, and keeps the `attrDoesNotExist` half out) AND the
+capability-production half `CapabilitiesInvariantPred (c ∪ c') it …` when the
+value is `true`. For an `it`-free sub-predicate `q`, `evaluatePred q it =
+evaluate q.toExpr` and `q.toCapKey = q.toExpr`, so the outer `CapabilitiesInvariant`
+implies the predicate one at the quantifier boundary (given the side condition),
+which is how `typeOfAll` discharges it. The attr/tag arms re-prove with the
+invariant (mirroring `capability_implies_{entity,record}_attribute`); D-94's
+value-only weak form is subsumed.
