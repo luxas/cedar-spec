@@ -626,3 +626,19 @@ recorded there with their recommended defaults.
   shape as `.and`), the dispatcher `type_of_pred_is_sound`, M4 `normalize_evaluatePred`, M5 wiring,
   M6. The Lean validator regression (reject `principal has "a" && context.s.all(it.a==1)`) and the
   DRT differential are M6 non-vacuity items, not yet done.
+
+### 5.8 D-P9c-7 — production-side resolution (approach A, 2026-10-11)
+
+Chose **approach (A), inverse-based invariant.** Added to `Cedar/Spec/Expr.lean`: `itCapKey`
+(already present), `PredExpr.NoReservedItAccess` (true unless the predicate contains the reserved
+access `context["__cedar::anyall::it"]`), and `PredExpr.ofCapKey : Expr → PredExpr` (total structural
+inverse of `toCapKey`, `.getAttr` arm guarded by a DECIDABLE `if a = .var .context ∧ attr =
+"__cedar::anyall::it"`). `CapabilitiesInvariantPred` (`Pred/Basic.lean`) is restated over `ofCapKey`:
+`∀ e a, (e,.attr a) ∈ c → EvaluatesToPred (.hasAttr (ofCapKey e) a) it … true` (and the `.tag`
+analogue) — no `∀q` quantifier, so the production side carries a single fact. `TypeOfPredIsSound`
+gains an `NoReservedItKey env` hypothesis (`¬ context.contains "__cedar::anyall::it"`). The bridge
+lemma `ofCapKey_toCapKey : q.NoReservedItAccess → ofCapKey q.toCapKey = q` connects consumer and
+producer (`toCapKey` injective exactly on `NoReservedItAccess` predicates). Still TODO: finish
+`ofCapKey_toCapKey`'s getAttr/list cases; the `well-typed-under-NoReservedItKey ⇒ NoReservedItAccess`
+lemma; the outer→predicate invariant entry lemma at the quantifier boundary (`evaluatePred q it =
+evaluate q.toExpr` on it-free `q`); then re-thread the arms, dispatcher, M4, M5, M6.
