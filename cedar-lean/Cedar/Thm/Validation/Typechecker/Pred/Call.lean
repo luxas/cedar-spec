@@ -104,19 +104,19 @@ Reduce `htc : typeOfCall f tys exprs = ok (.call f tys ty₀, c)` for a CONCRETE
 `contradiction` and pinning `ty₀` into the goal by `subst`. The constructor arms
 need the `typeOfConstructor` cases; the operator arms fall through to `skip`.
 -/
-local macro "reduce_htc" : tactic =>
+local macro "reduce_htc " h:ident e:ident : tactic =>
   `(tactic| (
-    split at htc <;>
+    split at $h:ident <;>
       first
         | contradiction
-        | (cases hc : typeOfConstructor Ext.Decimal.decimal exprs (CedarType.ext ExtType.decimal) <;> simp only [hc] at htc)
-        | (cases hc : typeOfConstructor Ext.IPAddr.ip exprs (CedarType.ext ExtType.ipAddr) <;> simp only [hc] at htc)
-        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.parse exprs (.ext .datetime) <;> simp only [hc] at htc)
-        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.Duration.parse exprs (.ext .duration) <;> simp only [hc] at htc)
+        | (cases hc : typeOfConstructor Ext.Decimal.decimal $e (CedarType.ext ExtType.decimal) <;> simp only [hc] at $h:ident)
+        | (cases hc : typeOfConstructor Ext.IPAddr.ip $e (CedarType.ext ExtType.ipAddr) <;> simp only [hc] at $h:ident)
+        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.parse $e (.ext .datetime) <;> simp only [hc] at $h:ident)
+        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.Duration.parse $e (.ext .duration) <;> simp only [hc] at $h:ident)
         | skip
     all_goals (simp only [ok, err, reduceCtorEq, Except.ok.injEq, Prod.mk.injEq,
-      TypedExpr.call.injEq, true_and, and_true, Except.bind_ok, Except.bind_err] at htc)
-    all_goals (obtain ⟨hty, _⟩ := htc; subst hty)))
+      TypedExpr.call.injEq, true_and, and_true, Except.bind_ok, Except.bind_err] at $h:ident)
+    all_goals (obtain ⟨hty, _⟩ := $h:ident; subst hty)))
 
 /--
 Close a `call_result_instance_of_typeOfCall` goal for a CONCRETE extension
@@ -125,17 +125,17 @@ Cases on `call $fn vs` (concrete, so elimination is non-dependent): `.error`
 takes the left disjunct with a fixed inhabitant of `ty₀`; `.ok` reads the
 matching `call` arm, whose coerced value is an instance of `ty₀`.
 -/
-local macro "close_call " fn:term : tactic =>
+local macro "close_call " fn:term " with " vst:ident envt:ident : tactic =>
   `(tactic| (
-    cases hcv : call $fn vs with
+    cases hcv : call $fn $vst with
     | error e =>
       first
-        | exact ⟨_, @decimal_is_instance_of_decimal env default, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, @ipaddr_is_instance_of_ipaddr env default, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, @datetime_is_instance_of_datetime env default, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, @duration_is_instance_of_duration env default, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, @bool_is_instance_of_anyBool env false, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, @InstanceOfType.instance_of_int env default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @decimal_is_instance_of_decimal $envt default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @ipaddr_is_instance_of_ipaddr $envt default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @datetime_is_instance_of_datetime $envt default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @duration_is_instance_of_duration $envt default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @bool_is_instance_of_anyBool $envt false, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @InstanceOfType.instance_of_int $envt default, Or.inl ⟨e, rfl⟩⟩
     | ok w =>
       refine ⟨w, ?_, Or.inr rfl⟩
       simp only [call] at hcv
@@ -169,28 +169,28 @@ theorem call_result_instance_of_typeOfCall {f : ExtFun} {tys : List TypedExpr}
     ∃ v, InstanceOfType env v ty₀ ∧
          ((∃ e, call f vs = Except.error e) ∨ call f vs = Except.ok v) := by
   cases f <;> simp only [typeOfCall] at htc
-  case decimal => reduce_htc; close_call ExtFun.decimal
-  case ip => reduce_htc; close_call ExtFun.ip
-  case datetime => reduce_htc; close_call ExtFun.datetime
-  case duration => reduce_htc; close_call ExtFun.duration
-  case lessThan => reduce_htc; close_call ExtFun.lessThan
-  case lessThanOrEqual => reduce_htc; close_call ExtFun.lessThanOrEqual
-  case greaterThan => reduce_htc; close_call ExtFun.greaterThan
-  case greaterThanOrEqual => reduce_htc; close_call ExtFun.greaterThanOrEqual
-  case isIpv4 => reduce_htc; close_call ExtFun.isIpv4
-  case isIpv6 => reduce_htc; close_call ExtFun.isIpv6
-  case isLoopback => reduce_htc; close_call ExtFun.isLoopback
-  case isMulticast => reduce_htc; close_call ExtFun.isMulticast
-  case isInRange => reduce_htc; close_call ExtFun.isInRange
-  case toMilliseconds => reduce_htc; close_call ExtFun.toMilliseconds
-  case toSeconds => reduce_htc; close_call ExtFun.toSeconds
-  case toMinutes => reduce_htc; close_call ExtFun.toMinutes
-  case toHours => reduce_htc; close_call ExtFun.toHours
-  case toDays => reduce_htc; close_call ExtFun.toDays
-  case offset => reduce_htc; close_call ExtFun.offset
-  case durationSince => reduce_htc; close_call ExtFun.durationSince
-  case toDate => reduce_htc; close_call ExtFun.toDate
-  case toTime => reduce_htc; close_call ExtFun.toTime
+  case decimal => reduce_htc htc exprs; close_call ExtFun.decimal with vs env
+  case ip => reduce_htc htc exprs; close_call ExtFun.ip with vs env
+  case datetime => reduce_htc htc exprs; close_call ExtFun.datetime with vs env
+  case duration => reduce_htc htc exprs; close_call ExtFun.duration with vs env
+  case lessThan => reduce_htc htc exprs; close_call ExtFun.lessThan with vs env
+  case lessThanOrEqual => reduce_htc htc exprs; close_call ExtFun.lessThanOrEqual with vs env
+  case greaterThan => reduce_htc htc exprs; close_call ExtFun.greaterThan with vs env
+  case greaterThanOrEqual => reduce_htc htc exprs; close_call ExtFun.greaterThanOrEqual with vs env
+  case isIpv4 => reduce_htc htc exprs; close_call ExtFun.isIpv4 with vs env
+  case isIpv6 => reduce_htc htc exprs; close_call ExtFun.isIpv6 with vs env
+  case isLoopback => reduce_htc htc exprs; close_call ExtFun.isLoopback with vs env
+  case isMulticast => reduce_htc htc exprs; close_call ExtFun.isMulticast with vs env
+  case isInRange => reduce_htc htc exprs; close_call ExtFun.isInRange with vs env
+  case toMilliseconds => reduce_htc htc exprs; close_call ExtFun.toMilliseconds with vs env
+  case toSeconds => reduce_htc htc exprs; close_call ExtFun.toSeconds with vs env
+  case toMinutes => reduce_htc htc exprs; close_call ExtFun.toMinutes with vs env
+  case toHours => reduce_htc htc exprs; close_call ExtFun.toHours with vs env
+  case toDays => reduce_htc htc exprs; close_call ExtFun.toDays with vs env
+  case offset => reduce_htc htc exprs; close_call ExtFun.offset with vs env
+  case durationSince => reduce_htc htc exprs; close_call ExtFun.durationSince with vs env
+  case toDate => reduce_htc htc exprs; close_call ExtFun.toDate with vs env
+  case toTime => reduce_htc htc exprs; close_call ExtFun.toTime with vs env
 
 
 /--
