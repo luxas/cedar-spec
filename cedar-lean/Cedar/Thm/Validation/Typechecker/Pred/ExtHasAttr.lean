@@ -851,6 +851,7 @@ theorem type_of_pred_extHasAttr_is_sound {x₁ : PredExpr} {a : Attr} {as' : Lis
     {itTy : CedarType} {it : Value} {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr}
     {request : Request} {entities : Entities}
     (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -860,7 +861,7 @@ theorem type_of_pred_extHasAttr_is_sound {x₁ : PredExpr} {a : Attr} {as' : Lis
     ∃ v, EvaluatesToPred (.extHasAttr x₁ a as') it request entities v ∧ InstanceOfType env v ty.typeOf := by
   obtain ⟨ty₁, c₁', bty, c', hpred, hext, hty, htyof, hc⟩ := type_of_pred_extHasAttr_inversion h₃
   subst hc
-  have ⟨hgci₁, v₁, hev₁, hio₁⟩ := ih hnr hci h₂ hit hpred
+  have ⟨hgci₁, v₁, hev₁, hio₁⟩ := ih hnr hitwf hci h₂ hit hpred
   -- `x₁` has no reserved `it` access, so `ofCapKey x₁.toCapKey = x₁`.
   have hofk : PredExpr.ofCapKey x₁.toCapKey = x₁ :=
     ofCapKey_toCapKey (type_of_pred_implies_no_reserved hnr hpred)

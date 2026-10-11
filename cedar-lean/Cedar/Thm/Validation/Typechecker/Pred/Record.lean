@@ -108,6 +108,7 @@ no capability hypothesis.
 theorem head_of_pred_vals_instance_of_head_of_types {xhd : Attr × PredExpr} {itTy : CedarType} {it : Value} {c₁ : Capabilities} {env : TypeEnv} {request : Request} {entities : Entities} {rhd : Attr × TypedExpr} {vhd : Attr × Value}
   (h₁ : TypeOfPredIsSound xhd.snd)
   (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
   (h₂ : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
@@ -117,7 +118,7 @@ theorem head_of_pred_vals_instance_of_head_of_types {xhd : Attr × PredExpr} {it
 := by
   simp [TypeOfPredIsSound] at h₁
   replace ⟨h₄, _, h₆⟩ := h₄ ; rw [←h₄]
-  specialize h₁ hnr hci h₂ hit h₆
+  specialize h₁ hnr hitwf hci h₂ hit h₆
   have ⟨_, v, h₁, h₇⟩ := h₁
   simp [bindAttr] at h₅
   cases h₈ : evaluatePred xhd.snd it request entities <;> simp [h₈] at h₅
@@ -131,6 +132,7 @@ Pred twin of `vals_instance_of_types`, weak form.
 theorem pred_vals_instance_of_types {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value} {c₁ : Capabilities} {env : TypeEnv} {request : Request} {entities : Entities} {rtx : List (Attr × TypedExpr)} {avs : List (Attr × Value)}
   (ih : ∀ a x, (a, x) ∈ axs → TypeOfPredIsSound x)
   (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
   (h₂ : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
@@ -151,12 +153,12 @@ theorem pred_vals_instance_of_types {axs : List (Attr × PredExpr)} {itTy : Ceda
     rename_i vhd vtl
     apply List.Forall₂.cons
     {
-      apply head_of_pred_vals_instance_of_head_of_types _ hnr hci h₂ hit h₅ h₇
+      apply head_of_pred_vals_instance_of_head_of_types _ hnr hitwf hci h₂ hit h₅ h₇
       apply ih xhd.fst xhd.snd
       simp only [List.mem_cons, true_or]
     }
     {
-      apply @pred_vals_instance_of_types xtl itTy it c₁ env request entities rtl vtl _ hnr hci h₂ hit h₆ h₈
+      apply @pred_vals_instance_of_types xtl itTy it c₁ env request entities rtl vtl _ hnr hitwf hci h₂ hit h₆ h₈
       intro a x h₉ ; apply ih a x ; simp [h₉]
     }
 
@@ -182,6 +184,7 @@ plumbing beyond `hci`, which it threads into each element IH.
 theorem type_of_pred_record_type_is_inhabited {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value}
     {c₁ : Capabilities} {env : TypeEnv} {rty : List (Attr × TypedExpr)} {request : Request} {entities : Entities}
     (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -210,7 +213,7 @@ theorem type_of_pred_record_type_is_inhabited {axs : List (Attr × PredExpr)} {i
       ih xhd.fst xhd.snd (by simp only [List.mem_cons, true_or])
     have hsound := ihhd (itTy := itTy) (it := it) (c₁ := c₁) (c₂ := c')
       (env := env) (ty := rhd.snd) (request := request) (entities := entities)
-      hnr hci h₂ hit h₈
+      hnr hitwf hci h₂ hit h₈
     obtain ⟨_, vhd, _, hinst⟩ := hsound
     refine ⟨(rhd.fst, vhd) :: vtl, ?_⟩
     simp only [List.map_cons]
@@ -230,6 +233,7 @@ drawn from the per-element IHs.
 theorem type_of_pred_record_is_sound {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
     (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -246,13 +250,13 @@ theorem type_of_pred_record_is_sound {axs : List (Attr × PredExpr)} {itTy : Ced
   rw [List.mapM₂_eq_mapM f]
   cases h₆ : (axs.mapM f) <;> simp only [Except.bind_err, Except.bind_ok]
   case error err =>
-    have ⟨v, hv⟩ := type_of_pred_record_type_is_inhabited hnr hci h₂ hit ih h₅
+    have ⟨v, hv⟩ := type_of_pred_record_type_is_inhabited hnr hitwf hci h₂ hit ih h₅
     refine ⟨v, Or.inl ⟨err, by simp only [f] at h₆; simp only [h₆]⟩, hv⟩
   case ok avs =>
     refine ⟨Value.record (Map.make avs), Or.inr rfl, ?_⟩
     apply mk_vals_instance_of_mk_types
     let p := fun (v : Value) (qty : QualifiedType) => InstanceOfType env v qty.getType
-    have h₇ := pred_vals_instance_of_types ih hnr hci h₂ hit h₅ (by simp only [f] at h₆; exact h₆)
+    have h₇ := pred_vals_instance_of_types ih hnr hitwf hci h₂ hit h₅ (by simp only [f] at h₆; exact h₆)
     have h₈ := List.canonicalize_preserves_forallᵥ p avs (rty.map λ (a, tx) => (a, .required tx.typeOf))
     simp [List.Forallᵥ] at h₈
     exact h₈ h₇

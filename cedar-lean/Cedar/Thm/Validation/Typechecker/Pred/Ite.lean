@@ -82,6 +82,7 @@ theorem type_of_pred_ite_inversion {x₁ x₂ x₃ : PredExpr} {itTy : CedarType
 theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {tx : TypedExpr} {request : Request} {entities : Entities}
     (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -92,7 +93,7 @@ theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType}
     GuardedCapabilitiesInvariantPred (.ite x₁ x₂ x₃) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.ite x₁ x₂ x₃) it request entities v ∧ InstanceOfType env v tx.typeOf := by
   have ⟨tx₁, bty₁, rc₁, tx₂, rc₂, tx₃, rc₃, h₄, h₅, h₆, h₇⟩ := type_of_pred_ite_inversion h₃
-  have ⟨ig₁, v₁, ih₁₂, ih₁₃⟩ := ih₁ hnr hci h₂ hit h₅
+  have ⟨ig₁, v₁, ih₁₂, ih₁₃⟩ := ih₁ hnr hitwf hci h₂ hit h₅
   rw [h₆] at ih₁₃
   have ⟨b₁, hb₁⟩ := instance_of_bool_is_bool ih₁₃
   subst hb₁
@@ -116,13 +117,13 @@ theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType}
       exact ⟨v₂, EvaluatesToPred.error (pred_ite_eval_err₁ hcerr), hv₂⟩
     case ff =>
       obtain ⟨h₂c, hty, hc⟩ := h₇
-      have ⟨_, v₃, _, ih₃₃⟩ := ih₃ hnr hci h₂ hit h₂c
+      have ⟨_, v₃, _, ih₃₃⟩ := ih₃ hnr hitwf hci h₂ hit h₂c
       refine ⟨fun h => absurd (by rw [pred_ite_eval_err₁ hcerr] at h; exact h) (by simp), ?_⟩
       rw [hty]; simp only [TypedExpr.typeOf]
       exact ⟨v₃, EvaluatesToPred.error (pred_ite_eval_err₁ hcerr), ih₃₃⟩
     case anyBool =>
       obtain ⟨h₂b, h₂c, hlub, hc⟩ := h₇
-      have ⟨_, v₃, _, ih₃₃⟩ := ih₃ hnr hci h₂ hit h₂c
+      have ⟨_, v₃, _, ih₃₃⟩ := ih₃ hnr hitwf hci h₂ hit h₂c
       refine ⟨fun h => absurd (by rw [pred_ite_eval_err₁ hcerr] at h; exact h) (by simp), ?_⟩
       simp only [TypedExpr.typeOf]
       exact ⟨v₃, EvaluatesToPred.error (pred_ite_eval_err₁ hcerr), instance_of_lub hlub (Or.inr ih₃₃)⟩
@@ -137,7 +138,7 @@ theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType}
       subst hb₁t
       have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
         capability_union_invariant_pred hci (ig₁ hcond)
-      have ⟨ig₂, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci₂ h₂ hit h₂b
+      have ⟨ig₂, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hitwf hci₂ h₂ hit h₂b
       rw [h₄, hty]
       refine ⟨?_, ?_⟩
       · intro htrue
@@ -155,7 +156,7 @@ theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType}
       have hb₁f := instance_of_ff_is_false ih₁₃
       simp only [Value.prim.injEq, Prim.bool.injEq] at hb₁f
       subst hb₁f
-      have ⟨ig₃, v₃, ih₃₂, ih₃₃⟩ := ih₃ hnr hci h₂ hit h₂c
+      have ⟨ig₃, v₃, ih₃₂, ih₃₃⟩ := ih₃ hnr hitwf hci h₂ hit h₂c
       rw [h₄, hty]
       subst hc
       refine ⟨?_, ?_⟩
@@ -174,7 +175,7 @@ theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType}
       case true =>
         have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
           capability_union_invariant_pred hci (ig₁ hcond)
-        have ⟨ig₂, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci₂ h₂ hit h₂b
+        have ⟨ig₂, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hitwf hci₂ h₂ hit h₂b
         refine ⟨?_, ?_⟩
         · intro htrue
           rw [pred_ite_eval_true hcond] at htrue
@@ -188,7 +189,7 @@ theorem type_of_pred_ite_is_sound {x₁ x₂ x₃ : PredExpr} {itTy : CedarType}
           · exact ⟨v₂, Or.inr (by rw [pred_ite_eval_true hcond]; exact ih₂₂),
               instance_of_lub hlub (Or.inl ih₂₃)⟩
       case false =>
-        have ⟨ig₃, v₃, ih₃₂, ih₃₃⟩ := ih₃ hnr hci h₂ hit h₂c
+        have ⟨ig₃, v₃, ih₃₂, ih₃₃⟩ := ih₃ hnr hitwf hci h₂ hit h₂c
         refine ⟨?_, ?_⟩
         · intro htrue
           rw [pred_ite_eval_false hcond] at htrue

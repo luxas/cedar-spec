@@ -237,6 +237,7 @@ production of `CapabilitiesInvariantPred c₂`.
 theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
     (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -271,7 +272,7 @@ theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : Cedar
           and_false] at hmem
   case right =>
     rcases h₄ with ⟨ety, h₄⟩ | ⟨rty, h₄⟩ <;>
-    have ⟨_, v₁, h₆, h₇⟩ := ih hnr hci h₂ hit hty₁ <;>
+    have ⟨_, v₁, h₆, h₇⟩ := ih hnr hitwf hci h₂ hit hty₁ <;>
     simp only [EvaluatesToPred] at h₆ <;>
     rw [h₄] at h₇
     · -- entity operand

@@ -252,6 +252,7 @@ theorem type_of_pred_eq_is_sound {x₁ x₂ : PredExpr} {it v₁ v₂ : Value}
 theorem type_of_pred_binaryApp_is_sound {op₂ : BinaryOp} {x₁ x₂ : PredExpr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
     (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -261,8 +262,8 @@ theorem type_of_pred_binaryApp_is_sound {op₂ : BinaryOp} {x₁ x₂ : PredExpr
     GuardedCapabilitiesInvariantPred (.binaryApp op₂ x₁ x₂) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.binaryApp op₂ x₁ x₂) it request entities v ∧ InstanceOfType env v ty.typeOf := by
   have ⟨tx₁, c₁', tx₂, c₂', ht₁, ht₂, htb⟩ := type_of_pred_binaryApp_inversion h₃
-  have ⟨_, v₁, hev₁, hinst₁⟩ := ih₁ hnr hci h₂ hit ht₁
-  have ⟨_, v₂, hev₂, hinst₂⟩ := ih₂ hnr hci h₂ hit ht₂
+  have ⟨_, v₁, hev₁, hinst₁⟩ := ih₁ hnr hitwf hci h₂ hit ht₁
+  have ⟨_, v₂, hev₂, hinst₂⟩ := ih₂ hnr hitwf hci h₂ hit ht₂
   simp only [EvaluatesToPred, evaluatePred] at hev₁ hev₂
   cases op₂
   -- `less`/`lessEq`: result `.bool .anyBool`, empty caps.

@@ -345,6 +345,7 @@ def TypeOfPredIsSound (p : PredExpr) : Prop :=
   ∀ {itTy : CedarType} {it : Value} {c₁ c₂ : Capabilities} {env : TypeEnv}
     {ty : TypedExpr} {request : Request} {entities : Entities},
     NoReservedItKey env →
+    itTy.WellFormed env →
     CapabilitiesInvariantPred c₁ it request entities →
     InstanceOfWellFormedEnvironment request entities env →
     InstanceOfType env it itTy →

@@ -95,6 +95,7 @@ theorem type_of_pred_or_inversion {x₁ x₂ : PredExpr} {itTy : CedarType} {c c
 theorem type_of_pred_or_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {tx : TypedExpr} {request : Request} {entities : Entities}
     (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -104,7 +105,7 @@ theorem type_of_pred_or_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it :
     GuardedCapabilitiesInvariantPred (.or x₁ x₂) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.or x₁ x₂) it request entities v ∧ InstanceOfType env v tx.typeOf := by
   have ⟨tx₁, bty₁, rc₁, h₄, h₅, h₆⟩ := type_of_pred_or_inversion h₃
-  have ⟨ig₁, v₁, ih₁₂, ih₁₃⟩ := ih₁ hnr hci h₂ hit h₄
+  have ⟨ig₁, v₁, ih₁₂, ih₁₃⟩ := ih₁ hnr hitwf hci h₂ hit h₄
   rw [h₅] at ih₁₃
   have ⟨b₁, hb₁⟩ := instance_of_bool_is_bool ih₁₃
   subst hb₁
@@ -157,7 +158,7 @@ theorem type_of_pred_or_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it :
           simp only [reduceCtorEq, Except.ok.injEq, Value.prim.injEq, Prim.bool.injEq] at he
       case isFalse h₇ =>
         replace ⟨bty, tx₂, bty₂, rc₂, htx, h₄b, hty₂, h₆⟩ := h₆
-        have ⟨ig₂, _v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci h₂ hit h₄b
+        have ⟨ig₂, _v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hitwf hci h₂ hit h₄b
         rw [hty₂] at ih₂₃
         have hprod₂ : CapabilitiesInvariantPred rc₂ it request entities := ig₂ hx₂
         split at h₆
@@ -220,7 +221,7 @@ theorem type_of_pred_or_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it :
                 exact bool_is_instance_of_anyBool _
         case false =>
           -- x₁ false ⇒ result is x₂'s boolean (or error).
-          have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci h₂ hit h₄b
+          have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hitwf hci h₂ hit h₄b
           rw [hty₂] at ih₂₃
           rcases ih₂₂ with ⟨err₂, ih₂₂⟩ | ih₂₂
           · exact ⟨_, EvaluatesToPred.error (pred_or_eval_err₂ ih₁₂ ih₂₂),

@@ -4,6 +4,7 @@
 -/
 
 import Cedar.Thm.Validation.Typechecker.Pred.Basic
+import Cedar.Thm.Validation.Typechecker.Pred.SupportA
 import Cedar.Thm.Validation.Typechecker.GetAttr
 
 /-!
@@ -93,7 +94,8 @@ theorem type_of_pred_getAttr_is_inhabited {x₁ : PredExpr} {a : Attr} {c₁ : C
   {env : TypeEnv} {request : Request} {entities : Entities} {tx₁ ty : TypedExpr}
   (hwfenv : InstanceOfWellFormedEnvironment request entities env)
   (h₃ : typeOfGetAttr tx₁ x₁.toCapKey a c₁ env = Except.ok (ty, ∅))
-  (h₇ : (∃ ety, tx₁.typeOf = .entity ety) ∨ (∃ rty, tx₁.typeOf = .record rty)) :
+  (h₇ : (∃ ety, tx₁.typeOf = .entity ety) ∨ (∃ rty, tx₁.typeOf = .record rty))
+  (hwfty : tx₁.typeOf.WellFormed env) :
   ∃ v, InstanceOfType env v ty.typeOf
 := by
   have hwf := hwfenv.1
@@ -134,16 +136,11 @@ theorem type_of_pred_getAttr_is_inhabited {x₁ : PredExpr} {a : Attr} {c₁ : C
     split at heq <;> simp only [Validation.ok, Validation.err, Except.ok.injEq, reduceCtorEq] at heq
     case h_1 _ _ h₉ =>
       subst heq; simp only [TypedExpr.typeOf]
-      -- OPEN (D-P9c-8, single red spot): need `CedarType.WellFormed env rty` for the
-      -- record receiver's `rty` on the sub-expression-ERROR branch with an optional
-      -- attribute. Requires `type_of_pred_implies_wf_type` (the predicate twin of
-      -- `typechecked_has_well_formed_type`, carrying `itTy.WellFormed env`), which is
-      -- a bounded structural induction left as the remaining step. No `sorry`.
-      exact qty_wf_implies_type_of_wf (wf_record_implies_wf_attr (by skip) h₉)
+      exact qty_wf_implies_type_of_wf (wf_record_implies_wf_attr (h₄ ▸ hwfty) h₉)
     case h_2 _ _ h₉ =>
       split at heq <;> simp only [Validation.ok, Validation.err, Except.ok.injEq, reduceCtorEq] at heq
       subst heq; simp only [TypedExpr.typeOf]
-      exact qty_wf_implies_type_of_wf (wf_record_implies_wf_attr (by skip) h₉)
+      exact qty_wf_implies_type_of_wf (wf_record_implies_wf_attr (h₄ ▸ hwfty) h₉)
 
 /--
 `.getAttr` predicate soundness — record receiver (full form). Mirrors
@@ -286,6 +283,7 @@ form.
 theorem type_of_pred_getAttr_is_sound {x1 : PredExpr} {a : Attr}
   {itTy it c1 c2 env ty request entities}
   (hnr : NoReservedItKey env)
+    (hitwf : itTy.WellFormed env)
   (hci : CapabilitiesInvariantPred c1 it request entities)
   (h2 : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
@@ -297,7 +295,7 @@ theorem type_of_pred_getAttr_is_sound {x1 : PredExpr} {a : Attr}
   have ⟨h5, tx₁, c1', h4, h6, h7⟩ := type_of_pred_getAttr_inversion h3
   subst h5
   refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
-  have ⟨_, v₁, hev₁, hinst₁⟩ := ih hnr hci h2 hit h4
+  have ⟨_, v₁, hev₁, hinst₁⟩ := ih hnr hitwf hci h2 hit h4
   -- `x1` has no reserved `it` access (it type-checked under `hnr`), so
   -- `ofCapKey x1.toCapKey = x1` and the capability-invariant consumer fields are
   -- read directly about `x1`.
@@ -315,6 +313,7 @@ theorem type_of_pred_getAttr_is_sound {x1 : PredExpr} {a : Attr}
     -- not WF, so the record-receiver-error witness is sourced from the IH instance
     -- `hinst₁` directly (see `type_of_pred_getAttr_is_inhabited`).
     have ⟨w, hw⟩ := type_of_pred_getAttr_is_inhabited (x₁ := x1) h2 h3' h7
+      (type_of_pred_implies_wf_type h2.1 hitwf h4)
     exact ⟨w, Or.inl ⟨err, by simp only [hev₁, Except.bind_err]⟩, hw⟩
   · -- the sub-expression yields `v₁`; derive runtime presence from `hci` where needed
     rcases h7 with ⟨ety, h7⟩ | ⟨rty, h7⟩
