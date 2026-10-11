@@ -74,6 +74,7 @@ theorem type_of_pred_and_inversion {x₁ x₂ : PredExpr} {itTy : CedarType} {c 
 /-- `.and` predicate soundness (pred twin of `type_of_and_is_sound`), full-mirror form. -/
 theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {tx : TypedExpr} {request : Request} {entities : Entities}
+    (hnr : NoReservedItKey env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -83,7 +84,7 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
     GuardedCapabilitiesInvariantPred (.and x₁ x₂) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.and x₁ x₂) it request entities v ∧ InstanceOfType env v tx.typeOf := by
   have ⟨tx₁, bty₁, rc₁, h₄, h₅, h₆⟩ := type_of_pred_and_inversion h₃
-  have ⟨ig₁, v₁, ih₁₂, ih₁₃⟩ := ih₁ hci h₂ hit h₄
+  have ⟨ig₁, v₁, ih₁₂, ih₁₃⟩ := ih₁ hnr hci h₂ hit h₄
   rw [h₅] at ih₁₃
   have ⟨b₁, hb₁⟩ := instance_of_bool_is_bool ih₁₃
   subst hb₁
@@ -119,7 +120,7 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
           replace ⟨bty, tx₂, bty₂, rc₂, htx, htx₂, hty₂, h₆⟩ := h₆
           have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
             capability_union_invariant_pred hci hprod₁
-          have ⟨ig₂, _, _, _⟩ := ih₂ hci₂ h₂ hit htx₂
+          have ⟨ig₂, _, _, _⟩ := ih₂ hnr hci₂ h₂ hit htx₂
           have hprod₂ : CapabilitiesInvariantPred rc₂ it request entities := ig₂ hx₂
           split at h₆ <;> (have ⟨_, hc⟩ := h₆; subst hc)
           · exact empty_capabilities_invariant_pred it request entities
@@ -157,7 +158,7 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
         case true =>
           have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
             capability_union_invariant_pred hci (ig₁ ih₁₂)
-          have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂ hci₂ h₂ hit htx₂
+          have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci₂ h₂ hit htx₂
           rw [hty₂] at ih₂₃
           rcases ih₂₂ with ⟨err₂, ih₂₂⟩ | ih₂₂
           · refine ⟨_, EvaluatesToPred.error ?_, type_is_inhabited_bool.choose_spec⟩
