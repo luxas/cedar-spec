@@ -117,7 +117,7 @@ theorem head_of_pred_vals_instance_of_head_of_types {xhd : Attr × PredExpr} {it
 := by
   simp [TypeOfPredIsSound] at h₁
   replace ⟨h₄, _, h₆⟩ := h₄ ; rw [←h₄]
-  specialize h₁ hci h₂ hit h₆
+  specialize h₁ hnr hci h₂ hit h₆
   have ⟨_, v, h₁, h₇⟩ := h₁
   simp [bindAttr] at h₅
   cases h₈ : evaluatePred xhd.snd it request entities <;> simp [h₈] at h₅
@@ -151,12 +151,12 @@ theorem pred_vals_instance_of_types {axs : List (Attr × PredExpr)} {itTy : Ceda
     rename_i vhd vtl
     apply List.Forall₂.cons
     {
-      apply head_of_pred_vals_instance_of_head_of_types _ hci h₂ hit h₅ h₇
+      apply head_of_pred_vals_instance_of_head_of_types _ hnr hci h₂ hit h₅ h₇
       apply ih xhd.fst xhd.snd
       simp only [List.mem_cons, true_or]
     }
     {
-      apply @pred_vals_instance_of_types xtl itTy it c₁ env request entities rtl vtl _ hci h₂ hit h₆ h₈
+      apply @pred_vals_instance_of_types xtl itTy it c₁ env request entities rtl vtl _ hnr hci h₂ hit h₆ h₈
       intro a x h₉ ; apply ih a x ; simp [h₉]
     }
 
@@ -246,13 +246,13 @@ theorem type_of_pred_record_is_sound {axs : List (Attr × PredExpr)} {itTy : Ced
   rw [List.mapM₂_eq_mapM f]
   cases h₆ : (axs.mapM f) <;> simp only [Except.bind_err, Except.bind_ok]
   case error err =>
-    have ⟨v, hv⟩ := type_of_pred_record_type_is_inhabited hci h₂ hit ih h₅
+    have ⟨v, hv⟩ := type_of_pred_record_type_is_inhabited hnr hci h₂ hit ih h₅
     refine ⟨v, Or.inl ⟨err, by simp only [f] at h₆; simp only [h₆]⟩, hv⟩
   case ok avs =>
     refine ⟨Value.record (Map.make avs), Or.inr rfl, ?_⟩
     apply mk_vals_instance_of_mk_types
     let p := fun (v : Value) (qty : QualifiedType) => InstanceOfType env v qty.getType
-    have h₇ := pred_vals_instance_of_types ih hci h₂ hit h₅ (by simp only [f] at h₆; exact h₆)
+    have h₇ := pred_vals_instance_of_types ih hnr hci h₂ hit h₅ (by simp only [f] at h₆; exact h₆)
     have h₈ := List.canonicalize_preserves_forallᵥ p avs (rty.map λ (a, tx) => (a, .required tx.typeOf))
     simp [List.Forallᵥ] at h₈
     exact h₈ h₇
