@@ -54,8 +54,9 @@ pub static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
         .unwrap()
 });
 
-/// Create a local solver suited for fuzzing
-fn local_solver() -> Result<LocalSolver, String> {
+/// Create a local solver suited for fuzzing (and for the `anyall` cvc5 benchmark
+/// harness, which reuses this 1 GB `setrlimit` + `CVC5`-env `--lang smt` solver).
+pub fn local_solver() -> Result<LocalSolver, String> {
     let path = std::env::var("CVC5").unwrap_or_else(|_| "cvc5".into());
     let mut cmd = Command::new(path);
     // Do not set `tlimit` here and let tokio's `timeout` function handle timeout
