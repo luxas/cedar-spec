@@ -489,6 +489,36 @@ bottom-up:
   equality is FALSE and must not be stated. Next worker: prove this type-preserving form (structural,
   M4-sized; the `.and`/`.or`/`.ite` fold arms use `type_of_pred_is_sound` to pin the folded branch's
   bool type), then wire §5.4 steps 1–6 against it.
+
+  **UPDATE 5 (LEAD worker #2 cont., 2026-10-11 ~17:45) — D-P9c-12 RESOLVED (D-73b form), M5 steps 1–3
+  landed, step 4 blocker found.** Per the orchestrator decision, D-P9c-12 is settled the D-73b way:
+  do NOT prove any `typeOfPred (normalize p₀) = typeOfPred p₀` bridge. The typed `.all` node STORES
+  `normalize p₀` but every well-typedness fact is indexed by the SOURCE predicate's typing.
+  LANDED (commit 439ca0c + working tree): (1) `typeOfAll` stores `PredExpr.normalize p τ c env`
+  (reordered `normalize` above `typeOfAll` for the forward ref). (2) `TypedExpr.WellTyped.all` `h₄` is
+  now the existential `∃ p₀ itTy c c' typ, p = normalize p₀ … ∧ typeOfPred p₀ … = ok(typ,_) ∧ typ bool`;
+  the `typeOf`-ok⇒WellTyped `.all` case supplies it with `p₀ = source p`, `rfl`, `hpred`. (3)
+  `normalize_wellTyped` (new, GREEN, via `PredExpr.normalize.induct`) discharges `h₃` for the stored
+  normalized predicate. (4) `type_of_all_inversion` conclusion updated to `.all tyr (normalize p τ c) …`;
+  `type_of_all_is_sound` re-greened unchanged (uses `evalAll_bool_or_qerr` for arbitrary `f`). (5)
+  `evalAll_congr` (new, GREEN): `evalAll` is congruent in `f` over the set's own members.
+  **BLOCKER (step 4 — `type_of_preserves_evaluation_results` `.all` case, `Typechecker.lean:~477`):**
+  after the store change the LHS evaluates the SOURCE `p` per element and the RHS the stored
+  `normalize p`; closing it needs `evalAll_congr` + per-element `normalize_evaluatePred`, whose
+  hypotheses include **`NoReservedItKey env`** (consumed by `type_of_pred_is_sound`). That side
+  condition is NOT a hypothesis of `type_of_preserves_evaluation_results` and is NOT derivable from
+  `env.WellFormed` (a schema could declare the reserved `context["__cedar::anyall::it"]` attr; D-P9c-7
+  threads `NoReservedItKey` as an explicit assumption). Its two real callers (`TPE/Policy.lean:78`,
+  `SymCC/WellTyped.lean:375`, both `empty_capabilities_invariant`) don't carry it either. So step 4
+  requires either (A) adding `NoReservedItKey env` as a hypothesis to
+  `type_of_preserves_evaluation_results` + plumbing it to those two callers (and wherever a
+  `NoReservedItKey` fact is sourced — likely a validator-level `env.WellFormed`+schema-reserved-name
+  lemma), OR (B) a validator-level theorem `<schema well-formed> → NoReservedItKey env`. This is a
+  cross-cutting change to a central Validation theorem that sibling branches touch, so it is the exact
+  next step to decide/execute. Also still needed for the SymCC compile arm: the entry lemma (b)
+  `CapabilitiesInvariant c → NoReservedItKey → InstanceOfType env it τ → CapabilitiesInvariantPred c it`
+  (bridge `evaluatePred (ofCapKey e) it = evaluate e` on it-free outer cap-keys), M5 step 3's
+  SymCCSupported flip + real `compile_well_typed` `.all` arm + Pred-module imports, D-79, M6.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the

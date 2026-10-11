@@ -40,6 +40,20 @@ open Cedar.Data
 open Cedar.Spec
 open Cedar.Validation
 
+/-- `evalAll` only ever applies its per-element function to members of `s`, so
+two functions agreeing on every member of `s` yield the same `evalAll`. Used to
+swap the stored (normalized) predicate for the source predicate under `evalAll`
+in `type_of_preserves_evaluation_results` (D-74 A). -/
+theorem evalAll_congr {s : Set Value} {f g : Value → Result Value}
+    (h : ∀ v ∈ s, f v = g v) :
+    evalAll s f = evalAll s g := by
+  simp only [evalAll]
+  have hmap : s.toList.mapM (fun v => (f v).as Bool) = s.toList.mapM (fun v => (g v).as Bool) := by
+    apply List.mapM_congr
+    intro v hv
+    rw [h v ((Cedar.Data.Set.mem_elts_iff_mem_set v s).mp hv)]
+  rw [hmap]
+
 /--
 **L4.** `evalAll` always yields `ok (bool _)` or `error quantifierError`, for any
 per-element function. The `.as Bool` coercion inside `evalAll` turns every
