@@ -4,6 +4,7 @@
 -/
 
 import Cedar.Thm.Validation.Typechecker.Pred.Basic
+import Cedar.Thm.Validation.Typechecker.Pred.SupportB
 import Cedar.Thm.Validation.Typechecker.BinaryApp
 
 /-!
@@ -184,12 +185,6 @@ theorem evalPred_binaryApp_int {op₂ : BinaryOp} {x₁ x₂ : PredExpr} {it : V
 `.anyBool` when a LUB exists, and `.ff` for two distinct entity types.
 `apply₂ .eq v₁ v₂ = .ok (v₁ == v₂)` unconditionally, so the only content is
 matching the precise `BoolType`. -/
-
-/-- A capability key is a literal exactly when its predicate is that literal. -/
-theorem toCapKey_lit {p : PredExpr} {l : Prim} (h : p.toCapKey = .lit l) : p = .lit l := by
-  cases p <;>
-    simp only [PredExpr.toCapKey, itCapKey, reduceCtorEq, Expr.lit.injEq] at h ⊢ <;>
-    first | (subst h; rfl) | (simp_all)
 
 theorem type_of_pred_eq_is_sound {x₁ x₂ : PredExpr} {it v₁ v₂ : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
