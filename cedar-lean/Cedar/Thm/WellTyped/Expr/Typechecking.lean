@@ -1890,7 +1890,7 @@ theorem typechecked_is_well_typed_after_lifting
       simp only [hᵢr, Except.bind_ok] at h
       simp only [typeOfAll] at h
       split at h <;> rename_i hset
-      · cases hpred : typeOfPred p _ xcap env with
+      · cases hpred : typeOfPred p _ (xcap.filter (Capability.isClean)) env with
         | error => rw [hpred] at h; simp at h
         | ok typc =>
           rw [hpred] at h
@@ -1903,7 +1903,7 @@ theorem typechecked_is_well_typed_after_lifting
           exact TypedExpr.WellTyped.all (hᵢ hᵢr)
             (by rw [type_of_after_lifted_is_lifted, hset, CedarType.liftBoolTypes])
             (normalize_wellTyped (typeOfPred_implies_wellTyped hpred))
-            ⟨p, _, xcap, typc.2, typc.1, rfl, hpred, _, hbool⟩
+            ⟨p, _, xcap.filter (Capability.isClean), typc.2, typc.1, rfl, hpred, _, hbool⟩
       · simp only [err, reduceCtorEq] at h
 
 end Cedar.Thm

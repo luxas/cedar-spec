@@ -45,6 +45,15 @@ public abbrev Capabilities := List (Expr × Key)
 
 public def Capabilities.singleton (e : Expr) (k : Key) : Capabilities := [(e, k)]
 
+/-- D-99: a capability entry `(e, k)` is "clean" iff its entity key `e` is clean
+and, for a tag capability `.tag x`, the tag-key expression `x` is clean too. Only
+clean entries survive the `typeOfAll` boundary filter, so the quantifier-boundary
+entry lemma only has to bridge keys for which `evaluatePred (ofCapKey ·) it` agrees
+with `evaluate`. A predicate's own `toCapKey`/`toExpr` are always clean, so no
+capability the predicate consults is dropped. -/
+public def Capability.isClean (ek : Expr × Key) : Bool :=
+  ek.fst.isCleanCapKey && (match ek.snd with | .tag x => x.isCleanCapKey | .attr _ => true)
+
 public abbrev ResultType := Except TypeError (TypedExpr × Capabilities)
 
 public def ResultType.typeOf : ResultType -> Except TypeError (CedarType × Capabilities) :=
@@ -506,13 +515,19 @@ establish a capability about the outside world.
 public def typeOfAll (tyr : TypedExpr) (p : PredExpr) (c : Capabilities) (env : TypeEnv) : ResultType :=
   match tyr.typeOf with
   | .set τ => do
-    let (typ, _) ← typeOfPred p τ c env
+    -- D-99: type and normalize the predicate under the OUTER capabilities filtered to the
+    -- "clean" keys (in `toCapKey`'s image and `it`-free). A `PredExpr`'s own `toCapKey` is always
+    -- clean, so no capability the predicate could consult is dropped — acceptance is unchanged —
+    -- while the quantifier-boundary entry lemma (b) only has to bridge clean keys. Returned
+    -- capabilities stay the unfiltered `c` (D-39: the predicate's output caps are dropped).
+    let cPred := c.filter (Capability.isClean)
+    let (typ, _) ← typeOfPred p τ cPred env
     match typ.typeOf with
     -- D-74 option A / D-73b: TYPE the source predicate `p`, but STORE its normalization in the
     -- `.all` node. `compilePred_well_typed` compiles `normalize p` under `p`'s (source) typing, so
     -- the stored predicate must be `normalize p`. The node's well-typedness is indexed by the SOURCE
     -- `p` (D-73b existential premise), never by re-typing `normalize p` (that bridge is false — D-P9c-12).
-    | .bool _ => ok (TypedExpr.all tyr (PredExpr.normalize p τ c env) (.bool .anyBool)) c
+    | .bool _ => ok (TypedExpr.all tyr (PredExpr.normalize p τ cPred env) (.bool .anyBool)) c
     | _       => err (.unexpectedType typ.typeOf)
   | ty => err (.unexpectedType ty)
 

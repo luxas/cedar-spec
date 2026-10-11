@@ -81,6 +81,206 @@ theorem wf_env_implies_no_reserved_it_key {env : TypeEnv}
     (hwf : env.WellFormed) : NoReservedItKey env := by
   have ⟨_, _, _, hnrit⟩ := hwf
   exact hnrit
+
+/-- D-99 it-free bridge: an `it`-free predicate evaluates (with any element `it`
+bound) exactly as its reconstructed expression evaluates. Binding `it` is
+irrelevant precisely because `.item` never occurs. Proved by structural recursion
+mirroring `evaluatePred`/`evaluate`. -/
+theorem evaluatePred_eq_evaluate_toExpr {q : PredExpr} {it : Value}
+    {request : Request} {entities : Entities}
+    (h : q.mentionsIt = false) :
+    evaluatePred q it request entities = evaluate q.toExpr request entities := by
+  induction q using PredExpr.toExpr.induct with
+  | case1 => exact absurd h (by simp [PredExpr.mentionsIt])
+  | case2 l => simp only [PredExpr.toExpr, evaluatePred, evaluate]
+  | case3 v => cases v <;> simp only [PredExpr.toExpr, evaluatePred, evaluate]
+  | case4 a b c iha ihb ihc =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨⟨ha, hb⟩, hc⟩ := h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha ha, ihb hb, ihc hc]
+  | case5 a b iha ihb =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨ha, hb⟩ := h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha ha, ihb hb]
+  | case6 a b iha ihb =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨ha, hb⟩ := h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha ha, ihb hb]
+  | case7 op a iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha h]
+  | case8 op a b iha ihb =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨ha, hb⟩ := h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha ha, ihb hb]
+  | case9 a attr iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha h]
+  | case10 a attr iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha h]
+  | case11 a attr attrs iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toExpr, evaluatePred, evaluate, iha h]
+  | case12 axs ih =>
+    simp only [PredExpr.mentionsIt, List.any_eq_false] at h
+    have hall : ∀ a e, (a, e) ∈ axs → e.mentionsIt = false := by
+      intro a e hmem
+      have hsz : sizeOf (a, e).snd < 1 + sizeOf axs := List.sizeOf_snd_lt_sizeOf_list hmem
+      have hin : (⟨(a, e), hsz⟩ : {x : Attr × PredExpr // sizeOf x.snd < 1 + sizeOf axs}) ∈ axs.attach₂ := by
+        simp only [List.attach₂, List.mem_pmap]
+        exact ⟨(a, e), hmem, rfl⟩
+      simpa using h _ hin
+    simp only [PredExpr.toExpr, evaluatePred, evaluate]
+    rw [List.mapM₂_eq_mapM (fun x : Attr × PredExpr => bindAttr x.fst (evaluatePred x.snd it request entities)),
+        List.map₂_eq_map (fun x : Attr × PredExpr => (x.fst, x.snd.toExpr)),
+        List.mapM₂_eq_mapM (fun x : Attr × Expr => bindAttr x.fst (evaluate x.snd request entities)),
+        List.mapM_map]
+    apply congrArg (f := fun r => r >>= fun avs => Except.ok (Value.record (Map.make avs)))
+    apply List.mapM_congr
+    intro x hx
+    obtain ⟨a, e⟩ := x
+    have hmem := List.sizeOf_snd_lt_sizeOf_list hx
+    simp only [Function.comp_apply, bindAttr, ih a e hmem (hall a e hx)]
+  | case13 f xs ih =>
+    simp only [PredExpr.mentionsIt, List.any_eq_false] at h
+    have hall : ∀ e, e ∈ xs → e.mentionsIt = false := by
+      intro e hmem
+      have hin : (⟨e, hmem⟩ : {x : PredExpr // x ∈ xs}) ∈ xs.attach := by
+        simp only [List.attach, List.attachWith, List.mem_pmap]
+        exact ⟨e, hmem, rfl⟩
+      simpa using h _ hin
+    simp only [PredExpr.toExpr, evaluatePred, evaluate]
+    rw [List.mapM₁_eq_mapM (fun x : PredExpr => evaluatePred x it request entities),
+        List.map₁_eq_map (fun x : PredExpr => x.toExpr),
+        List.mapM₁_eq_mapM (fun x : Expr => evaluate x request entities),
+        List.mapM_map]
+    apply congrArg (f := fun r => r >>= fun vs => call f vs)
+    apply List.mapM_congr
+    intro x hx
+    simp only [Function.comp_apply, ih x hx (hall x hx)]
+
+/-- On an `it`-free predicate `toCapKey = toExpr` (both are the structural
+`Expr`-reconstruction; they differ only at `.item`, which is absent). -/
+theorem toCapKey_eq_toExpr_of_mentionsIt_false {q : PredExpr}
+    (h : q.mentionsIt = false) : q.toCapKey = q.toExpr := by
+  induction q using PredExpr.toExpr.induct with
+  | case1 => exact absurd h (by simp [PredExpr.mentionsIt])
+  | case2 l => simp only [PredExpr.toCapKey, PredExpr.toExpr]
+  | case3 v => simp only [PredExpr.toCapKey, PredExpr.toExpr]
+  | case4 a b c iha ihb ihc =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨⟨ha, hb⟩, hc⟩ := h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha ha, ihb hb, ihc hc]
+  | case5 a b iha ihb =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨ha, hb⟩ := h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha ha, ihb hb]
+  | case6 a b iha ihb =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨ha, hb⟩ := h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha ha, ihb hb]
+  | case7 op a iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha h]
+  | case8 op a b iha ihb =>
+    simp only [PredExpr.mentionsIt, Bool.or_eq_false_iff] at h
+    obtain ⟨ha, hb⟩ := h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha ha, ihb hb]
+  | case9 a attr iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha h]
+  | case10 a attr iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha h]
+  | case11 a attr attrs iha =>
+    simp only [PredExpr.mentionsIt] at h
+    simp only [PredExpr.toCapKey, PredExpr.toExpr, iha h]
+  | case12 axs ih =>
+    simp only [PredExpr.mentionsIt, List.any_eq_false] at h
+    have hall : ∀ a e, (a, e) ∈ axs → e.mentionsIt = false := by
+      intro a e hmem
+      have hsz : sizeOf (a, e).snd < 1 + sizeOf axs := List.sizeOf_snd_lt_sizeOf_list hmem
+      have hin : (⟨(a, e), hsz⟩ : {x : Attr × PredExpr // sizeOf x.snd < 1 + sizeOf axs}) ∈ axs.attach₂ := by
+        simp only [List.attach₂, List.mem_pmap]; exact ⟨(a, e), hmem, rfl⟩
+      simpa using h _ hin
+    simp only [PredExpr.toCapKey, PredExpr.toExpr]
+    congr 1
+    rw [List.map₂_eq_map (fun x : Attr × PredExpr => (x.fst, x.snd.toCapKey)),
+        List.map₂_eq_map (fun x : Attr × PredExpr => (x.fst, x.snd.toExpr))]
+    apply List.map_congr_left
+    intro x hx
+    obtain ⟨a, e⟩ := x
+    simp only [ih a e (List.sizeOf_snd_lt_sizeOf_list hx) (hall a e hx)]
+  | case13 f xs ih =>
+    simp only [PredExpr.mentionsIt, List.any_eq_false] at h
+    have hall : ∀ e, e ∈ xs → e.mentionsIt = false := by
+      intro e hmem
+      have hin : (⟨e, hmem⟩ : {x : PredExpr // x ∈ xs}) ∈ xs.attach := by
+        simp only [List.attach, List.attachWith, List.mem_pmap]; exact ⟨e, hmem, rfl⟩
+      simpa using h _ hin
+    simp only [PredExpr.toCapKey, PredExpr.toExpr]
+    congr 1
+    rw [List.map₁_eq_map (fun x : PredExpr => x.toCapKey),
+        List.map₁_eq_map (fun x : PredExpr => x.toExpr)]
+    apply List.map_congr_left
+    intro x hx
+    simp only [ih x hx (hall x hx)]
+
+/-- **Quantifier-boundary entry lemma (b), D-99.** The outer expression-level
+capability invariant transfers to the predicate-level invariant on the
+`isCleanCapKey`-FILTERED capabilities, for any bound element `it`. Each clean key
+`e` satisfies `(ofCapKey e).toCapKey = e` and `¬ (ofCapKey e).mentionsIt`, so by the
+it-free bridge `evaluatePred (.hasAttr (ofCapKey e) k) it = evaluate (.hasAttr e k)`
+(resp. `.hasTag`), carrying the outer `= .ok true` fact across unchanged. -/
+theorem entry_capabilities_invariant_pred {c : Capabilities} {it : Value}
+    {request : Request} {entities : Entities}
+    (h : CapabilitiesInvariant c request entities) :
+    CapabilitiesInvariantPred (c.filter Capability.isClean) it request entities := by
+  obtain ⟨hattr, htag⟩ := h
+  constructor
+  · intro e k hmem
+    rw [List.mem_filter] at hmem
+    obtain ⟨hmemc, hclean⟩ := hmem
+    simp only [Capability.isClean, Expr.isCleanCapKey, Bool.and_eq_true,
+      Bool.not_eq_true', decide_eq_true_eq] at hclean
+    obtain ⟨⟨hkey, hnoit⟩, _⟩ := hclean
+    have hbridge := evaluatePred_eq_evaluate_toExpr (q := PredExpr.ofCapKey e) (it := it)
+      (request := request) (entities := entities) hnoit
+    have hte : EvaluatesTo (.hasAttr e k) request entities true := hattr e k hmemc
+    have htx : (PredExpr.ofCapKey e).toExpr = e := by
+      rw [← toCapKey_eq_toExpr_of_mentionsIt_false hnoit, hkey]
+    simp only [EvaluatesToPred, evaluatePred, hbridge, htx]
+    simp only [EvaluatesTo, evaluate] at hte
+    rcases hte with he | he | he | he | he
+    all_goals first
+      | exact Or.inr he
+      | exact Or.inl ⟨_, he⟩
+  · intro e k hmem
+    rw [List.mem_filter] at hmem
+    obtain ⟨hmemc, hclean⟩ := hmem
+    simp only [Capability.isClean, Bool.and_eq_true] at hclean
+    obtain ⟨he_clean, hktag⟩ := hclean
+    simp only [Expr.isCleanCapKey, Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq] at he_clean
+    obtain ⟨hkey, hnoit⟩ := he_clean
+    simp only [Expr.isCleanCapKey, Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq] at hktag
+    obtain ⟨hkkey, hknoit⟩ := hktag
+    have hbe := evaluatePred_eq_evaluate_toExpr (q := PredExpr.ofCapKey e) (it := it)
+      (request := request) (entities := entities) hnoit
+    have hbk := evaluatePred_eq_evaluate_toExpr (q := PredExpr.ofCapKey k) (it := it)
+      (request := request) (entities := entities) hknoit
+    have hte : EvaluatesTo (.binaryApp .hasTag e k) request entities true := htag e k hmemc
+    have htxe : (PredExpr.ofCapKey e).toExpr = e := by
+      rw [← toCapKey_eq_toExpr_of_mentionsIt_false hnoit, hkey]
+    have htxk : (PredExpr.ofCapKey k).toExpr = k := by
+      rw [← toCapKey_eq_toExpr_of_mentionsIt_false hknoit, hkkey]
+    simp only [EvaluatesToPred, evaluatePred, hbe, hbk, htxe, htxk]
+    simp only [EvaluatesTo, evaluate] at hte
+    rcases hte with he | he | he | he | he
+    all_goals first
+      | exact Or.inr he
+      | exact Or.inl ⟨_, he⟩
+
 /-- The empty capability set trivially satisfies the predicate invariant. -/
 theorem empty_capabilities_invariant_pred (it : Value) (request : Request) (entities : Entities) :
     CapabilitiesInvariantPred ∅ it request entities := by

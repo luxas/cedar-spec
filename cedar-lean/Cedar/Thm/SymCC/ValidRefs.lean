@@ -504,16 +504,77 @@ theorem typeOf_preserves_valid_refs_record
     specialize hrefs (attr', x) hmem_attr'_x
     exact ih_rec (attr', x) hmem_attr'_x htyₓ hrefs
 
-/--
-`typeOf` preserves `Entities.ValidRefsFor`.
-The converse is not true, due to policies with
-invalid UID literals, such as
-```
-// entity User enum ["alice"];
-permit(principal, action, resource)
-when { if true then User::"alice" else User::"bob" };
-```
--/
+/-- `PredExpr.normalize` preserves `PredExpr.ValidRefs`: it only folds dead
+`.and`/`.or`/`.ite` branches and recurses, never introducing a new entity
+literal (D-99 ripple — the typed `.all` node stores `normalize p`, so the valid-
+refs obligation on its `toExpr` is about the normalized predicate). -/
+theorem normalize_validRefs {validRef : EntityUID → Prop} {p : PredExpr}
+    {itTy : CedarType} {c : Capabilities} {env : TypeEnv}
+    (h : PredExpr.ValidRefs validRef p) :
+    PredExpr.ValidRefs validRef (PredExpr.normalize p itTy c env) := by
+  induction p, c using PredExpr.normalize.induct (itTy := itTy) (env := env) with
+  | case1 c => simpa only [PredExpr.normalize] using h
+  | case2 c l => simpa only [PredExpr.normalize] using h
+  | case3 c v => simpa only [PredExpr.normalize] using h
+  | case4 c cond t e tyc c₁ htc htt ihc iht =>
+    cases h with | ite_valid hc ht he =>
+      simp only [PredExpr.normalize, htc, htt]; exact .ite_valid (ihc hc) (iht ht) (iht ht)
+  | case5 c cond t e tyc c₁ htc hff ihc ihe =>
+    cases h with | ite_valid hc ht he =>
+      simp only [PredExpr.normalize, htc, hff]; exact .ite_valid (ihc hc) (ihe he) (ihe he)
+  | case6 c cond t e tyc c₁ htc hntt hnff ihc iht ihe =>
+    cases h with | ite_valid hc ht he =>
+      simp only [PredExpr.normalize, htc, hntt, hnff]; exact .ite_valid (ihc hc) (iht ht) (ihe he)
+  | case7 c cond t e err htc ihc iht ihe =>
+    cases h with | ite_valid hc ht he =>
+      simp only [PredExpr.normalize, htc]; exact .ite_valid (ihc hc) (iht ht) (ihe he)
+  | case8 c a b tyc c₁ hta hff iha =>
+    cases h with | and_valid ha hb => simp only [PredExpr.normalize, hta, hff]; exact iha ha
+  | case9 c a b tyc c₁ hta hnff iha ihb =>
+    cases h with | and_valid ha hb =>
+      simp only [PredExpr.normalize, hta, hnff]; exact .and_valid (iha ha) (ihb hb)
+  | case10 c a b err hta iha ihb =>
+    cases h with | and_valid ha hb => simp only [PredExpr.normalize, hta]; exact .and_valid (iha ha) (ihb hb)
+  | case11 c a b tyc c₁ hta htt iha =>
+    cases h with | or_valid ha hb => simp only [PredExpr.normalize, hta, htt]; exact iha ha
+  | case12 c a b tyc c₁ hta hntt iha ihb =>
+    cases h with | or_valid ha hb =>
+      simp only [PredExpr.normalize, hta, hntt]; exact .or_valid (iha ha) (ihb hb)
+  | case13 c a b err hta iha ihb =>
+    cases h with | or_valid ha hb => simp only [PredExpr.normalize, hta]; exact .or_valid (iha ha) (ihb hb)
+  | case14 c op x ih =>
+    cases h with | unaryApp_valid hx => simp only [PredExpr.normalize]; exact .unaryApp_valid (ih hx)
+  | case15 c op a b iha ihb =>
+    cases h with | binaryApp_valid ha hb => simp only [PredExpr.normalize]; exact .binaryApp_valid (iha ha) (ihb hb)
+  | case16 c x a ih =>
+    cases h with | getAttr_valid hx => simp only [PredExpr.normalize]; exact .getAttr_valid (ih hx)
+  | case17 c x a ih =>
+    cases h with | hasAttr_valid hx => simp only [PredExpr.normalize]; exact .hasAttr_valid (ih hx)
+  | case18 c x a attrs ih =>
+    cases h with | extHasAttr_valid hx => simp only [PredExpr.normalize]; exact .extHasAttr_valid (ih hx)
+  | case19 c axs ih =>
+    cases h with
+    | record_valid hall =>
+      simp only [PredExpr.normalize]
+      apply PredExpr.ValidRefs.record_valid
+      intro ax hax
+      simp only [List.map₂_eq_map (fun x : Attr × PredExpr => (x.fst, PredExpr.normalize x.snd itTy c env)),
+        List.mem_map] at hax
+      obtain ⟨⟨a', e'⟩, hmem, heq⟩ := hax
+      subst heq
+      exact ih a' e' (List.sizeOf_snd_lt_sizeOf_list hmem) (hall (a', e') hmem)
+  | case20 c f xs ih =>
+    cases h with
+    | call_valid hall =>
+      simp only [PredExpr.normalize]
+      apply PredExpr.ValidRefs.call_valid
+      intro x hx
+      simp only [List.map₁_eq_map (fun e : PredExpr => PredExpr.normalize e itTy c env),
+        List.mem_map] at hx
+      obtain ⟨e', hmem, heq⟩ := hx
+      subst heq
+      exact ih e' hmem (hall e' hmem)
+
 theorem typeOf_preserves_valid_refs
   {Γ : TypeEnv} (entities : Entities)
   {expr : Expr} {tx : TypedExpr} {c₁ c₂ : Capabilities}
@@ -574,7 +635,7 @@ theorem typeOf_preserves_valid_refs
     cases hrefs with
     | all_valid hrecv hpred =>
       simp only [TypedExpr.toExpr]
-      exact Expr.ValidRefs.all_valid (typeOf_preserves_valid_refs entities htr hrecv) hpred
+      exact Expr.ValidRefs.all_valid (typeOf_preserves_valid_refs entities htr hrecv) (normalize_validRefs hpred)
   | call _ args =>
     apply typeOf_preserves_valid_refs_call entities hty hrefs
     intros arg hmem_arg tx c c'

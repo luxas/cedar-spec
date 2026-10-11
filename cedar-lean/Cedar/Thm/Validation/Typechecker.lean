@@ -31,6 +31,7 @@ import Cedar.Thm.Validation.Typechecker.LUB
 import Cedar.Thm.Validation.Typechecker.WF
 import Cedar.Thm.Validation.Typechecker.Basic
 import Cedar.Thm.Validation.Typechecker.Types
+import Cedar.Thm.Validation.Typechecker.Pred.Normalize
 
 /-!
 This file contains useful definitions and lemmas about the `Typechecker` functions.
@@ -473,14 +474,55 @@ theorem type_of_preserves_evaluation_results {e : Expr} {c₁ c₂ : Capabilitie
     | ok tyr =>
       simp only [hr, Except.bind_ok] at h₃
       simp only [typeOfAll] at h₃
-      split at h₃ <;> rename_i hset
-      · cases hpred : typeOfPred p _ xcap env <;> rw [hpred] at h₃ <;>
+      split at h₃ <;> rename_i τ hset
+      · cases hpred : typeOfPred p _ (xcap.filter Capability.isClean) env <;> rw [hpred] at h₃ <;>
           simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h₃
+        rename_i typc
         split at h₃ <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h₃
         rcases h₃ with ⟨h₃, _⟩
         subst h₃
-        specialize hᵢ h₁ hr
-        simp only [TypedExpr.toExpr, evaluate, hᵢ]
+        -- Receiver: evaluation preservation (IH) and soundness (for element typing).
+        have hᵢ' := hᵢ h₁ hr
+        have hrok : typeOf xrecv xcap env = Except.ok (tyr.fst, tyr.snd) := by rw [hr]
+        have ⟨_, vr, hvr, hvrty⟩ := type_of_is_sound h₁ h₂ hrok
+        rw [hset] at hvrty
+        obtain ⟨s, hsrec, hselem⟩ := instance_of_set_type_is_set hvrty
+        have ⟨hwfenv, _, _⟩ := h₂
+        have hnr : NoReservedItKey env := wf_env_implies_no_reserved_it_key hwfenv
+        -- τ is well-formed: the receiver's (lifted) typed result type is WF, and WF is insensitive
+        -- to Bool annotations, so the element type of its `.set` is WF.
+        have hwfτ : CedarType.WellFormed env τ := by
+          have hwtR := typechecked_is_well_typed_after_lifting hr
+          have hwfR := well_typed_implies_wf_type hwfenv hwtR
+          rw [type_of_after_lifted_is_lifted, hset, CedarType.liftBoolTypes] at hwfR
+          cases hwfR with | set_wf hwfτl => exact wf_type_iff_wf_liftBoolTypes.mpr hwfτl
+        -- Equalize receivers via the IH, then the two quantifier bodies agree per element.
+        simp only [TypedExpr.toExpr, evaluate, hᵢ']
+        cases hs : (evaluate tyr.fst.toExpr request entities).as (Set Value) with
+        | error e => simp only [hs, Except.bind_err]
+        | ok sset =>
+          simp only [hs, Except.bind_ok]
+          apply evalAll_congr
+          intro v hv
+          -- the actual set evaluated equals `s` (from receiver soundness), so its elements are τ-typed
+          have hvty : InstanceOfType env v τ := by
+            have hxs : evaluate xrecv request entities = .ok (.set s) := by
+              simp only [EvaluatesTo] at hvr
+              rcases hvr with h | h | h | h | h <;>
+                first
+                  | (rw [hsrec] at h; exact h)
+                  | (exfalso
+                     rw [hᵢ'] at h
+                     rw [h] at hs
+                     simp [Result.as] at hs)
+            have hRset : evaluate tyr.fst.toExpr request entities = .ok (.set s) := by
+              rw [← hᵢ']; exact hxs
+            rw [hRset] at hs
+            simp only [Result.as, Coe.coe, Value.asSet, Except.bind_ok, Except.ok.injEq] at hs
+            subst hs
+            exact hselem v hv
+          have hcip := entry_capabilities_invariant_pred (c := xcap) (it := v) h₁
+          exact (normalize_evaluatePred hnr hwfτ hcip h₂ hvty ⟨typc.1, typc.2, hpred⟩).symm
       · simp only [err, reduceCtorEq] at h₃
 
 end Cedar.Thm

@@ -420,6 +420,18 @@ decreasing_by
     omega
 
 /--
+D-99: a capability key `e` is "clean" iff it is in the image of `PredExpr.toCapKey`
+(`(ofCapKey e).toCapKey = e`) AND its preimage predicate is `it`-free. A clean key is
+therefore free of set, all, and reserved-key nodes, so `evaluatePred (ofCapKey e) it =
+evaluate e` regardless of `it`. `typeOfAll` filters the OUTER capabilities to the clean
+ones before typing the predicate; acceptance-preserving because a `PredExpr`'s own
+`toCapKey` (all it ever consults) is always clean, so no usable capability is dropped
+(Rust does not filter but accepts identically — D-99; validation-DRT parity).
+-/
+public def Expr.isCleanCapKey (e : Expr) : Bool :=
+  decide ((PredExpr.ofCapKey e).toCapKey = e) && !(PredExpr.ofCapKey e).mentionsIt
+
+/--
 `p` applies no `in` (ancestors) to an `it`-dependent left operand: every
 `.binaryApp .mem l r` in `p` has `l.mentionsIt = false`.  This is the predicate
 whose compiled footprint-sensitive `in` operands are all `it`-free, hence covered
