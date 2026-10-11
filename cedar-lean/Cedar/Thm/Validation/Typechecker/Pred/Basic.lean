@@ -71,6 +71,16 @@ never contain the reserved access, so `toCapKey` is injective on it. -/
 def NoReservedItKey (env : TypeEnv) : Prop :=
   ¬ env.reqty.context.contains "__cedar::anyall::it"
 
+/-- D-98 (option B): a well-formed environment never declares the reserved
+`__cedar::anyall::it` context attribute, so `NoReservedItKey` is a consequence of
+`TypeEnv.WellFormed` (which the validator's `validateWellFormed` establishes).
+This lets `.all` predicate-soundness callers source `NoReservedItKey` from the
+`InstanceOfWellFormedEnvironment`/`env.WellFormed` fact they already carry, rather
+than taking it as a new hypothesis. -/
+theorem wf_env_implies_no_reserved_it_key {env : TypeEnv}
+    (hwf : env.WellFormed) : NoReservedItKey env := by
+  have ⟨_, _, _, hnrit⟩ := hwf
+  exact hnrit
 /-- The empty capability set trivially satisfies the predicate invariant. -/
 theorem empty_capabilities_invariant_pred (it : Value) (request : Request) (entities : Entities) :
     CapabilitiesInvariantPred ∅ it request entities := by

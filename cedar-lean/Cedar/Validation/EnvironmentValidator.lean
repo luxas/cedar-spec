@@ -206,6 +206,13 @@ public def RequestType.validateWellFormed (env : TypeEnv) (reqty : RequestType) 
     if reqty.context == entry.context then .ok ()
     else
       .error (.typeError s!"action {reqty.action} context type does not match schema")
+    -- D-98 (option B): reject a context declaring the reserved `__cedar::anyall::it`
+    -- attribute, matching the Rust schema parser's refusal of `__cedar` names. This
+    -- is exactly `NoReservedItKey env` for `env.reqty` and is required by the `.all`
+    -- predicate-soundness chain (D-74 A / D-P9c-7).
+    if reqty.context.contains "__cedar::anyall::it" then
+      .error (.typeError s!"action {reqty.action} context declares the reserved attribute __cedar::anyall::it")
+    else .ok ()
   | none => .error (.typeError s!"action {reqty.action} does not exist in schema")
 
 public def TypeEnv.validateWellFormed (env : TypeEnv) : EnvironmentValidationResult := do

@@ -344,3 +344,31 @@ implies the predicate one at the quantifier boundary (given the side condition),
 which is how `typeOfAll` discharges it. The attr/tag arms re-prove with the
 invariant (mirroring `capability_implies_{entity,record}_attribute`); D-94's
 value-only weak form is subsumed.
+
+
+## D-98 (2026-10-11, Phase 9c) — RESOLVES the M5 `NoReservedItKey` sourcing (option B)
+
+**Decision (orchestrator).** M5 step 4 (`type_of_preserves_evaluation_results`'s
+`.all` case) needs `NoReservedItKey env` to apply `normalize_evaluatePred` per set
+element, but that side condition was neither a hypothesis of the theorem nor
+derivable from `env.WellFormed`. Chosen fix = **option B**: the Lean environment
+validator now ENCODES the part of the Rust schema parser's `__cedar`-namespace
+refusal that the `.all` chain relies on.
+
+Concretely:
+- `RequestType.WellFormed` (`Thm/Validation/Typechecker/WF.lean`) gains the
+  conjunct `¬ reqty.context.contains "__cedar::anyall::it"` — exactly
+  `NoReservedItKey env` for `env.reqty`.
+- The executable `RequestType.validateWellFormed`
+  (`Validation/EnvironmentValidator.lean`) rejects a context declaring that
+  reserved attribute, and `request_type_validate_well_formed_is_sound`
+  (`Thm/Validation/EnvironmentValidation.lean`) re-proves the enriched Prop.
+- New `wf_env_implies_no_reserved_it_key : env.WellFormed → NoReservedItKey env`
+  (`Thm/Validation/Typechecker/Pred/Basic.lean`) lets callers SOURCE
+  `NoReservedItKey` from the `InstanceOfWellFormedEnvironment` / `env.WellFormed`
+  fact they already carry.
+
+Deliberately NOT done: adding `NoReservedItKey` as a new hypothesis to
+`type_of_preserves_evaluation_results` or its TPE/SymCC callers (they get it from
+`env.WellFormed`). Regression: a CedarUnitTests case asserts a schema whose
+context declares `__cedar::anyall::it` is rejected by the environment validator.
