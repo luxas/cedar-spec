@@ -16,6 +16,7 @@
 
 import Cedar.Spec.Evaluator
 import Cedar.Data.Map
+import Cedar.Validation.EnvironmentValidator
 import UnitTest.Run
 
 /-! Unit tests for the `.all` / `.any` set quantifier (anyall feature). -/
@@ -102,5 +103,41 @@ def testsForAny :=
   ]
 
 def tests := [ testsForAll, testsForAny ]
+
+/-! ### D-98 regression: the environment validator rejects a context that declares
+the reserved quantifier capability-key attribute `__cedar::anyall::it`. -/
+
+section D98
+open Cedar.Validation
+
+private def reservedCtx : RecordType :=
+  Map.mk [("__cedar::anyall::it", Qualified.required (.bool .anyBool))]
+
+private def userTy : EntityType := ⟨"User", []⟩
+private def resTy  : EntityType := ⟨"Res", []⟩
+private def actUid : EntityUID := ⟨⟨"Action", []⟩, "act"⟩
+
+private def reservedEnv : TypeEnv where
+  ets := Map.mk []
+  acts := Map.mk [(actUid, {
+    appliesToPrincipal := Set.mk [userTy]
+    appliesToResource := Set.mk [resTy]
+    ancestors := Set.mk []
+    context := reservedCtx })]
+  reqty := {
+    principal := userTy
+    action := actUid
+    resource := resTy
+    context := reservedCtx }
+
+private def isErr (r : EnvironmentValidationResult) : Bool :=
+  match r with | .error _ => true | .ok _ => false
+
+-- The reserved-attr context is REJECTED by the request-type validator (D-98):
+-- the action/principal/resource/context-shape checks all pass, so the error is
+-- exactly the reserved-attribute rejection.
+#guard isErr (reservedEnv.reqty.validateWellFormed reservedEnv)
+
+end D98
 
 end UnitTest.AnyAll
