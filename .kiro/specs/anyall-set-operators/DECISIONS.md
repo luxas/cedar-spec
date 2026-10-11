@@ -254,3 +254,51 @@ a multi-minute `cargo` build):
   both key schemes rather than a built dual harness; the recommended fix
   (collision-free `itExpr`) is deferred to a later branch and NOT implemented in
   9c, which uses weak soundness (D-94) and does not depend on capability parity.
+
+## D-96 (2026-10-11, Phase 9c) — BLOCKER: weak soundness does NOT discharge the capability-`.tt` attr/tag arms
+
+Found while proving the `.hasAttr`/`.getAttr`/`.extHasAttr`/`.binaryApp .hasTag`/
+`.binaryApp .getTag` arms of `type_of_pred_is_sound` under D-94 weak soundness.
+
+Weak soundness admits any **error**, but when evaluation **succeeds** the value
+must still be an instance of the result **type** — and that type can be a
+*precise* `.bool .tt` / `.bool .ff` driven by a **capability**, not just the
+schema:
+
+- `hasAttrInRecord` (`Cedar/Validation/Typechecker.lean:243`) returns
+  `.bool .tt` when `(x, .attr a) ∈ c` — a capability. So
+  `typeOfPred (.hasAttr .item a) itTy c env` types as `.bool .tt` whenever
+  `(itExpr, .attr a) = (.var .principal, .attr a) ∈ c` (e.g. an outer
+  `principal has "a"` before the quantifier). But the runtime element `it` is an
+  arbitrary set member that may lack `a`, so `hasAttr it a = .ok false` —
+  **`false` is NOT an instance of `.bool .tt`**. The arm is therefore **FALSE**
+  as stated, and weak soundness (which still constrains the success value) does
+  not rescue it.
+- `typeOfHasTag`/`typeOfGetTag` (`:189`/`:200`) have the identical shape over tag
+  capabilities (`(x, .tag t) ∈ c`), so `.binaryApp .hasTag`/`.getTag` hit the same
+  wall.
+- SOUND arms (no capability-driven precise type): `.item`, `.lit`, `.var`,
+  `.unaryApp`, `.binaryApp` {eq, less, lessEq, add, sub, mul, contains,
+  containsAll, containsAny, mem}, `.call`, and `.record` (its per-attr types come
+  from `typeOfPred` on the sub-exprs, not a `hasAttr` capability). `.and`/`.or`/
+  `.ite` are sound in structure but recurse into the attr arms, so the dispatcher
+  cannot close while those are open.
+
+**Consequence.** `type_of_pred_is_sound` (and hence `normalize_evaluatePred` and
+the honest `compile_well_typed` `.all` arm) **cannot be completed in 9c** under
+the current spec, for the SAME root cause as D-95: `itExpr := .var .principal`
+collides with request-var capability keys. Weak soundness was expected to sidestep
+this (D-94) but only sidesteps the *attrDoesNotExist-as-error* half; the
+*capability-forced-precise-type* half remains.
+
+**Resolution (escalated — needs the D-95 fix, which is a one-line spec change but
+out of 9c's declared scope).** The clean fix is exactly D-95's: make `itExpr`
+collision-free so `typeOfPred (.hasAttr .item a)` can never pick up a
+request-rooted `(x, .attr a)` capability and thus never types `it.a`/`it has a`
+as a capability-driven `.tt`. With a collision-free `itExpr`, `hasAttrInRecord`'s
+`(x, .attr a) ∈ c` branch is unreachable for `it`-rooted keys, the attr/tag arms
+become `.ff`/`.anyBool`-only (schema-driven, sound), and weak soundness closes.
+This is the recommended path for completing D-74 A; it should be done in a
+dedicated change (it touches `itExpr` and must re-green the whole SymCC `.all`
+chain that depends on `itExpr`'s identity, D-21/D-44), NOT bolted onto 9c, whose
+brief explicitly said "do NOT implement the itExpr change in 9c".
