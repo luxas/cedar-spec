@@ -727,3 +727,44 @@ constructor arms ⇒ `ext_wf` type-mismatch), and the main `.binaryApp`/`.getAtt
 arms that call them. The fix is per-leaf destructuring of the inner-helper result pair rather than a
 generic `first`-closer. Because these helpers are not yet green, `GetAttr.lean:142,146` cannot be
 closed with `type_of_pred_implies_wf_type` yet — the two `(by skip)` spots remain.
+
+### 5.10 LEAD worker #3 completion — real `.all` compile arm + D-79 + M6 (2026-10-11)
+
+**The last proof goal is closed.** `compile_well_typed_on_wf_expr`'s `.all` arm
+(`Thm/SymCC/Compiler/WellTyped.lean`) is proved under the honest guard
+`SymCCSupported(.all) = x₁.SymCCSupported && p.NoItDependentIn`, lifting the D-74 interim.
+
+Mechanics:
+- `WellTyped.all`'s `h₄` gains a conjunct `τ = itTy.liftBoolTypes` (true by construction, `rfl`
+  at the single construction site in `Typechecking.lean`). The SymCC arm needs
+  `ofType itTy = ofType τ` to match the receiver term's element type against
+  `compilePred_well_typed`; `ofType` ignores Bool annotations (`ofType_eq_ofType_liftBool`), so the
+  lift relation delivers exactly that. (`itTy = τ` as CedarTypes is false — D-P9c-12.)
+- `WellTyped.lean` is reordered so `compilePred_well_typed` precedes the big recursion; a factored
+  `compile_well_typed_all` (hypothesis form, taking the receiver's `CompileWellTyped` by recursion)
+  discharges the arm. The big theorem gains a `Γ.WellFormed` hypothesis (threaded to every recursive
+  call and the single external caller in `SymbolicCompilation.lean`), because `compilePred_well_typed`
+  needs it. Existence is proved by driving compile's three `.all` paths (none / literal fold /
+  symbolic); `compile_all_fold_mapM_ok` (new, by induction) handles the literal-fold `mapM`; the
+  result type `.option .bool` comes from the now-public `compile_all_wf` + `CompileWF` (WF.lean).
+- **D-79 (D-P9c-13):** `PredExpr.normalize`'s static-`ite` arms compute the live branch once with
+  `let` and share it; the emitted term is defeq to the old `.ite c' t' t'`, so all dependent proofs
+  are unchanged.
+
+**M6 green bar (verified):**
+- `lake build Cedar` — 648 jobs, 0 `sorry`.
+- `#print axioms` on `type_of_pred_is_sound`, `normalize_evaluatePred`, `compile_well_typed`,
+  `compile_interpret_on_footprint`, `type_of_preserves_evaluation_results` — all exactly
+  `[propext, Classical.choice, Quot.sound]`.
+- `CedarUnitTests` — 466/466, incl. `anyall: .all evaluation` (13) and `.any` (4). D-99 validator
+  `#guard` regressions added (optional-attr-on-element REJECTED; principal-cap predicate ACCEPTED).
+- `CedarSymTests` — 1220/1220 through cvc5 (was 1216); `AnyAll.e2e` 16/16 incl. the new SymCCOpt
+  `.all` completeness pair (optimized `verifyEquivalentOpt` over compiled policy sets).
+- §5.5 mutations: (1) interim `SymCCSupported(.all) = false` ⇒ `lake build Cedar` fails in
+  `compile_well_typed_all`/the arm; (2) break `normalize`'s `and` fold (`.bool .ff` keeps `b`) ⇒
+  `normalize_wellTyped`/`normalize_evaluatePred` fail. Both verified then reverted.
+
+**Deferred:** the cedar-drt validation fuzzer run. Its `build_lean_lib.sh` begins with `lake update`,
+which touches a package cache shared with another worktree (`wt/p8`), so running it from here is
+unsafe per the "do not touch other worktrees" rule. The Lean proofs + both exe suites through cvc5
+cover the same ground more rigorously than a two-minute fuzzer sample.

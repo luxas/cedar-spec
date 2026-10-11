@@ -409,7 +409,15 @@ bottom-up:
   `compile_well_typed` `.all` arm (lift the D-74-interim) so SymCC `.all` **completeness** holds
   honestly; and (D-79) fold `normalize`'s constant-`ite` to the live branch once instead of
   duplicating, now that `normalize_evaluatePred` licenses it. _Satisfies:_ 5.1 (completeness), 6.4
-  (closes the F2 dead-code debt). _Status: IN PROGRESS, D-97 unblocked (9c implementer, 2026-10-11)._
+  (closes the F2 dead-code debt). _Status: **IMPLEMENTED** (LEAD worker #3, 2026-10-11) — the real
+  `.all` arm of `compile_well_typed_on_wf_expr` is proved (honest guard `x₁.SymCCSupported &&
+  p.NoItDependentIn`), D-79 landed (static-`ite` branch sharing, D-P9c-13), M6 green: `lake build
+  Cedar` 648 jobs 0 `sorry`; the five named theorems `#print axioms` = `[propext, Classical.choice,
+  Quot.sound]`; `CedarSymTests` 1220/1220 (incl. the SymCCOpt `.all` completeness case); `CedarUnitTests`
+  466/466 + D-99 validator `#guard` regressions; §5.5 mutations (interim-`false` ⇒ Lean build fails;
+  break the `and` fold ⇒ `normalize_wellTyped`/`normalize_evaluatePred` fails) both verified and
+  reverted. DRT fuzzer run deferred (its `build_lean_lib.sh` runs `lake update`, which the shared
+  package cache made unsafe to run from this worktree)._
   **M0 landed GREEN** (D-97): collision-free `it` capability key (`PredExpr.toCapKey`/`itCapKey`,
   `typeOfPred` rewired) — `lake build Cedar` 616 jobs, `CedarSymTests` 1216/1216, `CedarUnitTests`
   466/466; resolves the D-95/D-96 parity bug at the source. **Predicate capability invariant landed:**
