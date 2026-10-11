@@ -75,8 +75,8 @@ use std::time::{Duration, Instant};
 use cedar_drt_inner::symcc::local_solver;
 use cedar_policy::{PolicySet, RequestEnv, Schema, Validator};
 use cedar_policy_symcc::{
-    err::Error, solver::LocalSolver, solver::WriterSolver, CedarSymCompiler, SymEnv,
-    WellTypedPolicies, WellTypedPolicy,
+    err::Error, solver::LocalSolver, solver::SolverError, solver::WriterSolver, CedarSymCompiler,
+    SymEnv, WellTypedPolicies, WellTypedPolicy,
 };
 use serde::{Deserialize, Serialize};
 
@@ -134,21 +134,18 @@ impl Display for SolveOutcome {
 /// Classify a verb error into a first-class non-sat outcome. A `check_*` verb
 /// returns `Ok(bool)` on a real decision (mapped by the caller to Sat/Unsat);
 /// this maps the error arms. OOM detection is heuristic (R4): the 1 GB
-/// `setrlimit` makes cvc5 fail allocation, surfacing as a `SolverError` whose
-/// text mentions memory/allocation/eof; everything else solver-side is kept as
-/// the raw error string for auditability.
+/// `setrlimit` makes cvc5 fail allocation, surfacing EITHER as a graceful
+/// `std::bad_alloc` solver error OR as an abrupt process kill (the OOM-killer /
+/// `RLIMIT_AS` abort gives no exit status — `terminated unexpectedly with
+/// status: None`, a signal/kill). Both are the same memory-cap death and are
+/// classified `Oom`; everything else solver-side is kept as the raw error
+/// string under `EncodeError` for auditability.
 fn classify_err(e: &Error) -> (SolveOutcome, String) {
     match e {
         Error::SolverUnknown => (SolveOutcome::Unknown, "solver returned unknown".into()),
         Error::SolverError(se) => {
-            let msg = se.to_string().to_lowercase();
-            let is_oom = msg.contains("memory")
-                || msg.contains("alloc")
-                || msg.contains("out of")
-                || msg.contains("bad_alloc")
-                || msg.contains("unexpected eof")
-                || msg.contains("broken pipe");
-            if is_oom {
+            let raw = se.to_string();
+            if is_oom_signature(&raw) {
                 (SolveOutcome::Oom, format!("solver error (classified oom): {se}"))
             } else {
                 (SolveOutcome::EncodeError, format!("solver error: {se}"))
@@ -156,6 +153,31 @@ fn classify_err(e: &Error) -> (SolveOutcome, String) {
         }
         other => (SolveOutcome::EncodeError, format!("verb error: {other}")),
     }
+}
+
+/// True when a solver error string looks like the 1 GiB memory cap being hit —
+/// either a graceful allocation failure (`std::bad_alloc`, "out of memory") or
+/// an abrupt kill with no exit status (the `RLIMIT_AS` / OOM-killer signature:
+/// "terminated unexpectedly with status: None", "killed", a "signal"). Factored
+/// out of `classify_err` so `--selftest` can exercise the exact table
+/// deterministically, without a real solver.
+fn is_oom_signature(raw: &str) -> bool {
+    let msg = raw.to_lowercase();
+    // Graceful allocation failure under the cap.
+    msg.contains("memory")
+        || msg.contains("alloc")
+        || msg.contains("out of")
+        || msg.contains("bad_alloc")
+        // Abrupt kill under the cap: the process dies with no exit status, which
+        // the solver surfaces as "terminated unexpectedly with status: None"
+        // (F-2: this is a mem-cap death at N=192, not an encoder failure).
+        || msg.contains("terminated unexpectedly")
+        || msg.contains("status: none")
+        || msg.contains("killed")
+        || msg.contains("signal")
+        // Pipe/EOF breakage from a solver that vanished mid-query.
+        || msg.contains("unexpected eof")
+        || msg.contains("broken pipe")
 }
 
 // ===========================================================================
@@ -888,8 +910,15 @@ fn predicate_points() -> Vec<(&'static str, &'static str)> {
 }
 
 /// The full sweep's set-size points, and the smoke subset.
+///
+/// N-1: the default `--full` axis now runs to **128** (the cliff onset: cvc5
+/// solves N=128 in ~4.5 s, then OOMs at N≥192 under the 1 GiB cap), so the
+/// headline sweep carries the first steep point rather than leaving it to the
+/// separate `cliff-setsize.json` probe. The baseline unroll is capped at N≤64
+/// (`BASELINE_MAX_N`), so N=128 contributes a quantified row only — still well
+/// under a minute of added wall time.
 fn full_sizes() -> Vec<usize> {
-    vec![0, 1, 2, 4, 8, 16, 32, 64]
+    vec![0, 1, 2, 4, 8, 16, 32, 64, 128]
 }
 fn smoke_sizes() -> Vec<usize> {
     vec![0, 1, 2, 4, 8]
@@ -1026,7 +1055,71 @@ fn write_output(report: &BenchReport, format: &str, out_path: Option<&str>) {
 // Selftest (P2/P3/P4 green checks, no long solves)
 // ===========================================================================
 
+/// Deterministic classifier table (F-2). Builds `Error` values directly (no
+/// solver) and asserts `classify_err` maps each to the right first-class
+/// outcome, keeping the raw solver text in the note either way. Covers the two
+/// mem-cap death signatures (graceful `bad_alloc` and the abrupt
+/// `status: None` kill — the one the committed cliff data mislabeled) and a
+/// genuine encoder error that must NOT be swallowed as `oom`.
+fn classifier_table_selftest() {
+    // (raw solver message, expected outcome). `SolverError::Solver(_)` is the
+    // same variant the real `check_sat` path produces for both an allocation
+    // failure and an abrupt process kill.
+    let solver_cases: &[(&str, SolveOutcome)] = &[
+        // Graceful allocation failure under the 1 GiB cap (N=256 in the data).
+        ("std::bad_alloc", SolveOutcome::Oom),
+        ("Cannot allocate memory", SolveOutcome::Oom),
+        ("out of memory", SolveOutcome::Oom),
+        // Abrupt kill under the cap — no exit status (N=192 in the data). This
+        // is the row F-2 was about: it previously fell through to EncodeError.
+        (
+            "Solver process terminated unexpectedly with status: None",
+            SolveOutcome::Oom,
+        ),
+        ("solver process killed", SolveOutcome::Oom),
+        ("terminated by signal 9", SolveOutcome::Oom),
+        ("broken pipe", SolveOutcome::Oom),
+        ("unexpected EOF", SolveOutcome::Oom),
+        // A genuine solver/encoder failure must stay EncodeError, not be
+        // swallowed as oom.
+        (
+            "unexpected `(` in response to (check-sat)",
+            SolveOutcome::EncodeError,
+        ),
+        ("unsupported logic feature", SolveOutcome::EncodeError),
+    ];
+    for (msg, want) in solver_cases {
+        let e = Error::SolverError(SolverError::Solver((*msg).to_string()));
+        let (got, note) = classify_err(&e);
+        assert_eq!(
+            got, *want,
+            "classifier: {msg:?} should classify {want}, got {got}"
+        );
+        // The raw solver text is preserved in the note for audit (F-2 keeps the
+        // signature readable even once the label reads `oom`).
+        assert!(
+            note.to_lowercase().contains(&msg.to_lowercase()),
+            "classifier: note for {msg:?} must retain the raw solver text, got {note:?}"
+        );
+    }
+    // `unknown` is its own first-class outcome, not oom/encode_error.
+    let (got, _) = classify_err(&Error::SolverUnknown);
+    assert_eq!(got, SolveOutcome::Unknown, "classifier: SolverUnknown => Unknown");
+    println!(
+        "# selftest OK: classifier table ({} solver cases + unknown) — mem-cap kills (bad_alloc, status:None) => oom, genuine errors => encode_error",
+        solver_cases.len()
+    );
+}
+
 async fn selftest() {
+    // (0) Classifier table (F-2): `classify_err` is deterministic over the
+    // solver error string, so exercise it without a real solver. Both the
+    // graceful `std::bad_alloc` AND the abrupt mem-cap kill ("terminated
+    // unexpectedly with status: None", the RLIMIT_AS/OOM-killer signature at
+    // N=192) must classify `Oom`; a genuine encoder/solver message must stay
+    // `EncodeError`; `unknown` must stay `Unknown`.
+    classifier_table_selftest();
+
     // (1) Timeout is first-class: a tiny timeout on a real query yields Timeout.
     let case = &set_size_cases(8)[0];
     let c = compile_case(case);
