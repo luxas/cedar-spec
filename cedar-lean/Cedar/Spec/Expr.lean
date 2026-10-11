@@ -258,6 +258,19 @@ Rust validator's reserved unknown `__cedar::anyall::it` (D-21/D-44).
 public def itExpr : Expr := .var .principal
 
 /--
+Reserved, collision-free capability key for the quantifier element keyword `it`
+(D-97). Mirrors the Rust validator's reserved unknown `__cedar::anyall::it`
+(D-21/D-44): `it`'s capabilities must NOT share a key with any request variable,
+or an outer `principal has "a"` capability `(.var .principal, .attr "a")` would be
+read as justifying `it.a` inside a predicate — a Lean↔Rust validator parity bug
+(D-95/D-96). The key is `context.__cedar::anyall::it`; the reserved attribute name
+cannot be written in policy text and Rust's schema parser refuses `__cedar`
+names, so it is producible by ordinary typing only in a context record type that
+declares it — ruled out by `TypeEnv.NoReservedItKey` (below) where needed.
+-/
+public def itCapKey : Expr := .getAttr (.var .context) "__cedar::anyall::it"
+
+/--
 Reconstruct the `Expr` denoted by a predicate, substituting the element keyword
 `it` with `itExpr`. Used to type a predicate by reusing the ordinary expression
 typing machinery (D-44). The set-free, non-nested shape of `PredExpr` (no `set`,
@@ -277,6 +290,36 @@ public def PredExpr.toExpr : PredExpr → Expr
   | .extHasAttr a attr attrs => .extHasAttr a.toExpr attr attrs
   | .record axs         => .record $ axs.map₂ (λ ⟨(a, e), _⟩ => (a, e.toExpr))
   | .call f xs          => .call f $ xs.map₁ (λ ⟨e, _⟩ => e.toExpr)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
+/--
+Capability-key reconstruction of a predicate (D-97). Agrees with `toExpr` on
+every arm EXCEPT `.item`, which maps to the collision-free `itCapKey` instead of
+`itExpr`. `typeOfPred` passes this (never `toExpr`) as the capability-key argument
+to `typeOfHasAttr`/`typeOfGetAttr`/`typeOfExtHasAttr`/`typeOfBinaryApp`, so an
+`it`-rooted attribute/tag capability can never collide with a request variable's
+key. On an `it`-free predicate `toCapKey = toExpr` (`toCapKey_eq_toExpr_of_mentionsIt_false`).
+-/
+public def PredExpr.toCapKey : PredExpr → Expr
+  | .item               => itCapKey
+  | .lit l              => .lit l
+  | .var v              => .var v
+  | .ite a b c          => .ite a.toCapKey b.toCapKey c.toCapKey
+  | .and a b            => .and a.toCapKey b.toCapKey
+  | .or a b             => .or a.toCapKey b.toCapKey
+  | .unaryApp op a      => .unaryApp op a.toCapKey
+  | .binaryApp op a b   => .binaryApp op a.toCapKey b.toCapKey
+  | .getAttr a attr     => .getAttr a.toCapKey attr
+  | .hasAttr a attr     => .hasAttr a.toCapKey attr
+  | .extHasAttr a attr attrs => .extHasAttr a.toCapKey attr attrs
+  | .record axs         => .record $ axs.map₂ (λ ⟨(a, e), _⟩ => (a, e.toCapKey))
+  | .call f xs          => .call f $ xs.map₁ (λ ⟨e, _⟩ => e.toCapKey)
 decreasing_by
   all_goals (simp_wf ; try omega)
   all_goals

@@ -413,17 +413,17 @@ public def typeOfPred (p : PredExpr) (itTy : CedarType) (c : Capabilities) (env 
   | .binaryApp op₂ x₁ x₂ => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
     let (ty₂, _) ← typeOfPred x₂ itTy c env
-    typeOfBinaryApp op₂ ty₁ ty₂ x₁.toExpr x₂.toExpr c env
+    typeOfBinaryApp op₂ ty₁ ty₂ x₁.toCapKey x₂.toCapKey c env
   | .hasAttr x₁ a => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
-    typeOfHasAttr ty₁ x₁.toExpr a c env
+    typeOfHasAttr ty₁ x₁.toCapKey a c env
   | .extHasAttr x₁ a as => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
-    let (bty, c') ← typeOfExtHasAttr ty₁ x₁.toExpr (a :: as) c env
+    let (bty, c') ← typeOfExtHasAttr ty₁ x₁.toCapKey (a :: as) c env
     ok (TypedExpr.extHasAttr ty₁ a as (.bool bty)) c'
   | .getAttr x₁ a => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
-    typeOfGetAttr ty₁ x₁.toExpr a c env
+    typeOfGetAttr ty₁ x₁.toCapKey a c env
   | .record axs => do
     let atys ← axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => (typeOfPred x₁ itTy c env).map (λ (ty, _) => (a₁, ty)))
     ok (.record atys (.record (Map.make (atys.map (λ (a, ty) => (a, .required ty.typeOf))))))

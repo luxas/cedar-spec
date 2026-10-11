@@ -2277,6 +2277,10 @@ theorem predExpr_toExpr_eq_lit {x : Cedar.Spec.PredExpr} {p : Prim}
     (h : x.toExpr = .lit p) : x = .lit p := by
   cases x <;> simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq, PredExpr.lit.injEq]
 
+theorem predExpr_toCapKey_eq_lit {x : Cedar.Spec.PredExpr} {p : Prim}
+    (h : x.toCapKey = .lit p) : x = .lit p := by
+  cases x <;> simp_all only [PredExpr.toCapKey, itCapKey, reduceCtorEq, Expr.lit.injEq, PredExpr.lit.injEq]
+
 /--
 D-72 step (3) / D-73b: a well-typed source predicate `p₀` compiles — AFTER NORMALIZATION —
 to a well-typed term. Recursion is on the SOURCE `p₀` (following `typeOfPred`'s case
@@ -2377,7 +2381,7 @@ theorem compilePred_well_typed {p₀ : Cedar.Spec.PredExpr} {itTy : CedarType} {
     cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
       simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
     rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
-    cases hehp : typeOfExtHasAttr ty₁ x₁.toExpr (a :: attrs) c Γ <;> rw [hehp] at htp <;>
+    cases hehp : typeOfExtHasAttr ty₁ x₁.toCapKey (a :: attrs) c Γ <;> rw [hehp] at htp <;>
       simp only [Validation.ok, Validation.err, Except.bind_ok, Except.bind_err, Except.ok.injEq,
         Prod.mk.injEq, reduceCtorEq] at htp
     rename_i r₂; obtain ⟨bty, c₂⟩ := r₂
@@ -2396,8 +2400,8 @@ theorem compilePred_well_typed {p₀ : Cedar.Spec.PredExpr} {itTy : CedarType} {
     have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
     have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
     refine compilePred_well_typed_binaryApp hwε hitw hitty hok₁ hty₁ hok₂ hty₂ ?_ ?_ htp
-    · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
-    · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
+    · intro pr he; rw [predExpr_toCapKey_eq_lit he]; simp only [PredExpr.normalize]
+    · intro pr he; rw [predExpr_toCapKey_eq_lit he]; simp only [PredExpr.normalize]
   | .ite x₁ x₂ x₃ =>
     simp only [typeOfPred] at htp
     cases hxc : typeOfPred x₁ itTy c Γ <;> rw [hxc] at htp <;>
