@@ -412,34 +412,110 @@ theorem type_of_pred_binaryApp_is_sound {op₂ : BinaryOp} {x₁ x₂ : PredExpr
   -- `.tt` case IS discharged via `hci.2 x₁.toCapKey x₂.toCapKey _ x₁ x₂ rfl rfl`
   -- (shown below); the schema `.ff` cases and the singleton guarded ∀q producer
   -- side (D-95/D-97) are the residual RED gaps (no `sorry`).
+  -- `hasTag`: result from `typeOfHasTag`. Output cap is empty (`.ff`/`.tt`
+  -- branches) or a singleton tag capability (`.anyBool` branch). Full mirror of
+  -- `Typechecker/BinaryApp/HasTag.lean` over `evaluatePred` /
+  -- `CapabilitiesInvariantPred`, with the SupportB `.tag` helpers. The singleton
+  -- producer side is discharged by `pred_hasTag_true_implies_cap_inv`, the `.tt`
+  -- consumer side by `pred_mem_capabilities_implies_mem_tags`.
   case hasTag =>
+    -- `ofCapKey (xᵢ.toCapKey) = xᵢ` from the no-reserved-access facts.
+    have hofk₁ : PredExpr.ofCapKey x₁.toCapKey = x₁ :=
+      ofCapKey_toCapKey (type_of_pred_implies_no_reserved hnr ht₁)
+    have hofk₂ : PredExpr.ofCapKey x₂.toCapKey = x₂ :=
+      ofCapKey_toCapKey (type_of_pred_implies_no_reserved hnr ht₂)
     simp only [typeOfBinaryApp] at htb
     cases hety₁ : tx₁.typeOf with
     | entity ety₁ =>
       cases hety₂ : tx₂.typeOf with
       | string =>
         simp only [hety₁, hety₂, bind, Except.bind] at htb
+        rw [hety₁] at hinst₁
+        have ⟨uid, huidty, hvv₁⟩ := instance_of_entity_type_is_entity hinst₁
+        rw [hety₂] at hinst₂
+        have ⟨s, hvv₂⟩ := instance_of_string_is_string hinst₂
+        subst hvv₁ hvv₂
         cases hht : typeOfHasTag ety₁ x₁.toCapKey x₂.toCapKey c₁ env with
         | error e => simp only [hht, reduceCtorEq] at htb
         | ok p =>
-          obtain ⟨tyr, cr⟩ := p
-          simp only [hht, ok, Except.ok.injEq, Prod.mk.injEq] at htb
-          obtain ⟨htyeq, hceq⟩ := htb
-          subst htyeq; subst hceq
-          rw [hety₁] at hinst₁
-          have ⟨uid, _, hvv₁⟩ := instance_of_entity_type_is_entity hinst₁
-          rw [hety₂] at hinst₂
-          have ⟨s, hvv₂⟩ := instance_of_string_is_string hinst₂
-          subst hvv₁ hvv₂
+        obtain ⟨tyr, cr⟩ := p
+        simp only [hht, ok, Except.ok.injEq, Prod.mk.injEq] at htb
+        obtain ⟨htyeq, hceq⟩ := htb
+        subst htyeq; subst hceq
+        simp only [TypedExpr.typeOf]
+        -- `typeOfHasTag` always returns a `.bool _` type here.
+        have hbty : ∃ bty, tyr = CedarType.bool bty := by
           simp only [typeOfHasTag] at hht
-          -- Demonstrate the capability `.tt` discharge over `evaluatePred`
-          -- (the single genuinely NEW ingredient D-97 b adds). The remaining
-          -- schema-dependent `bty` matches are the RED gap.
-          -- value side: result is a bool; precise bty is the schema-dependent gap.
-          -- guarded side: empty or singleton tag cap (singleton ∀q producer side
-          -- is the D-95/D-97 gap). Both halves RED (unsolved, no sorry).
-          simp only [TypedExpr.typeOf]
-          refine ⟨?_, ?_⟩
+          split at hht
+          · simp only [ok, Except.ok.injEq, Prod.mk.injEq] at hht; exact ⟨.ff, hht.1.symm⟩
+          · split at hht <;> simp only [ok, Except.ok.injEq, Prod.mk.injEq] at hht
+            · exact ⟨.tt, hht.1.symm⟩
+            · exact ⟨.anyBool, hht.1.symm⟩
+          · split at hht <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at hht
+            exact ⟨.ff, hht.1.symm⟩
+        -- Operand-error short-circuits ⇒ the whole predicate errors (any-error side).
+        rcases hev₁ with ⟨e₁, hev₁⟩ | hev₁
+        · obtain ⟨bty, htyr⟩ := hbty
+          have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env bty
+          refine ⟨fun hc => absurd hc ?_,
+            w₀, Or.inl ⟨e₁, by simp only [evaluatePred, hev₁, Except.bind_err]⟩,
+            by rw [htyr]; exact hw₀⟩
+          simp only [evaluatePred, hev₁, Except.bind_err, reduceCtorEq, not_false_eq_true]
+        rcases hev₂ with ⟨e₂, hev₂⟩ | hev₂
+        · obtain ⟨bty, htyr⟩ := hbty
+          have ⟨w₀, hw₀⟩ := @type_is_inhabited_bool env bty
+          refine ⟨fun hc => absurd hc ?_,
+            w₀, Or.inl ⟨e₂, by simp only [evaluatePred, hev₁, hev₂, Except.bind_ok, Except.bind_err]⟩,
+            by rw [htyr]; exact hw₀⟩
+          simp only [evaluatePred, hev₁, hev₂, Except.bind_ok, Except.bind_err, reduceCtorEq, not_false_eq_true]
+        -- Both operands evaluate to values. Split on the `typeOfHasTag` schema branch.
+        clear hbty
+        simp only [typeOfHasTag] at hht
+        split at hht
+        case h_1 heq =>
+          -- `some none` ⇒ `.ff`, empty caps.
+          simp only [ok, Except.ok.injEq, Prod.mk.injEq] at hht
+          obtain ⟨htyeq, hceq⟩ := hht
+          subst htyeq; subst hceq
+          refine ⟨empty_guarded_capabilities_invariant_pred,
+            Value.prim (Prim.bool ((entities.tagsOrEmpty uid).contains s)), ?_, ?_⟩
+          · exact Or.inr (by simp only [evaluatePred, hev₁, hev₂, apply₂, hasTag, Except.bind_ok])
+          · subst huidty
+            exact pred_no_tags_type_implies_no_tags h₂.instance_of_schema heq
+        case h_2 =>
+          split at hht
+          case isTrue hin =>
+            -- cap `.tt`: tag present via the invariant.
+            simp only [ok, Except.ok.injEq, Prod.mk.injEq] at hht
+            obtain ⟨htyeq, hceq⟩ := hht
+            subst htyeq; subst hceq
+            refine ⟨empty_guarded_capabilities_invariant_pred,
+              Value.prim (Prim.bool ((entities.tagsOrEmpty uid).contains s)), ?_, ?_⟩
+            · exact Or.inr (by simp only [evaluatePred, hev₁, hev₂, apply₂, hasTag, Except.bind_ok])
+            · exact pred_mem_capabilities_implies_mem_tags hci hofk₁ hofk₂ hev₁ hev₂ hin
+          case isFalse =>
+            -- `.anyBool`, singleton tag cap guarded by `hasTag = true`.
+            simp only [ok, Except.ok.injEq, Prod.mk.injEq] at hht
+            obtain ⟨htyeq, hceq⟩ := hht
+            subst htyeq; subst hceq
+            refine ⟨?_, Value.prim (Prim.bool ((entities.tagsOrEmpty uid).contains s)), ?_, ?_⟩
+            · -- guarded: on `hasTag = true`, the singleton is invariant.
+              intro hguard
+              simp only [evaluatePred, hev₁, hev₂, apply₂, hasTag, Except.bind_ok, Except.ok.injEq,
+                Value.prim.injEq, Prim.bool.injEq] at hguard
+              exact pred_hasTag_true_implies_cap_inv hofk₁ hofk₂ hev₁ hev₂ hguard
+            · exact Or.inr (by simp only [evaluatePred, hev₁, hev₂, apply₂, hasTag, Except.bind_ok])
+            · exact bool_is_instance_of_anyBool _
+        case h_3 heq =>
+          -- `none` ⇒ action-type ⇒ `.ff` (else err, contradicting hht).
+          split at hht <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at hht
+          obtain ⟨htyeq, hceq⟩ := hht
+          subst htyeq; subst hceq
+          refine ⟨empty_guarded_capabilities_invariant_pred,
+            Value.prim (Prim.bool ((entities.tagsOrEmpty uid).contains s)), ?_, ?_⟩
+          · exact Or.inr (by simp only [evaluatePred, hev₁, hev₂, apply₂, hasTag, Except.bind_ok])
+          · subst huidty
+            exact pred_no_type_implies_no_tags h₂.instance_of_schema heq
       | _ => simp only [hety₁, hety₂, typeOfBinaryApp, err, reduceCtorEq] at htb
     | _ => simp only [hety₁, typeOfBinaryApp, err, reduceCtorEq] at htb
 
