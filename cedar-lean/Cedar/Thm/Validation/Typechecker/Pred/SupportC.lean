@@ -166,4 +166,20 @@ theorem pred_or_eval_err₂ {x₁ x₂ : PredExpr} {it : Value} {req : Request} 
   simp only [evaluatePred, h₁, h₂, Result.as, Coe.coe, Value.asBool, Except.bind_ok,
     Bool.false_eq_true, ite_false, Except.bind_err]
 
+/-- Intersection of capability sets preserves the predicate invariant when EITHER
+side is invariant (pred twin of `capability_intersection_invariant`). -/
+theorem capability_intersection_invariant_pred {c₁ c₂ : Capabilities} {it : Value}
+    {request : Request} {entities : Entities}
+    (h₁ : CapabilitiesInvariantPred c₁ it request entities ∨
+          CapabilitiesInvariantPred c₂ it request entities) :
+    CapabilitiesInvariantPred (c₁ ∩ c₂) it request entities := by
+  simp only [CapabilitiesInvariantPred, List.mem_inter_iff] at *
+  refine ⟨?_, ?_⟩ <;> intro e k h₂
+  · cases h₁ <;> rename_i h₁
+    · exact h₁.left e k h₂.left
+    · exact h₁.left e k h₂.right
+  · cases h₁ <;> rename_i h₁
+    · exact h₁.right e k h₂.left
+    · exact h₁.right e k h₂.right
+
 end Cedar.Thm
