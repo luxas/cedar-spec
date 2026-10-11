@@ -435,6 +435,19 @@ bottom-up:
   (102-err restart from Record's shape), the two support lemmas (`type_of_pred_implies_wf_type` for
   `.getAttr`; ext-has-attr attr-name `NoReservedItAccess` for `.extHasAttr`), the tag arms, dispatcher
   `type_of_pred_is_sound`, M4, M5, M6.
+  **UPDATE 2 (continuation after the parallel arm wave, 2026-10-11 16:xx):** `SupportA`
+  `type_of_pred_implies_wf_type` (D-P9c-8) is GREEN — the predicate output-type WF lemma + its 11
+  per-helper WF lemmas + the lub_wf mutual block. **D-P9c-10 landed:** `itTy.WellFormed env` is now a
+  premise of `TypeOfPredIsSound`, threaded through every arm (mechanical, like `hnr`). With it,
+  `.getAttr` (record-receiver optional-attr error-side) and `.ite` (then-branch WF on the
+  condition-errors path) are both CLOSED. Pred modules GREEN now: Basic, SupportA/B/C, UnaryApp,
+  Record, HasAttr, GetAttr, BinaryApp, Call, And, Or, Ite (13/14). ONLY `ExtHasAttr` RED (2 spots):
+  the `ofCapKey (.getAttr x₁ a)` reserved-attr-NAME edge (depth-0 fact per D-P9c decision 2; a
+  well-typed ext-has-attr never names the reserved attr, discharged by a typing+NoReservedItKey
+  contradiction — needs the gci inner-induction restructured to carry that side condition). Remaining:
+  close ExtHasAttr, dispatcher `type_of_pred_is_sound` + axioms, quantifier-boundary entry lemma, M4
+  `normalize_evaluatePred`, M5 wiring (store `normalize p₀`, drop the D-74 interim guard, restore the
+  real `compile_well_typed` `.all` arm), D-79, M6 green bar. `lake build Cedar` still 616 jobs GREEN.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
