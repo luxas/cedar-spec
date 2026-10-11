@@ -1,6 +1,7 @@
 # Phase 7 Outcomes — Docs & open questions (`phase7-anyall-docs`)
 
-**Status:** IMPLEMENTED, review pending. Docs-only phase (no behavior change, no new `pub`
+**Status:** DONE — review converged (round 1: 2 findings fixed; round 2: NO ACTIONABLE FINDINGS).
+Docs-only phase (no behavior change, no new `pub`
 API). Satisfies T7.1 (feature docs + Mohamed et al. FMCAD 2025 citation) and T7.2 (OQ-1
 sets-of-sets out of scope). Decisions **D-84 / D-85 / D-86**.
 
@@ -104,8 +105,12 @@ cedar `4b365ea4`); rebase onto Phases 6/6.5 final tips before merge.
 - Re-run V1/V4/V8 after the Phase 6/6.5 rebase (doc claims are pinned to code that may move).
 - If the repo later gates CI on `-D warnings` rustdoc, the pre-existing doc-lint debt (unrelated
   to anyall) must be cleaned separately.
+- Optional symmetry (review N-2): `cedar-policy-symcc`'s `experimental` meta-feature does not
+  include `anyall` (cedar-policy and cedar-policy-core do). No doc is wrong about it; a one-line
+  Cargo change would align the three crates if wanted.
 
 ## Review loop
-| Round | Agent | Verdict |
+| Round | Verdict | Findings |
 |---|---|---|
-| 1 | — | pending |
+| 1 | ACTIONABLE FINDINGS: 2 | F-1 (moderate) `#[cfg_attr(docsrs, doc(cfg(feature = "anyall")))]` missing on `Expr::all`/`Expr::any` (PLAN A3) — fixed (cedar `b42f288a`). F-2 (minor) absolute local path in this branch's PLAN.md — fixed (cedar-spec `940021e`). Nit N-1 FMCAD author order in design.md — fixed in the same commit. 23 claims verified true (doctests 34→35 under `anyall`, `lake build Cedar` green, every quoted error string, SymCC/D-70/D-74-interim statements, DRT wiring, commit trailers). |
+| 2 | NO ACTIONABLE FINDINGS | Both fixes verified complete (badge convention is per-`lib.rs`-gate; the two constructors are the only per-item sites). Probed the cedar-docs hand-off, symcc `experimental` asymmetry (N-2, non-defect), CLI (no `anyall` feature; no doc points there), `.any` error semantics and `it` typing against `Spec/Evaluator.lean` and the typechecker, CHANGELOG wording. One cosmetic banner note in `language-reference-anyall.md` tightened post-review. |

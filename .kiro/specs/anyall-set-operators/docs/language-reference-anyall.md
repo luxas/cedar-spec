@@ -1,8 +1,9 @@
 # `.all` / `.any` — non-nested set quantifiers (experimental)
 
 > **Experimental.** These operators are gated behind the off-by-default `anyall` Cargo feature
-> (included in the `experimental` meta-feature). The default Cedar build does not include them,
-> and they are subject to change. Enable with `--features anyall` (or `--features experimental`).
+> (included in the `experimental` meta-feature of `cedar-policy` and `cedar-policy-core`). The
+> default Cedar build does not include them, and they are subject to change. Enable with
+> `--features anyall` (see "Enabling the feature" below for the per-crate details).
 
 Cedar's `.all` and `.any` operators test whether a predicate holds for **every** element (or
 **some** element) of a set, without manually expanding a conjunction or disjunction — which is
