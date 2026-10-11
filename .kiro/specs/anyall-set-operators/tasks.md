@@ -448,6 +448,20 @@ bottom-up:
   close ExtHasAttr, dispatcher `type_of_pred_is_sound` + axioms, quantifier-boundary entry lemma, M4
   `normalize_evaluatePred`, M5 wiring (store `normalize p₀`, drop the D-74 interim guard, restore the
   real `compile_well_typed` `.all` arm), D-79, M6 green bar. `lake build Cedar` still 616 jobs GREEN.
+  **UPDATE 3 (continuation, 2026-10-11 16:4x):** ALL 14 Pred arms now GREEN and the dispatcher
+  `type_of_pred_is_sound` (structural recursion, `termination_by sizeOf p`) is GREEN and **axiom-clean**
+  (`#print axioms` = `[propext, Classical.choice, Quot.sound]`). **D-P9c-11 landed** (ExtHasAttr
+  reserved-attr edge): both generalized inner lemmas now carry `NoReservedItKey env` and
+  `hctx : x₁ = .var .context → ty₁.typeOf = .record env.reqty.context`; in the `ofCapKey`-of-`.getAttr`
+  reserved branch, `hctx` + `NoReservedItKey` make `hasAttrInRecord` return `.bool .ff`, contradicting
+  the non-`ff` split (no Spec change). M1–M3 + dispatcher = COMPLETE. **M4** `normalize_evaluatePred`
+  is a sorry-free red draft (`Pred/Normalize.lean`): the two ff/tt eval helpers + 8 structural arms are
+  GREEN, the `.and`/`.or`/`.ite` folds are proved via an eval-case-split with the guarded production
+  threading `(c ∪ c₁)` into the then-branch IH; ~9 residual tactic-shape fiddles (record/call mapM₂
+  congruence, typeOfAnd/If bool extraction, the Result.as closers). Remaining: finish M4, support
+  lemma (b) quantifier-boundary entry, M5 wiring (Spec: `typeOfAll` stores `normalize p₀`, flip
+  `TypedExpr.SymCCSupported (.all …)` off `false`, restore the real `compile_well_typed` `.all` arm;
+  fix `type_of_preserves_evaluation_results` `.all` via M4) + D-79, M6 green bar.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
