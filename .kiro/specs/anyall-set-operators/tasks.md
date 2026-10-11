@@ -409,7 +409,14 @@ bottom-up:
   `compile_well_typed` `.all` arm (lift the D-74-interim) so SymCC `.all` **completeness** holds
   honestly; and (D-79) fold `normalize`'s constant-`ite` to the live branch once instead of
   duplicating, now that `normalize_evaluatePred` licenses it. _Satisfies:_ 5.1 (completeness), 6.4
-  (closes the F2 dead-code debt).
+  (closes the F2 dead-code debt). _Status: IN PROGRESS (9c implementer, 2026-10-11)._ M1 landed
+  (`EvaluatesToPred`, `TypeOfPredIsSound`, trivial `.item`/`.lit`/`.var` arms —
+  `Thm/Validation/Typechecker/Pred/Basic.lean`); M2 template landed (`.unaryApp` arm,
+  `Pred/UnaryApp.lean`, all 5 ops green). Remaining: M2 straight-line arms
+  (`.binaryApp`/`.getAttr`/`.hasAttr`/`.extHasAttr`/`.record`/`.call`), M3 hard arms
+  (`.and`/`.or`/`.ite`), M4 `normalize_evaluatePred`, M5 wiring §5.4 + D-79, M6 green bar. Each
+  landed module is `lake build`-green and 0-`sorry`; not yet wired into `typeOfAll`, so the main
+  `lake build Cedar` is unchanged and still green.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
