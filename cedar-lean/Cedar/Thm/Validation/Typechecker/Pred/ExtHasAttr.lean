@@ -343,6 +343,7 @@ private theorem typeOfHasAttr_tt_contradicts_find_none_pred
   (hwf : InstanceOfWellFormedEnvironment request entities env)
   (hci : CapabilitiesInvariantPred c it request entities)
   (hkey : qExpr.toCapKey = x₁)
+  (hofk : PredExpr.ofCapKey x₁ = qExpr)
   (heval_q : evaluatePred qExpr it request entities = .ok v)
   (hha : typeOfHasAttr ty₁ x₁ a c env = .ok val_ha)
   (heq_tt : val_ha.fst.typeOf = .bool .tt)
@@ -359,7 +360,8 @@ private theorem typeOfHasAttr_tt_contradicts_find_none_pred
   -- evaluate to `true`, contradicting `h_false`.
   have cap_contra : (x₁, Key.attr a) ∈ c → False := by
     intro h_cap
-    have hinv := hci.1 x₁ a h_cap qExpr hkey
+    have hinv := hci.1 x₁ a h_cap
+    rw [hofk] at hinv
     simp only [EvaluatesToPred, evaluatePred, heval_q, Except.bind_ok] at hinv
     rcases hinv with ⟨err, herr⟩ | hok
     · rw [h_false] at herr; simp at herr
@@ -504,18 +506,20 @@ private theorem singleton_capability_invariant_pred
   {x₁ : Expr} {a : Attr} {v it : Value} {request : Request} {entities : Entities}
   {qExpr : PredExpr}
   (hkey : qExpr.toCapKey = x₁)
+  (hofk : PredExpr.ofCapKey x₁ = qExpr)
   (heval_q : evaluatePred qExpr it request entities = .ok v)
   (h_true : hasAttr v a entities = .ok true) :
   CapabilitiesInvariantPred (Capabilities.singleton x₁ (.attr a)) it request entities := by
   constructor
-  · intro e k h_mem q hq
+  · intro e k h_mem
     simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, Key.attr.injEq] at h_mem
     obtain ⟨he, hk⟩ := h_mem; subst he; subst hk
-    -- Residual D-95 producer-side gap: `q.toCapKey = x₁ = qExpr.toCapKey` does NOT
-    -- pin `evaluatePred q it`, so `EvaluatesToPred (.hasAttr q k) it … true` cannot
-    -- be derived from `heval_q`/`h_true` for an arbitrary `q`. Left RED, no `sorry`.
-    clear hq heval_q h_true hkey
-  · intro e k h_mem q r hq hr
+    -- Producer field (ofCapKey form): `ofCapKey x₁ = qExpr`, and
+    -- `evaluatePred qExpr it = ok v` with `hasAttr v a = ok true` give exactly
+    -- `EvaluatesToPred (.hasAttr qExpr a) it … true`.
+    rw [hofk]
+    exact Or.inr (by simp only [evaluatePred, heval_q, Except.bind_ok, h_true])
+  · intro e k h_mem
     simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, reduceCtorEq,
       and_false] at h_mem
 
@@ -531,6 +535,7 @@ private theorem typeOfExtHasAttr_gci_pred
   (hwf : InstanceOfWellFormedEnvironment request entities env)
   (hci : CapabilitiesInvariantPred c it request entities)
   (hkey : qExpr.toCapKey = x₁)
+  (hofk : PredExpr.ofCapKey x₁ = qExpr)
   (heval_q : evaluatePred qExpr it request entities = .ok v)
   (hext : typeOfExtHasAttr ty₁ x₁ attrs c env = .ok res)
   (hloop : hasAttrs.loop v attrs entities = .ok true)
@@ -558,7 +563,7 @@ private theorem typeOfExtHasAttr_gci_pred
         all_goals (
           cases typeOfHasAttr_caps_subset_pred h₅ with
           | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
-          | inr h => rw [h]; exact singleton_capability_invariant_pred hkey heval_q h₄)
+          | inr h => rw [h]; exact singleton_capability_invariant_pred hkey hofk heval_q h₄)
     | cons b rest' =>
       simp only [typeOfExtHasAttr, bind, Except.bind] at hext
       cases h₆ : typeOfHasAttr ty₁ x₁ a c env with
@@ -594,12 +599,33 @@ private theorem typeOfExtHasAttr_gci_pred
               have h₉ : CapabilitiesInvariantPred ci it request entities := by
                 cases typeOfHasAttr_caps_subset_pred h₆ with
                 | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
-                | inr h => rw [h]; exact singleton_capability_invariant_pred hkey heval_q h₄
+                | inr h => rw [h]; exact singleton_capability_invariant_pred hkey hofk heval_q h₄
               -- Recurse.
               have hio_next : InstanceOfType env x₀ tyNext.typeOf :=
                 instance_of_getAttr_type_pred hwf h₅ hio h₀ h₁_find
               have hkey_next : (PredExpr.getAttr qExpr a).toCapKey = Expr.getAttr x₁ a := by
                 simp only [PredExpr.toCapKey, hkey]
+              -- The recursion's capability key is `.getAttr x₁ a`, whose inverse is
+              -- `.getAttr qExpr a`: `x₁` at this depth is itself `.getAttr …` (the
+              -- recursion only extends keys with `.getAttr`), so the reserved
+              -- `.var .context` branch of `ofCapKey` is not taken; when `x₁` is the
+              -- top-level operand key, `ofCapKey x₁ = qExpr` and the attr `a` is a
+              -- schema attr. We obtain the inverse from `hofk` through the
+              -- non-reserved `.getAttr` arm.
+              have hofk_next : PredExpr.ofCapKey (Expr.getAttr x₁ a) = PredExpr.getAttr qExpr a := by
+                by_cases hres : x₁ = Expr.var Var.context ∧ a = "__cedar::anyall::it"
+                · -- Reserved shape `context["__cedar::anyall::it"]` as an ext-has-attr
+                  -- receiver key. This cannot arise for a well-typed `.extHasAttr`
+                  -- (the attr names come from policy text and can never be the
+                  -- reserved key, which Rust's schema parser also refuses), but that
+                  -- exclusion is not threaded here as a hypothesis — the ext-has-attr
+                  -- attr-name NoReservedItAccess is not yet carried. Left RED
+                  -- (unsolved, no `sorry`); the non-reserved branch below is the one
+                  -- every real query takes.
+                  obtain ⟨hc1, ha⟩ := hres
+                  subst hc1 ha
+                  simp only [PredExpr.ofCapKey, and_self, ↓reduceIte]
+                · simp only [PredExpr.ofCapKey, if_neg hres, hofk]
               have heval_next : evaluatePred (PredExpr.getAttr qExpr a) it request entities = .ok x₀ := by
                 simp only [evaluatePred, heval_q, Except.bind_ok]
                 exact getAttr_ok_of_attrsOf_find_pred h₀ h₁_find
@@ -608,7 +634,7 @@ private theorem typeOfExtHasAttr_gci_pred
               have hloop_rest : hasAttrs.loop x₀ (b :: rest') entities = .ok true :=
                 h₃.resolve_left (by simp)
               have hrec_inv : CapabilitiesInvariantPred val_rec.2 it request entities :=
-                ih hci_ci hkey_next heval_next h₇ hloop_rest hio_next
+                ih hci_ci hkey_next hofk_next heval_next h₇ hloop_rest hio_next
               cases hcaps with
               | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
               | inr h => rw [h]; exact capability_union_invariant_pred h₉ hrec_inv
@@ -628,6 +654,7 @@ private theorem typeOfExtHasAttr_bool_type_sound_pred
     (hwf : InstanceOfWellFormedEnvironment request entities env)
     (hci : CapabilitiesInvariantPred c it request entities)
     (hkey : qExpr.toCapKey = x₁)
+    (hofk : PredExpr.ofCapKey x₁ = qExpr)
     (heval_q : evaluatePred qExpr it request entities = .ok v)
     (hext : typeOfExtHasAttr ty₁ x₁ attrs c env = .ok (bty, caps))
     (hio : InstanceOfType env v ty₁.typeOf)
@@ -672,7 +699,7 @@ private theorem typeOfExtHasAttr_bool_type_sound_pred
             | ff => simp [InstanceOfBoolType]
             | tt =>
               exfalso
-              exact typeOfHasAttr_tt_contradicts_find_none_pred hwf hci hkey heval_q hha heq hio hattrs hfind
+              exact typeOfHasAttr_tt_contradicts_find_none_pred hwf hci hkey hofk heval_q hha heq hio hattrs hfind
         case h_2 =>
           simp only [Except.ok.injEq, Prod.mk.injEq] at hext
           rw [← hext.1]; simp [InstanceOfBoolType]
@@ -718,7 +745,7 @@ private theorem typeOfExtHasAttr_bool_type_sound_pred
                     case ff => simp [InstanceOfBoolType]
                     case tt =>
                       exfalso
-                      exact typeOfHasAttr_tt_contradicts_find_none_pred hwf hci hkey heval_q hha_step hhas hio hattrs hfind_none
+                      exact typeOfHasAttr_tt_contradicts_find_none_pred hwf hci hkey hofk heval_q hha_step hhas hio hattrs hfind_none
                   case h_2 => simp [InstanceOfBoolType]
                 · simp only [Except.ok.injEq, Prod.mk.injEq] at hext
                   rw [← hext.1]; simp [InstanceOfBoolType]
@@ -741,6 +768,15 @@ private theorem typeOfExtHasAttr_bool_type_sound_pred
                   instance_of_getAttr_type_pred hwf hga hio hattrs hfind
                 have hkey_next : (PredExpr.getAttr qExpr a).toCapKey = Expr.getAttr x₁ a := by
                   simp only [PredExpr.toCapKey, hkey]
+                have hofk_next : PredExpr.ofCapKey (Expr.getAttr x₁ a) = PredExpr.getAttr qExpr a := by
+                  by_cases hres : x₁ = Expr.var Var.context ∧ a = "__cedar::anyall::it"
+                  · -- Reserved shape (see typeOfExtHasAttr_gci_pred): excluded for a
+                    -- well-typed ext-has-attr but not threaded as a hypothesis here;
+                    -- left RED (unsolved, no `sorry`).
+                    obtain ⟨hc1, ha⟩ := hres
+                    subst hc1 ha
+                    simp only [PredExpr.ofCapKey, and_self, ↓reduceIte]
+                  · simp only [PredExpr.ofCapKey, if_neg hres, hofk]
                 have heval_next : evaluatePred (PredExpr.getAttr qExpr a) it request entities = .ok next := by
                   simp only [evaluatePred, heval_q, Except.bind_ok]
                   exact getAttr_ok_of_attrsOf_find_pred hattrs hfind
@@ -750,10 +786,10 @@ private theorem typeOfExtHasAttr_bool_type_sound_pred
                   | inl h => rw [h]; exact empty_capabilities_invariant_pred it request entities
                   | inr h =>
                     rw [h]
-                    exact singleton_capability_invariant_pred hkey heval_q
+                    exact singleton_capability_invariant_pred hkey hofk heval_q
                       (hasAttr_true_of_attrsOf_find_pred hattrs hfind)
                 have hloop_next : hasAttrs.loop next (nextAttr :: more) entities = .ok (.prim (.bool b)) := hloop
-                have hih := ih hci_next hkey_next heval_next h_rec hio_next hloop_next
+                have hih := ih hci_next hkey_next hofk_next heval_next h_rec hio_next hloop_next
                 split at hext
                 · rename_i heq_ff
                   simp only [Except.ok.injEq, Prod.mk.injEq] at hext
@@ -814,6 +850,7 @@ FULL mirror.
 theorem type_of_pred_extHasAttr_is_sound {x₁ : PredExpr} {a : Attr} {as' : List Attr}
     {itTy : CedarType} {it : Value} {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr}
     {request : Request} {entities : Entities}
+    (hnr : NoReservedItKey env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -823,7 +860,10 @@ theorem type_of_pred_extHasAttr_is_sound {x₁ : PredExpr} {a : Attr} {as' : Lis
     ∃ v, EvaluatesToPred (.extHasAttr x₁ a as') it request entities v ∧ InstanceOfType env v ty.typeOf := by
   obtain ⟨ty₁, c₁', bty, c', hpred, hext, hty, htyof, hc⟩ := type_of_pred_extHasAttr_inversion h₃
   subst hc
-  have ⟨hgci₁, v₁, hev₁, hio₁⟩ := ih hci h₂ hit hpred
+  have ⟨hgci₁, v₁, hev₁, hio₁⟩ := ih hnr hci h₂ hit hpred
+  -- `x₁` has no reserved `it` access, so `ofCapKey x₁.toCapKey = x₁`.
+  have hofk : PredExpr.ofCapKey x₁.toCapKey = x₁ :=
+    ofCapKey_toCapKey (type_of_pred_implies_no_reserved hnr hpred)
   have heval_ext : evaluatePred (.extHasAttr x₁ a as') it request entities =
       (evaluatePred x₁ it request entities >>= fun v => hasAttrs v a as' entities) := by
     simp [evaluatePred]
@@ -847,7 +887,7 @@ theorem type_of_pred_extHasAttr_is_sound {x₁ : PredExpr} {a : Attr} {as' : Lis
       · rw [hev_x₁] at hev₁; simp at hev₁
       · rw [hev_x₁] at hev₁; simp only [Except.ok.injEq] at hev₁; subst hev₁; exact hio₁
     have hloop_ev : hasAttrs.loop v₁' (a :: as') entities = .ok true := hhasattrs
-    exact typeOfExtHasAttr_gci_pred h₂ hci rfl hev_x₁ hext hloop_ev hio₁'
+    exact typeOfExtHasAttr_gci_pred h₂ hci rfl hofk hev_x₁ hext hloop_ev hio₁'
   case right =>
     rw [htyof]
     simp only [EvaluatesToPred] at hev₁
@@ -866,6 +906,6 @@ theorem type_of_pred_extHasAttr_is_sound {x₁ : PredExpr} {a : Attr} {as' : Lis
         · apply InstanceOfType.instance_of_bool
           have hloop : hasAttrs.loop v₁ (a :: as') entities = .ok (.prim (.bool b)) := by
             simpa [hasAttrs] using hha
-          exact typeOfExtHasAttr_bool_type_sound_pred h₂ hci rfl hev₁ hext hio₁ hloop
+          exact typeOfExtHasAttr_bool_type_sound_pred h₂ hci rfl hofk hev₁ hext hio₁ hloop
 
 end Cedar.Thm
