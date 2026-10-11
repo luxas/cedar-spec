@@ -669,3 +669,30 @@ the reserved-attr-NAME exclusion for `ofCapKey (.getAttr x₁ a)` when `a` could
 well-typed ext-has-attr never names the reserved attr (Rust's schema parser refuses `__cedar` names),
 but that needs an attr-name `NoReservedItAccess` premise threaded through `typeOfExtHasAttr`, deferred
 (2 red spots, no sorry).
+
+**D-P9c-A1 — arm A (`SupportA.lean`, `type_of_pred_implies_wf_type`) implementation (2026-10-11).**
+Implemented D-P9c-8 as a bounded structural induction on `typeOfPred` in a new `Pred/SupportA.lean`
+(imports only GREEN modules: `Pred.Basic`, `Pred.Record`, `Pred.HasAttr` — deliberately NOT `Pred.And`,
+which is a red draft, so its errors do not leak in). The signature carries `env.WellFormed` and
+`itTy.WellFormed env` exactly as D-P9c-8 prescribes; `.item` discharges the latter.
+
+The `.ite .anyBool` arm needs LUB-of-WF-is-WF, which did not exist, so arm A proves it: a sorry-free
+mutual `lub_wf` / `lubRecordType_attrs_wf` / `lubQualifiedType_wf` (plus `lubRecordType_keys_eq_left`
+showing the LUB keeps the left record's key order ⇒ the result map is still `SortedBy`/WellFormed).
+`lub_wf` is `match ty₁,ty₂`-structured so the set/record recursions decrease syntactically; the record
+case uses `lubRecordType_attrs_wf` for per-attribute WF. These are GREEN.
+
+GREEN arms of the main theorem: `.item`, `.lit`, `.var`, `.ite`, `.unaryApp`, `.hasAttr`,
+`.extHasAttr`, `.and`, `.or` (the last two via inline guard-capturing analysis of
+`typeOfAnd`/`typeOfOr`, no `And.lean` dependency), plus helpers `typeOfLit_wf`, `typeOfVar_wf`,
+`typeOfUnaryApp_wf`, `typeOfHasAttr_wf` (via `hasAttrInRecord_result_is_bool`), `typeOfHasTag_wf`,
+`typeOfGetTag_wf`.
+
+STILL RED (no sorry, tactic-plumbing only — the WF reasoning is correct): the uniform output-type
+closers for `typeOfBinaryApp_wf` (the `.eq`/direct-op branch `first`-combinator leaves 5 `simp made no
+progress`), `typeOfGetAttr_wf` / `getAttrInRecord_wf` (the `getAttrInRecord` `do`-bind leaves a
+product `v✝.fst` the closer does not destructure cleanly), `typeOfCall_wf` (same `v✝.fst` on the
+constructor arms ⇒ `ext_wf` type-mismatch), and the main `.binaryApp`/`.getAttr`/`.call`/`.record`
+arms that call them. The fix is per-leaf destructuring of the inner-helper result pair rather than a
+generic `first`-closer. Because these helpers are not yet green, `GetAttr.lean:142,146` cannot be
+closed with `type_of_pred_implies_wf_type` yet — the two `(by skip)` spots remain.

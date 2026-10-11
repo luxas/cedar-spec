@@ -5,6 +5,7 @@
 
 import Cedar.Thm.Validation.Typechecker.Pred.Basic
 import Cedar.Thm.Validation.Typechecker.Pred.Record
+import Cedar.Thm.Validation.Typechecker.Pred.HasAttr
 
 /-!
 # Predicate output-type well-formedness (Phase 9c, arm A, D-P9c-8)
@@ -273,25 +274,39 @@ theorem typeOfBinaryApp_wf {op : BinaryOp} {ty₁ ty₂ : TypedExpr} {e₁ e₂ 
        simp only [bind, Except.bind] at h
        split at h <;> simp only [reduceCtorEq] at h
        rename_i v hgt
+       obtain ⟨vt, vc⟩ := v
        simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
-       obtain ⟨htx, hc⟩ := h; subst htx; subst hc; simp only [TypedExpr.typeOf]
+       obtain ⟨htx, hc⟩ := h; subst htx; simp only [TypedExpr.typeOf]
        exact typeOfGetTag_wf hwf hgt)
     | (-- `.hasTag`: result is `.bool`
        simp only [bind, Except.bind] at h
        split at h <;> simp only [reduceCtorEq] at h
        rename_i v hht
+       obtain ⟨vt, vc⟩ := v
        simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
-       obtain ⟨htx, hc⟩ := h; subst htx; subst hc; simp only [TypedExpr.typeOf]
+       obtain ⟨htx, hc⟩ := h; subst htx; simp only [TypedExpr.typeOf]
        exact typeOfHasTag_wf hht)
-    | (-- `.eq` / `contains` / `containsAll` / `containsAny`: flatten and close as bool
-       simp only [typeOfEq, ifLubThenBool, Function.comp_apply, bind, Except.bind] at h
-       repeat' split at h
-       all_goals (
-         first
-         | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h; done)
-         | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq] at h
-            obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
-            first | exact CedarType.WellFormed.bool_wf | exact CedarType.WellFormed.int_wf)))
+    | (-- `contains`/`containsAll`/`containsAny`: `ifLubThenBool` ⇒ `.bool`
+       simp only [ifLubThenBool, bind, Except.bind] at h
+       split at h <;> simp only [reduceCtorEq] at h
+       rename_i v hlub
+       obtain ⟨vt, vc⟩ := v
+       simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+       obtain ⟨htx, hc⟩ := h; subst htx; simp only [TypedExpr.typeOf]
+       -- `ifLubThenBool` only ever yields `.bool .anyBool`
+       simp only [ifLubThenBool] at hlub
+       split at hlub <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at hlub
+       obtain ⟨hvt, _⟩ := hlub; subst hvt; exact CedarType.WellFormed.bool_wf)
+    | (-- `.eq`: result `.bool`
+       simp only [typeOfEq, Function.comp_apply] at h
+       have hbool : ∃ bty, tx.typeOf = .bool bty := by
+         repeat' split at h
+         all_goals (
+           first
+           | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h; done)
+           | (simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+              obtain ⟨htx, _⟩ := h; subst htx; exact ⟨_, rfl⟩))
+       obtain ⟨bty, hbty⟩ := hbool; rw [hbty]; exact CedarType.WellFormed.bool_wf)
     | (-- direct arms `.mem` / `.less` / `.lessEq` ⇒ bool, `.add`/`.sub`/`.mul` ⇒ int
        simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
        obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
@@ -303,14 +318,54 @@ theorem typeOfHasAttr_wf {ty₁ : TypedExpr} {e : Expr} {a : Attr} {c c' : Capab
     {env : TypeEnv} {tx : TypedExpr}
     (h : typeOfHasAttr ty₁ e a c env = Except.ok (tx, c')) :
     tx.typeOf.WellFormed env := by
-  simp only [typeOfHasAttr, hasAttrInRecord, Function.comp_apply, bind, Except.bind] at h
-  repeat' split at h
-  all_goals (
-    first
-    | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h; done)
-    | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq] at h
-       obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
-       exact CedarType.WellFormed.bool_wf))
+  -- `typeOfHasAttr` always wraps a `hasAttrInRecord`/`.bool .ff` result into a
+  -- `.hasAttr _ _ ty'` whose `ty'` is a `.bool`.
+  have hbool : ∃ bty, tx.typeOf = .bool bty := by
+    simp only [typeOfHasAttr, Function.comp_apply, bind, Except.bind] at h
+    split at h
+    case h_1 rty hrty =>
+      split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+      rename_i heqr
+      obtain ⟨htx, _⟩ := h; subst htx
+      obtain ⟨bty, hbty⟩ := hasAttrInRecord_result_is_bool heqr
+      exact ⟨bty, by simp only [TypedExpr.typeOf, hbty]⟩
+    case h_2 ety hety =>
+      split at h
+      · split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+        rename_i heqr
+        obtain ⟨htx, _⟩ := h; subst htx
+        obtain ⟨bty, hbty⟩ := hasAttrInRecord_result_is_bool heqr
+        exact ⟨bty, by simp only [TypedExpr.typeOf, hbty]⟩
+      · split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+        obtain ⟨htx, _⟩ := h; subst htx
+        exact ⟨.ff, by simp only [TypedExpr.typeOf]⟩
+    case h_3 => simp only [err, reduceCtorEq] at h
+  obtain ⟨bty, hbty⟩ := hbool
+  rw [hbty]; exact CedarType.WellFormed.bool_wf
+
+/-- `getAttrInRecord` returns an attribute type that is well formed when the record
+type is well formed. -/
+theorem getAttrInRecord_wf {ty : CedarType} {rty : RecordType} {e : Expr} {a : Attr}
+    {c c' : Capabilities} {env : TypeEnv} {aty : CedarType}
+    (hwfrty : CedarType.WellFormed env (.record rty))
+    (h : getAttrInRecord ty rty e a c = Except.ok (aty, c')) :
+    aty.WellFormed env := by
+  simp only [getAttrInRecord] at h
+  cases hfind : rty.find? a with
+  | none => rw [hfind] at h; simp only [err, reduceCtorEq] at h
+  | some q =>
+    rw [hfind] at h
+    cases q with
+    | required aty' =>
+      simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨heqa, _⟩ := h; subst heqa
+      simpa only [Qualified.getType] using
+        qty_wf_implies_type_of_wf (wf_record_implies_wf_attr hwfrty hfind)
+    | optional aty' =>
+      split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+      obtain ⟨heqa, _⟩ := h; subst heqa
+      simpa only [Qualified.getType] using
+        qty_wf_implies_type_of_wf (wf_record_implies_wf_attr hwfrty hfind)
 
 /-- Well-formedness of the `typeOfGetAttr` result type, given the receiver type is
 well formed (record receiver) or from the schema (entity receiver). -/
@@ -322,33 +377,29 @@ theorem typeOfGetAttr_wf {ty₁ : TypedExpr} {e : Expr} {a : Attr} {c c' : Capab
     tx.typeOf.WellFormed env := by
   simp only [typeOfGetAttr, Function.comp_apply, bind, Except.bind] at h
   split at h
-  case h_1 rty hrty =>
-    -- record receiver: the receiver type `.record rty` is WF by `hty₁`
+  · -- record receiver `.record rty`: WF from `hty₁`
+    rename_i rty hrty
     rw [hrty] at hty₁
-    simp only [getAttrInRecord] at h
-    split at h <;> (try split at h) <;>
-      simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
-    case h_1 _ _ hfind =>
-      obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
-      simpa only [Qualified.getType] using qty_wf_implies_type_of_wf (wf_record_implies_wf_attr hty₁ hfind)
-    case h_2 _ _ hfind =>
-      obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
-      simpa only [Qualified.getType] using qty_wf_implies_type_of_wf (wf_record_implies_wf_attr hty₁ hfind)
-  case h_2 ety hety =>
-    -- entity receiver: schema attrs record is WF
+    split at h <;> simp only [reduceCtorEq] at h
+    rename_i aty hgar
+    obtain ⟨at', ac⟩ := aty
+    simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
+    exact getAttrInRecord_wf hty₁ hgar
+  · -- entity receiver `.entity ety`: WF of the schema attrs record
+    rename_i ety hety
     split at h <;> try simp only [err, reduceCtorEq] at h
     rename_i rty hattrs
     have hwfrty : CedarType.WellFormed env (.record rty) := wf_env_implies_wf_attrs hwf hattrs
-    simp only [getAttrInRecord] at h
-    split at h <;> (try split at h) <;>
-      simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
-    case h_1 _ _ hfind =>
-      obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
-      simpa only [Qualified.getType] using qty_wf_implies_type_of_wf (wf_record_implies_wf_attr hwfrty hfind)
-    case h_2 _ _ hfind =>
-      obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
-      simpa only [Qualified.getType] using qty_wf_implies_type_of_wf (wf_record_implies_wf_attr hwfrty hfind)
-  case h_3 => simp only [err, reduceCtorEq] at h
+    split at h <;> simp only [reduceCtorEq] at h
+    rename_i aty hgar
+    obtain ⟨at', ac⟩ := aty
+    simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
+    exact getAttrInRecord_wf hwfrty hgar
+  · simp only [err, reduceCtorEq] at h
+    · simp only [err, reduceCtorEq] at h
+  · simp only [err, reduceCtorEq] at h
 
 /-- Well-formedness of the `typeOfCall` result type (always a scalar/ext/bool
 constructor type, no record/set/entity). -/
@@ -358,11 +409,13 @@ theorem typeOfCall_wf {f : ExtFun} {tys : List TypedExpr} {xs : List Expr}
     tx.typeOf.WellFormed env := by
   simp only [typeOfCall, typeOfConstructor, Function.comp_apply, bind, Except.bind] at h
   repeat' split at h
+  all_goals (try simp only [Except.bind_ok, Except.bind_err] at h)
   all_goals (
     first
     | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h; done)
     | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq] at h
-       obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]
+       (try obtain ⟨htx, _⟩ := h)
+       subst htx; simp only [TypedExpr.typeOf]
        first
        | exact CedarType.WellFormed.bool_wf
        | exact CedarType.WellFormed.int_wf
@@ -414,25 +467,47 @@ theorem type_of_pred_implies_wf_type {p : PredExpr} {itTy : CedarType}
     cases h₁ : typeOfPred x₁ itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
     rename_i r₁
     cases h₂ : typeOfPred x₂ itTy (c ∪ r₁.2) env <;> simp only [h₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
-    simp only [typeOfAnd] at h
-    repeat' split at h
-    all_goals (
-      first
-      | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h; done)
-      | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq] at h
-         obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]; exact CedarType.WellFormed.bool_wf))
+    rename_i r₂
+    -- `typeOfAnd` output is always `.bool`-typed: the `.ff` short-circuit keeps the
+    -- (bool-typed) left operand; every other arm builds `.and _ _ (.bool _)`.
+    have hbool : ∃ bty, tx.typeOf = .bool bty := by
+      simp only [typeOfAnd, Except.bind_ok, bind, Except.bind] at h
+      split at h
+      case h_1 hg =>
+        simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨htx, _⟩ := h; subst htx; exact ⟨.ff, hg⟩
+      case h_2 bty₁ hg =>
+        split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h <;>
+          (obtain ⟨htx, _⟩ := h; subst htx; exact ⟨_, rfl⟩)
+      case h_3 => simp only [err, reduceCtorEq] at h
+    obtain ⟨bty, hbty⟩ := hbool; rw [hbty]; exact CedarType.WellFormed.bool_wf
   | .or x₁ x₂ =>
     simp only [typeOfPred] at h
     cases h₁ : typeOfPred x₁ itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
     rename_i r₁
     cases h₂ : typeOfPred x₂ itTy c env <;> simp only [h₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
-    simp only [typeOfOr] at h
-    repeat' split at h
-    all_goals (
-      first
-      | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h; done)
-      | (simp only [ok, err, Except.ok.injEq, Prod.mk.injEq] at h
-         obtain ⟨htx, _⟩ := h; subst htx; simp only [TypedExpr.typeOf]; exact CedarType.WellFormed.bool_wf))
+    rename_i r₂
+    -- `typeOfOr` output is always `.bool`-typed: either the (bool-typed) short-circuit
+    -- operand, or a freshly-built `.or _ _ (.bool _)`.
+    have hbool : ∃ bty, tx.typeOf = .bool bty := by
+      simp only [typeOfOr, Except.bind_ok, bind, Except.bind] at h
+      split at h
+      case h_1 hg =>
+        -- `.tt` short-circuit: `tx = r₁.fst`, `r₁.fst.typeOf = .bool .tt`
+        simp only [ok, Except.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨htx, _⟩ := h; subst htx; exact ⟨.tt, hg⟩
+      case h_2 hg =>
+        -- `.ff`: inner match on `r₂.fst.typeOf`, output `.or _ _ r₂.fst.typeOf` (a bool)
+        split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
+        rename_i bty hr₂
+        obtain ⟨htx, _⟩ := h; subst htx
+        exact ⟨bty, by simp only [TypedExpr.typeOf]; exact hr₂⟩
+      case h_3 hg₁ hg₂ =>
+        -- `.anyBool` left: inner match on `r₂.fst.typeOf`, output `.or _ _ (.bool _)`
+        split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h <;>
+          (obtain ⟨htx, _⟩ := h; subst htx; exact ⟨_, by simp only [TypedExpr.typeOf]⟩)
+      case h_4 => simp only [err, reduceCtorEq] at h
+    obtain ⟨bty, hbty⟩ := hbool; rw [hbty]; exact CedarType.WellFormed.bool_wf
   | .unaryApp op x₁ =>
     simp only [typeOfPred] at h
     cases h₁ : typeOfPred x₁ itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
