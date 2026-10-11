@@ -107,7 +107,8 @@ no capability hypothesis.
 -/
 theorem head_of_pred_vals_instance_of_head_of_types {xhd : Attr × PredExpr} {itTy : CedarType} {it : Value} {c₁ : Capabilities} {env : TypeEnv} {request : Request} {entities : Entities} {rhd : Attr × TypedExpr} {vhd : Attr × Value}
   (h₁ : TypeOfPredIsSound xhd.snd)
-  (hci : CapabilitiesInvariantPred c₁ it request entities)
+  (hnr : NoReservedItKey env)
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
   (h₂ : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
   (h₄ : AttrPredHasAttrType itTy c₁ env xhd rhd)
@@ -129,7 +130,8 @@ Pred twin of `vals_instance_of_types`, weak form.
 -/
 theorem pred_vals_instance_of_types {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value} {c₁ : Capabilities} {env : TypeEnv} {request : Request} {entities : Entities} {rtx : List (Attr × TypedExpr)} {avs : List (Attr × Value)}
   (ih : ∀ a x, (a, x) ∈ axs → TypeOfPredIsSound x)
-  (hci : CapabilitiesInvariantPred c₁ it request entities)
+  (hnr : NoReservedItKey env)
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
   (h₂ : InstanceOfWellFormedEnvironment request entities env)
   (hit : InstanceOfType env it itTy)
   (h₃ : List.Forall₂ (AttrPredHasAttrType itTy c₁ env) axs rtx)
@@ -179,6 +181,7 @@ plumbing beyond `hci`, which it threads into each element IH.
 -/
 theorem type_of_pred_record_type_is_inhabited {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value}
     {c₁ : Capabilities} {env : TypeEnv} {rty : List (Attr × TypedExpr)} {request : Request} {entities : Entities}
+    (hnr : NoReservedItKey env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -207,7 +210,7 @@ theorem type_of_pred_record_type_is_inhabited {axs : List (Attr × PredExpr)} {i
       ih xhd.fst xhd.snd (by simp only [List.mem_cons, true_or])
     have hsound := ihhd (itTy := itTy) (it := it) (c₁ := c₁) (c₂ := c')
       (env := env) (ty := rhd.snd) (request := request) (entities := entities)
-      hci h₂ hit h₈
+      hnr hci h₂ hit h₈
     obtain ⟨_, vhd, _, hinst⟩ := hsound
     refine ⟨(rhd.fst, vhd) :: vtl, ?_⟩
     simp only [List.map_cons]
@@ -226,6 +229,7 @@ drawn from the per-element IHs.
 -/
 theorem type_of_pred_record_is_sound {axs : List (Attr × PredExpr)} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
+    (hnr : NoReservedItKey env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
