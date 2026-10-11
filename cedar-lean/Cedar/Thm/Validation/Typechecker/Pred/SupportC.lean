@@ -166,6 +166,25 @@ theorem pred_or_eval_err₂ {x₁ x₂ : PredExpr} {it : Value} {req : Request} 
   simp only [evaluatePred, h₁, h₂, Result.as, Coe.coe, Value.asBool, Except.bind_ok,
     Bool.false_eq_true, ite_false, Except.bind_err]
 
+/-- `.ite` propagates a condition error. -/
+theorem pred_ite_eval_err₁ {x₁ x₂ x₃ : PredExpr} {it : Value} {req : Request} {es : Entities}
+    {e : Error} (h₁ : evaluatePred x₁ it req es = .error e) :
+    evaluatePred (.ite x₁ x₂ x₃) it req es = .error e := by
+  simp only [evaluatePred, h₁, Result.as, Except.bind_err]
+
+/-- `.ite` with a `true` condition evaluates the then-branch. -/
+theorem pred_ite_eval_true {x₁ x₂ x₃ : PredExpr} {it : Value} {req : Request} {es : Entities}
+    (h₁ : evaluatePred x₁ it req es = .ok (.prim (.bool true))) :
+    evaluatePred (.ite x₁ x₂ x₃) it req es = evaluatePred x₂ it req es := by
+  simp only [evaluatePred, h₁, Result.as, Coe.coe, Value.asBool, Except.bind_ok, ite_true]
+
+/-- `.ite` with a `false` condition evaluates the else-branch. -/
+theorem pred_ite_eval_false {x₁ x₂ x₃ : PredExpr} {it : Value} {req : Request} {es : Entities}
+    (h₁ : evaluatePred x₁ it req es = .ok (.prim (.bool false))) :
+    evaluatePred (.ite x₁ x₂ x₃) it req es = evaluatePred x₃ it req es := by
+  simp only [evaluatePred, h₁, Result.as, Coe.coe, Value.asBool, Except.bind_ok,
+    Bool.false_eq_true, ite_false]
+
 /-- Intersection of capability sets preserves the predicate invariant when EITHER
 side is invariant (pred twin of `capability_intersection_invariant`). -/
 theorem capability_intersection_invariant_pred {c₁ c₂ : Capabilities} {it : Value}
