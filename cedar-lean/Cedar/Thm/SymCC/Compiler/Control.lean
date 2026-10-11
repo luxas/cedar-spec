@@ -124,11 +124,11 @@ theorem compile_interpret_ite {x₁ x₂ x₃ : Expr} {εnv : SymEnv} {I : Inter
   clear ih₁ h₂
   split at h₃
   case h_1 =>
-    simp only [Term.interpret, someOf, compileIf]
+    simp only [interpret_term_some, interpret_term_prim, someOf, compileIf]
     rw [eq_comm] at h₃
     exact ih₂ h₁ hwf₂ h₃
   case h_2 =>
-    simp only [Term.interpret, someOf, compileIf]
+    simp only [interpret_term_some, interpret_term_prim, someOf, compileIf]
     rw [eq_comm] at h₃
     exact ih₃ h₁ hwf₃ h₃
   case h_3 t₁ _ h₄ h₅ =>

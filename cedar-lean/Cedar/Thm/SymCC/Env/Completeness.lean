@@ -505,7 +505,7 @@ private theorem ofEnv_request_completeness
   have ⟨hwf_I_vars, _⟩ := hwf_I
   have ⟨⟨hsame_I_princ, hsame_I_act, hsame_I_res, hsame_I_ctx⟩, _⟩ := hsame_I
   have hwf_sym_req := ofEnv_request_is_swf hwf_Γ
-  have ⟨⟨hwf_sym_princ, _, hwf_sym_act, _, hwf_sym_res, _, hwf_sym_ctx, _⟩, _⟩ := hwf_sym_req
+  have ⟨⟨hwf_sym_princ, _, _, _, hwf_sym_act, _, _, _, hwf_sym_res, _, _, _, hwf_sym_ctx, _, _, _⟩, _⟩ := hwf_sym_req
   simp only [
     SymEnv.interpret,
     SymRequest.interpret,
@@ -529,7 +529,7 @@ private theorem ofEnv_request_completeness
     exact sym_entities_is_valid_entity_uid_implies_entity_uid_wf hwf_Γ hwf_I_princ
   -- Well-formed symbolic action => well-formed concrete action
   · simp only [
-      Term.interpret,
+      Term.interpret, Term.interpretWith,
       SymEnv.ofEnv,
       SymRequest.ofRequestType,
     ] at hsame_I_act

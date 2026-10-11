@@ -330,10 +330,10 @@ theorem type_of_call_decimal_comparator_is_sound {xfn : ExtFun} {xs : List Expr}
   split_type_of h₈ ; rename_i h₈ hl₈ hr₈
   have ⟨_, v₂, hl₂, hr₂⟩ := ih₂ h₁ h₂ h₈
   simp [EvaluatesTo] at hl₁
-  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
   simp [hl₁] <;>
   try { exact type_is_inhabited_bool}
-  rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ <;>
+  rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ | hl₂ <;>
   simp [hl₂] <;>
   try { exact type_is_inhabited_bool}
   rw [hl₇] at  hr₁
@@ -403,10 +403,10 @@ theorem type_of_call_isInRange_comparator_is_sound {xs : List Expr} {c₁ c₂ :
   split_type_of h₈ ; rename_i h₈ hl₈ hr₈
   have ⟨_, v₂, hl₂, hr₂⟩ := ih₂ h₁ h₂ h₈
   simp [EvaluatesTo] at hl₁
-  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
   simp [hl₁] <;>
   try { exact type_is_inhabited_bool}
-  rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ <;>
+  rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ | hl₂ <;>
   simp [hl₂] <;>
   try { exact type_is_inhabited_bool}
   rw [hl₇] at hr₁
@@ -505,7 +505,7 @@ theorem type_of_call_toTime_is_sound {xs : List Expr} {c₁ c₂ : Capabilities}
   split_type_of h₇ ; rename_i h₇ hl₇ hr₇
   have ⟨_, v₁, hl₁, hr₁⟩ := ih₁ h₁ h₂ h₇
   simp only [EvaluatesTo] at hl₁
-  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
   simp only [hl₁, Except.bind_err, Except.error.injEq, reduceCtorEq, or_self, or_false, or_true,
     true_and] <;>
   try { exact type_is_inhabited_ext}
@@ -563,7 +563,7 @@ theorem type_of_call_toDate_is_sound {xs : List Expr} {c₁ c₂ : Capabilities}
   split_type_of h₇ ; rename_i h₇ hl₇ hr₇
   have ⟨_, v₁, hl₁, hr₁⟩ := ih₁ h₁ h₂ h₇
   simp only [EvaluatesTo] at hl₁
-  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
   simp only [hl₁, Except.bind_err, Except.error.injEq, reduceCtorEq, or_self, or_false, or_true,
     true_and] <;>
   try { exact type_is_inhabited_ext}
@@ -631,7 +631,7 @@ theorem type_of_call_offset_is_sound {xs : List Expr} {c₁ c₂ : Capabilities}
     split_type_of h₇ ; rename_i h₇ hl₇ hr₇
     have ⟨_, v₁, hl₁, hr₁⟩ := ih₁ h₁ h₂ h₇
     simp only [EvaluatesTo] at hl₁
-    rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+    rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
     simp only [hl₁, Except.bind_err, Except.error.injEq, reduceCtorEq, or_self, or_false, or_true, true_and] <;>
     try { exact type_is_inhabited_ext}
     rw [hl₇] at hr₁
@@ -642,7 +642,7 @@ theorem type_of_call_offset_is_sound {xs : List Expr} {c₁ c₂ : Capabilities}
     split_type_of h₈ ; rename_i h₈ hl₈ hr₈
     have ⟨_, v₂, hl₂, hr₂⟩ := ih₂ h₁ h₂ h₈
     simp only [EvaluatesTo] at ih₂
-    rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ <;>
+    rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ | hl₂ <;>
     simp only [hl₂, Except.bind_err, Except.bind_ok, Except.error.injEq, reduceCtorEq, or_self,
       or_false, or_true, true_and] <;>
     try { exact type_is_inhabited_ext}
@@ -710,7 +710,7 @@ theorem type_of_call_durationSince_is_sound {xs : List Expr} {c₁ c₂ : Capabi
     split_type_of h₇ ; rename_i h₇ hl₇ hr₇
     have ⟨_, v₁, hl₁, hr₁⟩ := ih₁ h₁ h₂ h₇
     simp only [EvaluatesTo] at hl₁
-    rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+    rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
     simp only [hl₁, Except.bind_err, Except.error.injEq, reduceCtorEq, or_self, or_false, or_true,
       true_and] <;>
     try { exact type_is_inhabited_ext}
@@ -722,7 +722,7 @@ theorem type_of_call_durationSince_is_sound {xs : List Expr} {c₁ c₂ : Capabi
     split_type_of h₈ ; rename_i h₈ hl₈ hr₈
     have ⟨_, v₂, hl₂, hr₂⟩ := ih₂ h₁ h₂ h₈
     simp only [EvaluatesTo] at hl₂
-    rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ <;>
+    rcases hl₂ with hl₂ | hl₂ | hl₂ | hl₂ | hl₂ <;>
     simp only [hl₂, Except.bind_err, Except.bind_ok, Except.error.injEq, reduceCtorEq, or_self,
       or_false, or_true, true_and] <;>
     try { exact type_is_inhabited_ext}
@@ -790,7 +790,7 @@ theorem type_of_call_ipAddr_recognizer_is_sound {xfn : ExtFun} {xs : List Expr} 
   split_type_of h₇ ; rename_i h₇ hl₇ hr₇
   have ⟨_, v₁, hl₁, hr₁⟩ := ih₁ h₁ h₂ h₇
   simp [EvaluatesTo] at hl₁
-  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
   simp [hl₁] <;>
   try { exact type_is_inhabited_bool}
   rw [hl₇] at hr₁
@@ -863,7 +863,7 @@ theorem type_of_call_duration_converter_is_sound {xfn : ExtFun} {xs : List Expr}
   split_type_of h₇ ; rename_i h₇ hl₇ hr₇
   have ⟨_, v₁, hl₁, hr₁⟩ := ih₁ h₁ h₂ h₇
   simp [EvaluatesTo] at hl₁
-  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ <;>
+  rcases hl₁ with hl₁ | hl₁ | hl₁ | hl₁ | hl₁ <;>
   simp [hl₁] <;>
   try { exact type_is_inhabited_int}
   rw [hl₇] at hr₁

@@ -45,6 +45,69 @@ open Cedar.Spec
 open Factory
 
 /--
+Footprint of a quantifier predicate `p` compiled against the element term `it`
+(D-70, option A): the entity-typed compiled terms of the `it`-FREE subexpressions
+of `p`, in the same `ofEntity`/`ofBranch` shape as `footprint` for `Expr` (over
+`compilePred`). An `it`-dependent subexpression contributes only its `it`-free
+children — its own compiled term mentions `it` and so cannot be grounded.
+-/
+def footprintPred (p : PredExpr) (it : Term) (εnv : SymEnv) : Set Term :=
+  match p with
+  | .item                  => Set.empty
+  | .lit _                 => ofEntity p
+  | .var _                 => ofEntity p
+  | .ite c t e             => ofBranch c (footprintPred c it εnv) (footprintPred t it εnv) (footprintPred e it εnv)
+  | .and a b               => ofBranch a (footprintPred a it εnv) (footprintPred b it εnv) Set.empty
+  | .or a b                => ofBranch a (footprintPred a it εnv) Set.empty (footprintPred b it εnv)
+  | .binaryApp _ a b       => ofEntity p ∪ footprintPred a it εnv ∪ footprintPred b it εnv
+  | .getAttr e _           => ofEntity p ∪ footprintPred e it εnv
+  | .hasAttr e _
+  | .extHasAttr e _ _
+  | .unaryApp _ e          => footprintPred e it εnv
+  | .call _ xs             => xs.mapUnion₁ (λ ⟨xᵢ, _⟩ => footprintPred xᵢ it εnv)
+  | .record m              => m.mapUnion₂ (λ ⟨(_, xᵢ), _⟩ => footprintPred xᵢ it εnv)
+where
+  ofEntity (q : PredExpr) : Set Term :=
+    if q.mentionsIt then Set.empty
+    else match compilePred q it εnv with
+      | .ok t => if t.typeOf.isOptionEntityType then Set.singleton t else Set.empty
+      | _     => Set.empty
+  ofBranch (q : PredExpr) (ft₁ ft₂ ft₃ : Set Term) : Set Term :=
+    match compilePred q it εnv with
+    | .ok (.some (.bool true))  => ft₂
+    | .ok (.some (.bool false)) => ft₃
+    | .ok _                     => ft₁ ∪ ft₂ ∪ ft₃
+    | .error _                  => Set.empty
+
+/--
+The `it`-free entity subterms of a quantifier predicate `p` whose receiver is
+`x₁`: compile the receiver, and if it is a set term, collect `footprintPred` of
+`p` against the reserved element variable; otherwise empty (D-70, option A).
+Kept separate from `footprint` so the receiver `compile`/`typeOf` match does not
+multiply `footprint.induct`'s `.all` case.
+-/
+def footprintAllPred (p : PredExpr) (x₁ : Expr) (εnv : SymEnv) : Set Term :=
+  match compile x₁ εnv with
+  | .ok t =>
+    match t with
+    | .none _ => Set.empty    -- D-69: a `.none` receiver compiles no predicate
+    | _ =>
+    match (Factory.option.get t).typeOf with
+    | .set elemTy =>
+      -- D-71: MIRROR compile's `.all` arm. A literal set of literal elements compiles
+      -- the predicate PER ELEMENT (`it := someOf vi`); otherwise it binds the reserved
+      -- element variable. The footprint follows the same split so each compiled term is
+      -- covered exactly (ofBranch already mirrors compileIf's laziness this way).
+      match Factory.option.get t with
+      | .set (Data.Set.mk vs) _ =>
+        if vs.all (·.isLiteral)
+        then vs.mapUnion (fun vi => footprintPred p (Factory.someOf vi) εnv)
+        else footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
+      | _ => footprintPred p (Factory.someOf (.var (Factory.anyAllItVar elemTy))) εnv
+    | _           => Set.empty
+  | .error _ => Set.empty
+
+/--
 Returns the terms corresponding to subexpressions of `x` of the following form:
 
   * A variable term with an entity type
@@ -73,9 +136,11 @@ def footprint (x : Expr) (εnv : SymEnv) : Set Term :=
   | .call _ xs
   | .set xs            => xs.mapUnion₁ (λ ⟨xᵢ, _⟩ => footprint xᵢ εnv)
   | .record axs        => axs.mapUnion₂ (λ ⟨(_, xᵢ), _⟩ => footprint xᵢ εnv)
-  -- Empty until SymCC supports `.all` (anyall Phase 5): `compile` rejects
-  -- `.all`, so no verification query over such an expression is ever built.
-  | .all _ _           => Set.empty
+  -- The receiver's own footprint, plus the `it`-free entity subterms of the
+  -- predicate compiled against the reserved element variable (D-70, option A).
+  -- `footprintAllPred` keeps the receiver `compile`/`typeOf` match OUT of this
+  -- `match x`, so `footprint.induct` yields a single clean `.all` case.
+  | .all x₁ p          => footprint x₁ εnv ∪ footprintAllPred p x₁ εnv
 where
   ofEntity : Set Term :=
     match compile x εnv with

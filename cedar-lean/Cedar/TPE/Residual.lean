@@ -43,6 +43,10 @@ inductive Residual where
   | record (map : List (Attr × Residual))  (ty : CedarType)
   | call (xfn : ExtFun) (args : List Residual) (ty : CedarType)
   | error (ty : CedarType)
+  /-- Quantifier residual (Part A, faithful whole-node residual per D-43): the
+  receiver residual together with the raw predicate. Mirrors `TypedExpr.all`;
+  per-element TPE of the predicate is deferred to Phase 6.5. -/
+  | all (expr : Residual) (pred : Cedar.Spec.PredExpr) (ty : CedarType)
 deriving Repr, Inhabited
 
 instance : Coe Bool Residual where
@@ -79,6 +83,7 @@ def Residual.typeOf : Residual → CedarType
   | .set _ ty
   | .record _ ty
   | .call _ _ ty
+  | .all _ _ ty
   | .error ty => ty
 
 
@@ -162,6 +167,9 @@ def Residual.evaluate (x : Residual) (req : Request) (es: Entities) : Result Val
   | .call xfn xs _ => do
     let vs ← xs.mapM₁ (fun ⟨x₁, _⟩ => evaluate x₁ req es)
     Cedar.Spec.call xfn vs
+  | .all e p _ => do
+    let s ← (evaluate e req es).as (Set Value)
+    evalAll s (fun v => evaluatePred p v req es)
   | .error _ => .error .extensionError
 termination_by x
 decreasing_by
@@ -172,6 +180,25 @@ decreasing_by
     try simp at h
     omega
 
+
+/-- Literal entity UIDs occurring in a quantifier predicate. Self-contained
+(does not depend on the SymCC concretizer's `PredExpr.entityUIDs`), so the
+batched evaluator loads the entities an `.all` predicate's literals reference. -/
+def PredExpr.litUIDs : Cedar.Spec.PredExpr → Set EntityUID
+  | .item                => Set.empty
+  | .lit (.entityUID uid) => Set.singleton uid
+  | .lit _               => Set.empty
+  | .var _               => Set.empty
+  | .ite x₁ x₂ x₃        => PredExpr.litUIDs x₁ ∪ PredExpr.litUIDs x₂ ∪ PredExpr.litUIDs x₃
+  | .and x₁ x₂
+  | .or x₁ x₂
+  | .binaryApp _ x₁ x₂   => PredExpr.litUIDs x₁ ∪ PredExpr.litUIDs x₂
+  | .unaryApp _ x₁
+  | .getAttr x₁ _
+  | .hasAttr x₁ _
+  | .extHasAttr x₁ _ _   => PredExpr.litUIDs x₁
+  | .call _ xs           => xs.mapUnion₁ (λ ⟨x, _⟩ => PredExpr.litUIDs x)
+  | .record axs          => axs.mapUnion₂ (λ ⟨(_, x), _⟩ => PredExpr.litUIDs x)
 
 def Residual.allLiteralUIDs (x : Residual) : Set EntityUID :=
   match x with
@@ -198,6 +225,8 @@ def Residual.allLiteralUIDs (x : Residual) : Set EntityUID :=
     x.mapUnion₂ (λ ⟨⟨_attr, v⟩, _⟩ => Residual.allLiteralUIDs v)
   | .call _ x _          =>
     x.mapUnion₁ (λ ⟨v, _⟩ => Residual.allLiteralUIDs v)
+  | .all e p _           =>
+    Residual.allLiteralUIDs e ∪ PredExpr.litUIDs p
 termination_by sizeOf x
 decreasing_by
   any_goals
@@ -261,6 +290,10 @@ def decResidual (x y : Residual) : Decidable (x = y) := by
     exact match decEq ty₁ ty₂ with
     | isTrue h₁ => isTrue (by rw [h₁])
     | isFalse _ => isFalse (by intro h; injection h; contradiction)
+  case all.all x₁ p tx y₁ q ty =>
+    exact match decResidual x₁ y₁, decEq p q, decEq tx ty with
+    | isTrue h₁, isTrue h₂, isTrue h₃ => isTrue (by rw [h₁, h₂, h₃])
+    | isFalse _, _, _ | _, isFalse _, _ | _, _, isFalse _ => isFalse (by intro h; injection h; contradiction)
 
 def decProdAttrResidualList (axs ays : List (Prod Attr Residual)) : Decidable (axs = ays) :=
   match axs, ays with
@@ -306,6 +339,10 @@ def TypedExpr.toResidual : TypedExpr → Residual
   | .set ls ty => .set (ls.map₁ (λ ⟨e, _⟩ => TypedExpr.toResidual e)) ty
   | .record ls ty => .record (ls.map₂ (λ ⟨(a, e), _⟩ => (a, TypedExpr.toResidual e))) ty
   | .call xfn args ty => .call xfn (args.map₁ (λ ⟨e, _⟩ => TypedExpr.toResidual e)) ty
+  -- Part A (D-43, faithful whole-node residual): the quantifier residualizes to
+  -- `Residual.all` with the converted receiver and the raw predicate, preserving
+  -- evaluation. Per-element TPE of the predicate is a Phase-6.5 refinement.
+  | .all expr pred ty => .all (TypedExpr.toResidual expr) pred ty
 decreasing_by
   all_goals (simp_wf ; try omega)
   all_goals

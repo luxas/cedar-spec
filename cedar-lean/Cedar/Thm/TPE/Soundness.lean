@@ -109,5 +109,17 @@ theorem partial_evaluate_is_sound
     exact partial_evaluate_is_sound_call hᵢ₁
   case error ty =>
     exact partial_evaluate_is_sound_error
+  case all e p τ hwt _ _ hᵢ =>
+    -- TPE.evaluate (.all e p ty) = .all (TPE.evaluate e) p ty; both sides reduce
+    -- to `(receiver.evaluate).as Set >>= evalAll (evaluatePred p ·)`. The receiver
+    -- IH equates the receiver results as Options, which suffices.
+    simp only [Residual.evaluate, TPE.evaluate]
+    cases hL : e.evaluate req es <;>
+      cases hR : (TPE.evaluate env e preq pes).evaluate req es <;>
+      simp only [hL, hR, Except.toOption] at hᵢ ⊢ <;>
+      first
+        | (exact hᵢ)
+        | (rename_i vL vR; cases vL <;> cases vR <;>
+            simp_all [Result.as, Coe.coe, Value.asSet, Except.bind_ok, Except.bind_err, Except.toOption])
 
 end Cedar.Thm

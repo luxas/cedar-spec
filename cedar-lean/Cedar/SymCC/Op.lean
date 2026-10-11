@@ -92,6 +92,16 @@ public inductive Op : Type where
   | set.member
   | set.subset
   | set.inter
+  /-- The SymCC encoding node for `Expr.all` (D-52). Applied to
+  `[set, predicate, errorPredicate]`, where `predicate` and `errorPredicate` are
+  boolean Terms over the reserved element variable (`anyAllItVar`): `predicate`
+  denotes `P[it]` and `errorPredicate` denotes "`P` errors on `it`". The result
+  is `.option .bool` (tri-valued, D-35). It encodes under logic `HO_ALL` using
+  two `set.filter` comprehensions (the decidable fragment of Mohamed et al.;
+  `forall`/`exists` are NOT used — cvc5's quantifier instantiation is
+  incomplete): `ite (not (set.filter (λx. errorPredicate[x]) S = ∅)) none
+  (some (set.filter (λx. predicate[x]) S = S))`. -/
+  | set.all
   ---------- Core ADT operators with a trusted mapping to SMT ----------
   | option.get
   | record.get  : Attr → Op
@@ -165,6 +175,7 @@ public def Op.mkName : Op → String
   | Op.set.member    => "set.member"
   | Op.set.subset    => "set.subset"
   | Op.set.inter     => "set.inter"
+  | Op.set.all       => "set.all"
   | Op.option.get    => "option.get"
   | Op.record.get _  => "record.get"
   | Op.string.like _ => "string.like"

@@ -164,6 +164,9 @@ theorem well_typed_implies_wf_type
     all_goals
       simp only [TypedExpr.typeOf]
       constructor
+  | all _ _ =>
+    simp only [TypedExpr.typeOf]
+    constructor
 
 /--
 The result of `typeOf` has a well-formed type.

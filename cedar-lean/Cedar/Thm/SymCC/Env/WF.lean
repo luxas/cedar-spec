@@ -462,6 +462,7 @@ public theorem wt_op_same_domain {εs₁ εs₂ : SymEntities} {op : Op} {ts : L
   case set.member_wt h    => exact Op.WellTyped.set.member_wt h
   case set.subset_wt h h' => exact Op.WellTyped.set.subset_wt h h'
   case set.inter_wt h h'  => exact Op.WellTyped.set.inter_wt h h'
+  case set.all_wt h h' h'' h₄ h₅ h₆ h₇ => exact Op.WellTyped.set.all_wt h h' h'' h₄ h₅ h₆ h₇
   case option.get_wt h    => exact Op.WellTyped.option.get_wt h
   case record.get_wt h h' => exact Op.WellTyped.record.get_wt h h'
   case string.like_wt h   => exact Op.WellTyped.string.like_wt h
@@ -587,12 +588,12 @@ public theorem wf_ρeq_same_domain {εs₁ εs₂ : SymEntities} {ρeq : SymRequ
 := by
   simp only [SymRequest.WellFormed]
   intro h₁ h₂
-  have ⟨hp, hp', ha, ha', hr, hr', hc, hc'⟩ := h₂
+  have ⟨hp, hp', hpn, hps, ha, ha', han, has, hr, hr', hrn, hrs, hc, hc', hcn, hcs⟩ := h₂
   simp only [and_self,
-    wf_term_same_domain h₁ hp, hp',
-    wf_term_same_domain h₁ ha, ha',
-    wf_term_same_domain h₁ hr, hr',
-    wf_term_same_domain h₁ hc, hc']
+    wf_term_same_domain h₁ hp, hp', hpn, hps,
+    wf_term_same_domain h₁ ha, ha', han, has,
+    wf_term_same_domain h₁ hr, hr', hrn, hrs,
+    wf_term_same_domain h₁ hc, hc', hcn, hcs]
 
 public theorem wf_uf_same_domain {εs₁ εs₂ : SymEntities} {f : UnaryFunction} :
   SameDomain εs₁ εs₂ →

@@ -160,6 +160,9 @@ theorem conversion_preserves_evaluation (te : TypedExpr) (req : Request) (es : E
     rw [List.mapM_map, List.mapM_map]
     rw [List.forall₂_implies_mapM_eq]
     apply conversion_preserves_evaluation_forall2
+  | all e p ty =>
+    have ih := conversion_preserves_evaluation e req es
+    simp only [TypedExpr.toExpr, TypedExpr.toResidual, Spec.evaluate, Residual.evaluate, ih]
 end
 
 
@@ -625,6 +628,14 @@ theorem conversion_preserves_typedness:
           apply ExtResidualWellTyped.toDays
           rw [←conversion_preserves_typeof]
           exact h₂
+  | all e p ty' =>
+    simp only [TypedExpr.toResidual] at h ⊢
+    cases h with
+    | all h₁ h₂ h₃ =>
+      apply Residual.WellTyped.all
+      · exact conversion_preserves_typedness h₁
+      · rw [←conversion_preserves_typeof]; exact h₂
+      · exact h₃
 termination_by sizeOf expr
 decreasing_by
   all_goals

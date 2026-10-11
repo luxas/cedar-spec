@@ -617,6 +617,12 @@ theorem Opt.compile_footprint_wf {x : Expr} {εnv : SymEnv} {res : Opt.CompileRe
         have ⟨arg, harg, h₁⟩ := hress res' (by simp)
         exact Opt.compile_footprint_wf h₁
       · simp
+  case all x₁ p =>
+    cases h : SymCC.compile (.all x₁ p) εnv
+    · simp [h]
+    · simp only [h, Except.bind_ok, Except.ok.injEq]
+      intro hres; subst hres
+      exact Cedar.SymCC.footprint_wf _ _
 
 /--
 Lemma pulled out from the below `mutual` block so that we can prove it on its own by induction

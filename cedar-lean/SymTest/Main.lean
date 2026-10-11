@@ -14,6 +14,7 @@
  limitations under the License.
 -/
 
+import SymTest.AnyAll
 import SymTest.Arith
 import SymTest.Datetime
 import SymTest.Decimal
@@ -36,6 +37,7 @@ private def UnitTest.TestSuite.liftToSolverM (t : TestSuite IO) : TestSuite Solv
   ⟨t.name, t.tests.map TestCase.liftToSolverM⟩
 
 private def tests :=
+  AnyAll.E2E.tests ++
   Arith.tests ++
   Has.tests ++
   Like.tests ++

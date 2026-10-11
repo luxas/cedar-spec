@@ -280,6 +280,53 @@ def compileCall (xfn : ExtFun) (ts : List Term) : Result Term := do
   | _, _                          => .error .typeError
 
 /--
+Compile a quantifier predicate (`PredExpr`, the body of `.all`) over the reserved
+element term `it` (a `.option elemTy` term standing for the current element,
+always present). Mirrors `compile` for the set-free predicate fragment; `.item`
+resolves to `it`. Produces an `.option`-typed term exactly like `compile`. -/
+def compilePred (p : PredExpr) (it : Term) (εnv : SymEnv) : Result Term := do
+  match p with
+  | .item => .ok it
+  | .lit l => compilePrim l εnv.entities
+  | .var v => compileVar v εnv.request
+  | .ite x₁ x₂ x₃ =>
+    compileIf (← compilePred x₁ it εnv) (compilePred x₂ it εnv) (compilePred x₃ it εnv)
+  | .and x₁ x₂ =>
+    compileAnd (← compilePred x₁ it εnv) (compilePred x₂ it εnv)
+  | .or x₁ x₂ =>
+    compileOr (← compilePred x₁ it εnv) (compilePred x₂ it εnv)
+  | .unaryApp op₁ x₁ =>
+    let t₁ ← compilePred x₁ it εnv
+    ifSome t₁ (← compileApp₁ op₁ (option.get t₁))
+  | .binaryApp op₂ x₁ x₂ =>
+    let t₁ ← compilePred x₁ it εnv
+    let t₂ ← compilePred x₂ it εnv
+    ifSome t₁ (ifSome t₂ (← compileApp₂ op₂ (option.get t₁) (option.get t₂) εnv.entities))
+  | .hasAttr x a =>
+    let t ← compilePred x it εnv
+    ifSome t (← compileHasAttr (option.get t) a εnv.entities)
+  | .extHasAttr x a as =>
+    let t ← compilePred x it εnv
+    compileExtHasAttr t (a :: as) εnv.entities
+  | .getAttr x a =>
+    let t ← compilePred x it εnv
+    ifSome t (← compileGetAttr (option.get t) a εnv.entities)
+  | .record axs =>
+    let ats ← axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => do .ok (a₁, ← compilePred x₁ it εnv))
+    compileRecord ats
+  | .call xfn xs =>
+    let ts ← xs.mapM₁ (λ ⟨x₁, _⟩ => compilePred x₁ it εnv)
+    compileCall xfn ts
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals
+    first
+      | (rename_i h; replace h := List.sizeOf_lt_of_mem h; omega)
+      | (rename_i h; replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+      | omega
+
+/--
 Given an expression `x` that has type `τ` with respect to a type environment
 `Γ`, and given a well-formed symbolic environment `εnv` that conforms to `Γ`,
 `compile x εnv` succeeds and produces a well-formed term of type `.option τ.toTermType`.
@@ -319,8 +366,63 @@ def compile (x : Expr) (εnv : SymEnv) : Result Term := do
   | .call xfn xs =>
     let ts ← xs.mapM₁ (λ ⟨x₁, _⟩ => compile x₁ εnv)
     compileCall xfn ts
-  -- Symbolic compilation of the `.all` set quantifier is Phase 5 of the
-  -- anyall feature; until then it is conservatively unsupported.
-  | .all _ _ => .error .unsupportedError
+  -- `.all` (D-34/D-51): compile the receiver to a set term, bind the element
+  -- variable, compile the predicate over it, and build the bounded-quantifier
+  -- term. Error propagates from the receiver via `ifSome`; the per-element
+  -- predicate value / error feed the tri-valued `set.all`.
+  | .all x₁ p =>
+    -- D-70 option A / D-71 guard: a predicate whose `in` has an `it`-dependent left
+    -- operand reads the ancestors UF at symbolic element UIDs, which the footprint
+    -- (option A) cannot cover; reject it as unsupported (option B — set-typed footprint
+    -- entries — is deferred to Phase 9). On well-typed Part-A input this never fires.
+    if ¬ p.NoItDependentIn then .error .unsupportedError else
+    let t ← compile x₁ εnv
+    match t with
+    | .none ty =>
+      -- D-69: short-circuit a `.none` (erroring) receiver without compiling the
+      -- predicate, mirroring the laziness of `compileIf`/`compileAnd` (dead branches
+      -- are not type-checked in SymCC). `ifSome (.none _) g = noneOf .bool` for the
+      -- `.option .bool`-typed quantifier value `g`, so return that directly. The
+      -- receiver type check is preserved: a non-set `.none` is still a type error.
+      match ty with
+      | .set _ => .ok (noneOf .bool)
+      | _      => .error .typeError
+    | _ =>
+    match (option.get t).typeOf with
+    | .set elemTy =>
+      -- D-68: fold concretely when the receiver is a *literal* set of *literal*
+      -- elements, by compiling the predicate PER ELEMENT (`it := someOf vi`).
+      -- This produces reduced per-element bodies, which (unlike the old syntactic
+      -- `Factory.set.all` fold) survives recompilation under an interpretation and
+      -- so keeps `compile_interpret .all` true. Otherwise take the symbolic path:
+      -- bind the reserved element variable and build the `.app set.all` node.
+      match option.get t with
+      | .set (Set.mk vs) _ =>
+        if vs.all (·.isLiteral) then do
+          -- D-65 per element: each per-element predicate must be Bool-typed.
+          let pts ← vs.mapM (fun vi => do
+            let pti ← compilePred p (Factory.someOf vi) εnv
+            if (option.get pti).typeOf = .bool then .ok pti else .error .typeError)
+          let conj   := pts.foldr (fun pti acc => and (option.get pti) acc) (true : Term)
+          let anyErr := pts.foldr (fun pti acc => or (not (isSome pti)) acc) (false : Term)
+          .ok (ifSome t (ite anyErr (noneOf .bool) (someOf conj)))
+        else
+          let itVar : Term := Factory.someOf (.var (Factory.anyAllItVar elemTy))
+          let pt ← compilePred p itVar εnv
+          if (option.get pt).typeOf = .bool
+          then .ok (ifSome t (Factory.set.all (option.get t) (option.get pt) (not (isSome pt))))
+          else .error .typeError
+      | _ =>
+        let itVar : Term := Factory.someOf (.var (Factory.anyAllItVar elemTy))
+        let pt ← compilePred p itVar εnv
+        -- D-65: guard that the per-element predicate is Bool-typed, mirroring the
+        -- `.option .bool` guards in `compileIf`/`compileAnd`/`compileOr`. SymCC compiles
+        -- only typechecked input and the Part A type rule types `.all` predicates as Bool,
+        -- so this guard always holds on well-typed input; it lets `set.all` (which requires
+        -- a Bool predicate, D-55a) be built well-formed.
+        if (option.get pt).typeOf = .bool
+        then .ok (ifSome t (Factory.set.all (option.get t) (option.get pt) (not (isSome pt))))
+        else .error .typeError
+    | _ => .error .typeError
 
 namespace Cedar.SymCC

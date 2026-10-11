@@ -18,6 +18,7 @@ module
 
 -- TODO: once we remove the `@[expose]`s below, do all of these need to be public imports?
 public import Cedar.SymCC.Compiler
+public import Cedar.SymCC.Enforcer
 public import Cedar.SymCC.Env
 public import Cedar.SymCC.ExtFun
 public import Cedar.SymCC.Factory
@@ -408,7 +409,13 @@ def compile (x : Expr) (εnv : SymEnv) : Result CompileResult := do
   | .call xfn xs =>
     let ress ← xs.mapM₁ (λ ⟨x₁, _⟩ => compile x₁ εnv)
     compileCall xfn ress
-  -- Unsupported until anyall Phase 5 (mirrors `SymCC.compile`).
-  | .all _ _ => .error .unsupportedError
+  -- D-70 (Phase 5B): `.all` is supported — delegate the compiled term to the shared
+  -- `SymCC.compile` and the footprint to the shared `SymCC.footprint` (which already
+  -- covers the quantifier predicate's `it`-free entity subterms, D-71). This keeps
+  -- `Opt.compile` definitionally equal to `SymCC.compile` + `footprint` on `.all`,
+  -- matching `Opt.compile.correctness`.
+  | .all x₁ p =>
+    let term ← SymCC.compile (.all x₁ p) εnv
+    .ok { term, footprint := Cedar.SymCC.footprint (.all x₁ p) εnv }
 
 namespace Cedar.SymCC

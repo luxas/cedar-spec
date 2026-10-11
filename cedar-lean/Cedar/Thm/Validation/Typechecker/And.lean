@@ -103,7 +103,7 @@ theorem type_of_and_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {env 
     have h₇ := instance_of_ff_is_false ih₁₃
     simp at h₇ ; subst h₇
     simp [EvaluatesTo] at ih₁₂
-    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
     simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool] <;>
     try exact type_is_inhabited_bool
     exact false_is_instance_of_ff
@@ -116,10 +116,10 @@ theorem type_of_and_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {env 
       exists false ; simp [TypedExpr.typeOf, false_is_instance_of_ff]
       cases b₁
       case false =>
-        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
         simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool]
       case true =>
-        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
         simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool]
         simp [GuardedCapabilitiesInvariant] at ih₁₁
         specialize ih₁₁ ih₁₂
@@ -127,7 +127,7 @@ theorem type_of_and_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {env 
         specialize ih₂ h₇ h₂ htx₂
         have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂
         simp [EvaluatesTo] at ih₂₂
-        rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;>
+        rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;>
         simp [ih₂₂]
         rw [hty₂] at ih₂₃
         have h₈ := instance_of_ff_is_false ih₂₃
@@ -136,13 +136,13 @@ theorem type_of_and_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {env 
     case isFalse hbty₂ =>
       cases b₁
       case false =>
-        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
         simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool, GuardedCapabilitiesInvariant, TypedExpr.typeOf] <;>
         try exact type_is_inhabited_bool
         apply instance_of_lubBool
         simp [ih₁₃]
       case true =>
-        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+        rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
         simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool, GuardedCapabilitiesInvariant] <;>
         try exact type_is_inhabited_bool
         simp [GuardedCapabilitiesInvariant] at ih₁₁
@@ -151,7 +151,7 @@ theorem type_of_and_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {env 
         specialize ih₂ h₇ h₂ htx₂
         have ⟨ih₂₁, v₂, ih₂₂, ih₂₃⟩ := ih₂
         simp [EvaluatesTo] at ih₂₂
-        rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;>
+        rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;>
         simp [ih₂₂] <;>
         try exact type_is_inhabited_bool
         rw [hty₂] at ih₂₃

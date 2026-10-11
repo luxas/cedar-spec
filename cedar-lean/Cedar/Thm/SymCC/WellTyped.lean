@@ -389,7 +389,8 @@ theorem wellTypedPolicy_preserves_evaluation
   ]
   have ⟨_, ⟨v, heval, hwt_v⟩⟩ := type_of_is_sound (empty_capabilities_invariant _ _) hinst hty
   simp only [EvaluatesTo, heq] at heval
-  rcases heval with heval | heval | heval | heval
+  rcases heval with heval | heval | heval | heval | heval
+  · simp [heval]
   · simp [heval]
   · simp [heval]
   · simp [heval]

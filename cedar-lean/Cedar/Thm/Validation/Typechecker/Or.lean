@@ -120,7 +120,7 @@ theorem type_of_or_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {env :
     simp [EvaluatesTo] at ih₁₂
     rw [h₅]
     exists (.prim (.bool true))
-    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
     simp [EvaluatesTo, evaluate, Result.as, ih₁₂, Coe.coe, Value.asBool] <;>
     exact true_is_instance_of_tt
   case isFalse =>
@@ -133,8 +133,8 @@ theorem type_of_or_is_sound {x₁ x₂ : Expr} {c₁ c₂ : Capabilities} {env :
     subst hb₂
     simp [EvaluatesTo]
     cases b₁ <;>
-    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
-    rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;>
+    rcases ih₁₂ with ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ | ih₁₂ <;>
+    rcases ih₂₂ with ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ | ih₂₂ <;>
     simp [evaluate, Result.as, Coe.coe, Value.asBool, ih₁₂, ih₂₂, GuardedCapabilitiesInvariant, pure, Except.pure] <;>
     try { simp only [TypedExpr.typeOf]; apply type_is_inhabited_bool }
     case false.inr.inr.inr.inr.inr.inr =>

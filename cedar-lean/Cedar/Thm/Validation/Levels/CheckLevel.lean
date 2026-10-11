@@ -589,6 +589,11 @@ theorem level_spec {tx : TypedExpr} {env : TypeEnv} {n : Nat}:
         exact h₁ h₂
       have ih := @level_spec atx.snd
       exact ih.mpr h₁
+  case all tx₁ p _ =>
+    -- `.all` is never level-valid (D-46): `checkLevel` returns `false` and there
+    -- is no `AtLevel.all` constructor, so both sides are `False`.
+    simp only [TypedExpr.checkLevel, Bool.false_eq_true, iff_false]
+    intro h; cases h
 termination_by tx
 
 end

@@ -73,7 +73,7 @@ private theorem compile_evaluate_hasAttr_record_aux
     simp only [Same.same, SameResults, SameValues, value?_bool, Map.contains, heq,
       Option.isSome_none]
 
-theorem compile_evaluate_hasAttr_record
+public theorem compile_evaluate_hasAttr_record
   {a : Attr} {v₁ : Value} {es : Entities}
   {εs : SymEntities} {t₁ t₂ : Term} {ty₁ : TermType} {rty rty': Map Attr TermType}
   (hwφ₁ : Term.WellFormed εs t₁)
@@ -142,7 +142,7 @@ private theorem compile_evaluate_attrsOrEmpty
   simp only [hrty, heq, and_true, true_and]
   exact (And.intro hwa.left hlit)
 
-theorem compile_evaluate_hasAttr_entity
+public theorem compile_evaluate_hasAttr_entity
   {a : Attr} {v₁ : Value} {es : Entities}
   {εs : SymEntities} {t₁ t₂ : Term} {fₐ : UnaryFunction}
   {ety : EntityType} {rty : Map Attr TermType}
@@ -485,7 +485,7 @@ private theorem compile_evaluate_getAttr_record_aux
     replace ⟨vₐ, hf', hf''⟩ := record_value?_find?_required (wf_term_record_implies_wf_map hwo.left) hnopt hf ih
     simp only [Same.same, SameResults, Map.findOrErr, hf', pe_record_get hf, SameValues, hf'']
 
-theorem compile_evaluate_getAttr_record
+public theorem compile_evaluate_getAttr_record
   {a : Attr} {v₁ : Value} {es : Entities}
   {εs : SymEntities} {t₁ t₂ : Term} {ty₁ tyₐ : TermType} {rty rty': Map Attr TermType}
   (hwφ₁ : Term.WellFormed εs t₁)
@@ -523,7 +523,7 @@ theorem compile_evaluate_getAttr_record
     exact compile_evaluate_getAttr_record_aux hwφ₂ htyₐ ha hf hwo hlit ih
 
 
-theorem compile_evaluate_getAttr_entity
+public theorem compile_evaluate_getAttr_entity
   {a : Attr} {v₁ : Value} {es : Entities}
   {εs : SymEntities} {t₁ t₂ : Term} {fₐ : UnaryFunction}
   {ety : EntityType} {tyₐ : TermType} {rty : Map Attr TermType}

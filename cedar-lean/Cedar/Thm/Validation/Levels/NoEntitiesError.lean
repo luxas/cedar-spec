@@ -225,6 +225,16 @@ theorem as_bool_ne_dne {r : Result Value} (hr : r ≠ .error .entityDoesNotExist
       cases p <;> simp [Result.as, Coe.coe, Value.asBool]
     all_goals simp [Result.as, Coe.coe, Value.asBool]
 
+theorem as_set_ne_dne {r : Result Value} (hr : r ≠ .error .entityDoesNotExist) :
+  (Result.as (Cedar.Data.Set Value) r) ≠ .error .entityDoesNotExist
+:= by
+  cases r
+  case error e =>
+    simp only [Result.as, ne_eq, Except.error.injEq] at hr ⊢
+    exact hr
+  case ok v =>
+    cases v <;> simp [Result.as, Coe.coe, Value.asSet]
+
 /--
 Inversion for the boolean coercion: if `Result.as Bool r = .ok b`, then `r` was
 already `.ok (.prim (.bool b))`.  Lets the guard operators recover the underlying
@@ -324,7 +334,7 @@ theorem level_based_no_dne_and {e₁ e₂ : Expr} {n : Nat} {c₀ c₁ : Capabil
     cases b
     · simp
     · exfalso
-      rcases he₁ with h | h | h | h <;> rw [h] at he₁' <;> simp_all
+      rcases he₁ with h | h | h | h | h <;> rw [h] at he₁' <;> simp_all
   case isFalse hbty =>
     replace ⟨ bty, tx₂, bty₂, c₂, htx, htx₂, hty₂, _ ⟩ := ht
     subst tx
@@ -365,7 +375,7 @@ theorem level_based_no_dne_or {e₁ e₂ : Expr} {n : Nat} {c₀ c₁ : Capabili
     have he₁' := as_bool_ok_inv hb
     cases b
     · exfalso
-      rcases he₁ with h | h | h | h <;> rw [h] at he₁' <;> simp_all
+      rcases he₁ with h | h | h | h | h <;> rw [h] at he₁' <;> simp_all
     · simp
   case isFalse hbty =>
     replace ⟨ bty, tx₂, bty₂, c₂, htx, htx₂, hty₂, _ ⟩ := ht
@@ -395,6 +405,20 @@ theorem level_based_no_dne_unary_app {op : UnaryOp} {e : Expr} {n : Nat} {c₀ c
   rename_i hl₁
   simp only [evaluate]
   exact bind_ne_error (ihe hc hr hcl htx₁ hl₁) (fun v _ => apply₁_ne_dne op v)
+
+theorem level_based_no_dne_all {e : Expr} {p : Cedar.Spec.PredExpr} {tx : TypedExpr} {n : Nat} {c₀ c₁ : Capabilities} {env : TypeEnv} {request : Request} {entities : Entities}
+  (hc : CapabilitiesInvariant c₀ request entities)
+  (hr : InstanceOfWellFormedEnvironment request entities env)
+  (hcl : EntitiesClosedAtLevel entities request n)
+  (ht : typeOf (.all e p) c₀ env = Except.ok (tx, c₁))
+  (hl : tx.AtLevel env n)
+  (ihe : TypedAtLevelHasNoDNEError e) :
+  evaluate (.all e p) request entities ≠ .error .entityDoesNotExist
+:= by
+  -- `.all` is never level-valid (D-46), so `hl` is uninhabitable.
+  have ⟨_, _, _, _, _, _, _, htyeq⟩ := type_of_all_inversion ht
+  subst htyeq
+  cases hl
 
 /--
 Meaty (`.getTag` branch).  For `op = .getTag` the evaluator calls
@@ -499,8 +523,9 @@ theorem level_based_no_dne_get_attr_entity {e : Expr} {tx₁ : TypedExpr} {ty : 
   simp only [evaluate]
   have hl₁' := entity_access_at_level_then_at_level hl₁
   unfold EvaluatesTo at he
-  rcases he with he | he | he | he
+  rcases he with he | he | he | he | he
   · exact absurd he (ihe hc hr hcl ht hl₁')
+  · simp [he]
   · simp [he]
   · simp [he]
   · have hcont := checked_eval_entity_exists hc hr ht hl₁ he (.euid euid) hcl
@@ -530,8 +555,9 @@ theorem level_based_no_dne_get_attr_record {e : Expr} {tx₁ : TypedExpr} {ty : 
   simp only [evaluate]
   have ⟨ hgc, v, he, hi ⟩ := type_of_is_sound hc hr ht
   unfold EvaluatesTo at he
-  rcases he with he | he | he | he
+  rcases he with he | he | he | he | he
   · exact absurd he (ihe hc hr hcl ht hl₁)
+  · simp [he]
   · simp [he]
   · simp [he]
   · rw [hrty] at hi
@@ -770,8 +796,9 @@ theorem level_based_no_dne_expr {e : Expr} {n : Nat} {tx : TypedExpr} {c c₁ : 
         omega
       exact @level_based_no_dne_expr x.snd
     exact level_based_no_dne_record hc hr hcl ht hl ih
-  case all =>
-    simp [typeOf] at ht
+  case all e p =>
+    have ihe := @level_based_no_dne_expr e
+    exact level_based_no_dne_all hc hr hcl ht hl ihe
 termination_by e
 
 /-! ## Policy- and validator-level wrappers

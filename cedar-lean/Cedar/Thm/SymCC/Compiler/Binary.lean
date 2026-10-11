@@ -190,7 +190,7 @@ theorem interpret_getTag {t₁ t₂ : Term} {ety : EntityType} {εs : SymEntitie
   simp only [SymTags.getTag!, SymTags.interpret, interpret_app hI hto.left hwf hto.right,
     interpret_tagOf]
 
-private theorem interpret_compileApp₂ {op₂ : BinaryOp} {t t₁ t₂: Term} {εs : SymEntities} {I : Interpretation}
+theorem interpret_compileApp₂ {op₂ : BinaryOp} {t t₁ t₂: Term} {εs : SymEntities} {I : Interpretation}
   (hwε  : εs.WellFormed)
   (hI   : Interpretation.WellFormed I εs)
   (hwφ₁ : Term.WellFormed εs t₁)
@@ -269,7 +269,7 @@ private theorem interpret_compileApp₂ {op₂ : BinaryOp} {t t₁ t₂: Term} {
       interpret_getTag (wf_εs_implies_wf_tags hwε hτs) hI hwφ₁ hwφ₂ hty₁ hty₂,
       Option.pure_def, Option.bind_some_fun]
 
-private theorem compileApp₂_ok_typeOf {op₂ : BinaryOp} {t₁ t₁' t₂ t₂' t₃ : Term} {εs : SymEntities} (I : Interpretation)
+theorem compileApp₂_ok_typeOf {op₂ : BinaryOp} {t₁ t₁' t₂ t₂' t₃ : Term} {εs : SymEntities} (I : Interpretation)
   (hty₁ : t₁.typeOf = t₁'.typeOf)
   (hty₂ : t₂.typeOf = t₂'.typeOf)
   (hok  : compileApp₂ op₂ t₁ t₂ εs = Except.ok t₃)  :
@@ -314,7 +314,7 @@ private theorem compileApp₂_ok_typeOf {op₂ : BinaryOp} {t₁ t₁' t₂ t₂
     simp only [compileApp₂, ← hty₁, ← hty₂, hty₁', hty₂', ite_true, Except.ok.injEq, exists_eq']
   }
 
-private theorem compileApp₂_ok_typeOf_eq {op₂ : BinaryOp} {t₁ t₁' t₂ t₂' t₃ t₃' : Term} {εs : SymEntities}
+theorem compileApp₂_ok_typeOf_eq {op₂ : BinaryOp} {t₁ t₁' t₂ t₂' t₃ t₃' : Term} {εs : SymEntities}
   (hwε  : εs.WellFormed)
   (hw₁  : t₁.WellFormed εs)
   (hw₂  : t₂.WellFormed εs)
@@ -1251,7 +1251,7 @@ private theorem compileApp₂_getTag_implies_apply₂ {t₁ t₂ t₃ : Term} {v
     replace heq := heq.right.right tag val ht
     simp only [Same.same, SameResults, heq.left, pe_ifTrue_true, heq.right]
 
-private theorem compileApp₂_implies_apply₂ {op₂ : BinaryOp} {t₁ t₂ t₃ : Term} {v₁ v₂ : Value} {es : Entities} {εs : SymEntities}
+public theorem compileApp₂_implies_apply₂ {op₂ : BinaryOp} {t₁ t₂ t₃ : Term} {v₁ v₂ : Value} {es : Entities} {εs : SymEntities}
   (heq  : es ∼ εs)
   (hwf₁ : Value.WellFormed es v₁)
   (hwφ₁ : Term.WellFormed εs t₁)

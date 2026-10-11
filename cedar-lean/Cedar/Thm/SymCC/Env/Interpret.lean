@@ -26,6 +26,7 @@ public import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Interpretation
 import Cedar.Thm.SymCC.Term.Interpret.Lit
 import Cedar.Thm.SymCC.Term.Interpret.WF
+import all Cedar.Thm.SymCC.Term.Interpret.SubstAnyAllIt
 
 /-!
 # Properties of interpretations on symbolic environments
@@ -231,12 +232,20 @@ public theorem interpret_ρeq_wf {εs : SymEntities} {ρeq : SymRequest} {I : In
   (ρeq.interpret I).WellFormed εs
 := by
   intro h₁ h₂
-  have ⟨hp, hp', ha, ha', hr, hr', hc, hc'⟩ := h₂
+  have ⟨hp, hp', hpn, hps, ha, ha', han, has, hr, hr', hrn, hrs, hc, hc', hcn, hcs⟩ := h₂
   simp [SymRequest.WellFormed, SymRequest.interpret,
     interpret_term_wf_fun_typeOf h₁ hp hp',
     interpret_term_wf_fun_typeOf h₁ ha ha',
     interpret_term_wf_fun_typeOf h₁ hr hr',
-    interpret_term_wf_fun_typeOf h₁ hc hc']
+    interpret_term_wf_fun_typeOf h₁ hc hc',
+    isLiteral_noAnyAllItVar _ (interpret_term_lit h₁ hp),
+    isLiteral_noAnyAllItVar _ (interpret_term_lit h₁ ha),
+    isLiteral_noAnyAllItVar _ (interpret_term_lit h₁ hr),
+    isLiteral_noAnyAllItVar _ (interpret_term_lit h₁ hc),
+    isLiteral_noSetAll _ (interpret_term_lit h₁ hp),
+    isLiteral_noSetAll _ (interpret_term_lit h₁ ha),
+    isLiteral_noSetAll _ (interpret_term_lit h₁ hr),
+    isLiteral_noSetAll _ (interpret_term_lit h₁ hc)]
 
 public theorem interpret_εnv_wf {εnv : SymEnv} {I : Interpretation} :
   εnv.WellFormed →
@@ -293,7 +302,7 @@ public theorem interpret_εnv_lit {εnv : SymEnv} {I : Interpretation} :
   simp only [SymEnv.isLiteral, SymEnv.interpret, Bool.and_eq_true]
   constructor
   case left =>
-    have ⟨hwp, _, hwa, _, hwr, _, hwc, _⟩ := wf_εnv_implies_wf_ρeq hw
+    have ⟨hwp, _, _, _, hwa, _, _, _, hwr, _, _, _, hwc, _, _, _⟩ := wf_εnv_implies_wf_ρeq hw
     simp only [SymRequest.isLiteral, SymRequest.interpret,
       interpret_term_lit hI hwp, interpret_term_lit hI hwa,
       interpret_term_lit hI hwr, interpret_term_lit hI hwc, Bool.and_self]

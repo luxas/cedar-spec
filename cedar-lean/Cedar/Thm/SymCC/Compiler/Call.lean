@@ -32,65 +32,65 @@ open Batteries Data Spec SymCC Factory
 
 ----- PE lemmas for ExtFuns -----
 
-private theorem pe_decimal_lessThan {d₁ d₂ : Ext.Decimal} :
+public theorem pe_decimal_lessThan {d₁ d₂ : Ext.Decimal} :
   Decimal.lessThan (Term.prim (TermPrim.ext (Ext.decimal d₁))) (Term.prim (TermPrim.ext (Ext.decimal d₂))) =
   Term.prim (TermPrim.bool (decide (d₁ < d₂)))
 := by
   simp only [Decimal.lessThan, pe_ext_decimal_val, pe_bvslt, LT.lt, Int64.lt]
   exact congrArg (fun b => Term.prim (TermPrim.bool b)) Bool.decide_eq_true.symm
 
-private theorem pe_decimal_lessThanOrEqual {d₁ d₂ : Ext.Decimal} :
+public theorem pe_decimal_lessThanOrEqual {d₁ d₂ : Ext.Decimal} :
   Decimal.lessThanOrEqual (Term.prim (TermPrim.ext (Ext.decimal d₁))) (Term.prim (TermPrim.ext (Ext.decimal d₂))) =
   Term.prim (TermPrim.bool (decide (d₁ ≤ d₂)))
 := by
   simp only [Decimal.lessThanOrEqual, pe_ext_decimal_val, pe_bvsle, LE.le, Int64.le]
   exact congrArg (fun b => Term.prim (TermPrim.bool b)) Bool.decide_eq_true.symm
 
-private theorem pe_decimal_greaterThan {d₁ d₂ : Ext.Decimal} :
+public theorem pe_decimal_greaterThan {d₁ d₂ : Ext.Decimal} :
   Decimal.greaterThan (Term.prim (TermPrim.ext (Ext.decimal d₁))) (Term.prim (TermPrim.ext (Ext.decimal d₂))) =
   Term.prim (TermPrim.bool (decide (d₁ > d₂)))
 := by simp only [Decimal.greaterThan, pe_decimal_lessThan, gt_iff_lt]
 
-private theorem pe_decimal_greaterThanOrEqual {d₁ d₂ : Ext.Decimal} :
+public theorem pe_decimal_greaterThanOrEqual {d₁ d₂ : Ext.Decimal} :
   Decimal.greaterThanOrEqual (Term.prim (TermPrim.ext (Ext.decimal d₁))) (Term.prim (TermPrim.ext (Ext.decimal d₂))) =
   Term.prim (TermPrim.bool (decide (d₁ ≥ d₂)))
 := by simp only [Decimal.greaterThanOrEqual, pe_decimal_lessThanOrEqual, ge_iff_le]
 
-private theorem pe_ipaddr_isIpv4 {ip : Ext.IPAddr.IPNet} :
+public theorem pe_ipaddr_isIpv4 {ip : Ext.IPAddr.IPNet} :
   IPAddr.isIpv4 (Term.prim (TermPrim.ext (Ext.ipaddr ip))) = ip.isV4
 := by
   simp only [IPAddr.isIpv4, Ext.IPAddr.IPNet.isV4]
   cases ip <;>
   simp only [pe_ext_ipaddr_isV4_V4, pe_ext_ipaddr_isV4_V6]
 
-private theorem pe_ipaddr_isIpv6 {ip : Ext.IPAddr.IPNet} :
+public theorem pe_ipaddr_isIpv6 {ip : Ext.IPAddr.IPNet} :
   IPAddr.isIpv6 (Term.prim (TermPrim.ext (Ext.ipaddr ip))) = ip.isV6
 := by
   simp only [IPAddr.isIpv6, Ext.IPAddr.IPNet.isV6]
   cases ip <;>
   simp only [pe_ext_ipaddr_isV4_V4, pe_ext_ipaddr_isV4_V6, pe_not_true, pe_not_false]
 
-private theorem pe_ipaddr_isIpv4_V4 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V4_WIDTH} :
+public theorem pe_ipaddr_isIpv4_V4 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V4_WIDTH} :
   IPAddr.isIpv4 (Term.prim (TermPrim.ext (Ext.ipaddr (Ext.IPAddr.IPNet.V4 cidr)))) = true
 := by
   simp only [IPAddr.isIpv4, pe_ext_ipaddr_isV4_V4]
 
-private theorem pe_ipaddr_isIpv4_V6 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V6_WIDTH} :
+public theorem pe_ipaddr_isIpv4_V6 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V6_WIDTH} :
   IPAddr.isIpv4 (Term.prim (TermPrim.ext (Ext.ipaddr (Ext.IPAddr.IPNet.V6 cidr)))) = false
 := by
   simp only [IPAddr.isIpv4, pe_ext_ipaddr_isV4_V6]
 
-private theorem pe_ipaddr_isIpv6_V4 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V4_WIDTH} :
+public theorem pe_ipaddr_isIpv6_V4 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V4_WIDTH} :
   IPAddr.isIpv6 (Term.prim (TermPrim.ext (Ext.ipaddr (Ext.IPAddr.IPNet.V4 cidr)))) = false
 := by
   simp only [IPAddr.isIpv6, pe_ext_ipaddr_isV4_V4, pe_not_true]
 
-private theorem pe_ipaddr_isIpv6_V6 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V6_WIDTH} :
+public theorem pe_ipaddr_isIpv6_V6 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V6_WIDTH} :
   IPAddr.isIpv6 (Term.prim (TermPrim.ext (Ext.ipaddr (Ext.IPAddr.IPNet.V6 cidr)))) = true
 := by
   simp only [IPAddr.isIpv6, pe_ext_ipaddr_isV4_V6, pe_not_false]
 
-private theorem pe_ipaddr_subnetWidth {w : Nat} {cidr : Ext.IPAddr.CIDR w} :
+public theorem pe_ipaddr_subnetWidth {w : Nat} {cidr : Ext.IPAddr.CIDR w} :
   IPAddr.subnetWidth w (cidrPrefixTerm cidr) = Ext.IPAddr.CIDR.subnetWidth cidr
 := by
   simp only [IPAddr.subnetWidth, cidrPrefixTerm, Ext.IPAddr.CIDR.subnetWidth]
@@ -101,26 +101,26 @@ private theorem pe_ipaddr_subnetWidth {w : Nat} {cidr : Ext.IPAddr.CIDR w} :
     have h : w ≤ 2 ^ w := by omega
     simp only [pe_zero_extend h, pe_bvsub, BitVec.sub_eq, BitVec.natCast_eq_ofNat]
 
-private theorem pe_ipaddr_range {w : Nat} {cidr : Ext.IPAddr.CIDR w} :
+public theorem pe_ipaddr_range {w : Nat} {cidr : Ext.IPAddr.CIDR w} :
   IPAddr.range w (Term.prim (TermPrim.bitvec cidr.addr)) (cidrPrefixTerm cidr) =
   (Ext.IPAddr.CIDR.range cidr).map Term.bitvec Term.bitvec
 := by
   simp only [IPAddr.range, pe_ipaddr_subnetWidth, pe_bvlshr, pe_bvshl, pe_bvadd, BitVec.add_eq,
     pe_bvsub, BitVec.sub_eq, Prod.map, Term.bitvec, Ext.IPAddr.CIDR.range]
 
-private theorem pe_ipaddr_rangeV4 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V4_WIDTH} :
+public theorem pe_ipaddr_rangeV4 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V4_WIDTH} :
   IPAddr.rangeV4 (.prim (.ext (Ext.ipaddr (Ext.IPAddr.IPNet.V4 cidr)))) =
   (Ext.IPAddr.CIDR.range cidr).map Term.bitvec Term.bitvec
 := by
   simp only [IPAddr.rangeV4, pe_ext_ipaddr_addrV4_V4, pe_ext_ipaddr_prefixV4_V4, pe_ipaddr_range]
 
-private theorem pe_ipaddr_rangeV6 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V6_WIDTH} :
+public theorem pe_ipaddr_rangeV6 {cidr : Ext.IPAddr.CIDR Ext.IPAddr.V6_WIDTH} :
   IPAddr.rangeV6 (.prim (.ext (Ext.ipaddr (Ext.IPAddr.IPNet.V6 cidr)))) =
   (Ext.IPAddr.CIDR.range cidr).map Term.bitvec Term.bitvec
 := by
   simp only [IPAddr.rangeV6, pe_ext_ipaddr_addrV6_V6, pe_ext_ipaddr_prefixV6_V6, pe_ipaddr_range]
 
-private theorem pe_ipaddr_inRange {w : Nat} {c₁ c₂ : Ext.IPAddr.CIDR w} {rangeV : Term → (Term × Term)} {f : Ext.IPAddr.CIDR w → Ext.IPAddr.IPNet}
+public theorem pe_ipaddr_inRange {w : Nat} {c₁ c₂ : Ext.IPAddr.CIDR w} {rangeV : Term → (Term × Term)} {f : Ext.IPAddr.CIDR w → Ext.IPAddr.IPNet}
   (hpe : ∀ {c}, rangeV (.prim (.ext (Ext.ipaddr (f c)))) = (Ext.IPAddr.CIDR.range c).map Term.bitvec Term.bitvec) :
   IPAddr.inRange rangeV (Term.prim (TermPrim.ext (Ext.ipaddr (f c₁)))) (Term.prim (TermPrim.ext (Ext.ipaddr (f c₂)))) =
   Term.prim (TermPrim.bool (Ext.IPAddr.CIDR.inRange c₁ c₂))
@@ -133,7 +133,7 @@ private theorem pe_ipaddr_inRange {w : Nat} {c₁ c₂ : Ext.IPAddr.CIDR w} {ran
   · simp only [pe_and_false_left, Bool.false_and]
   · simp only [pe_and_true_left, Bool.true_and]
 
-private theorem pe_ipaddr_isInRange {ip₁ ip₂ : Ext.IPAddr.IPNet} :
+public theorem pe_ipaddr_isInRange {ip₁ ip₂ : Ext.IPAddr.IPNet} :
   IPAddr.isInRange (.prim (.ext (Ext.ipaddr ip₁))) (.prim (.ext (Ext.ipaddr ip₂))) =
   ip₁.inRange ip₂
 := by
@@ -147,7 +147,7 @@ private theorem pe_ipaddr_isInRange {ip₁ ip₂ : Ext.IPAddr.IPNet} :
   case V4 => exact pe_ipaddr_inRange pe_ipaddr_rangeV4
   case V6 => exact pe_ipaddr_inRange pe_ipaddr_rangeV6
 
-private theorem pe_ipaddr_isInRangeLit {ip : Ext.IPAddr.IPNet}
+public theorem pe_ipaddr_isInRangeLit {ip : Ext.IPAddr.IPNet}
   {c₄ : Ext.IPAddr.CIDR Ext.IPAddr.V4_WIDTH} {c₆ : Ext.IPAddr.CIDR Ext.IPAddr.V6_WIDTH} :
   IPAddr.inRangeLit (Term.prim (TermPrim.ext (Ext.ipaddr ip))) c₄ c₆ =
   Term.prim (TermPrim.bool (match ip with
@@ -162,19 +162,19 @@ private theorem pe_ipaddr_isInRangeLit {ip : Ext.IPAddr.IPNet}
   case V4 => exact pe_ipaddr_inRange pe_ipaddr_rangeV4
   case V6 => exact pe_ipaddr_inRange pe_ipaddr_rangeV6
 
-private theorem pe_ipaddr_isLoopback {ip : Ext.IPAddr.IPNet} :
+public theorem pe_ipaddr_isLoopback {ip : Ext.IPAddr.IPNet} :
   IPAddr.isLoopback (.prim (.ext (Ext.ipaddr ip))) = ip.isLoopback
 := by
   simp only [IPAddr.isLoopback, Ext.IPAddr.IPNet.isLoopback, pe_ipaddr_isInRangeLit]
   cases ip <;> simp only
 
-private theorem pe_ipaddr_isMulticast {ip : Ext.IPAddr.IPNet} :
+public theorem pe_ipaddr_isMulticast {ip : Ext.IPAddr.IPNet} :
   IPAddr.isMulticast (.prim (.ext (Ext.ipaddr ip))) = ip.isMulticast
 := by
   simp only [IPAddr.isMulticast, Ext.IPAddr.IPNet.isMulticast, pe_ipaddr_isInRangeLit]
   cases ip <;> simp only
 
-private theorem pe_datetime_offset {dt : Ext.Datetime} {dur : Ext.Datetime.Duration}:
+public theorem pe_datetime_offset {dt : Ext.Datetime} {dur : Ext.Datetime.Duration}:
   Datetime.offset (.prim (.ext (Ext.datetime dt))) (.prim (.ext (Ext.duration dur))) =
   match dt.offset dur with
   | none => .none (.prim (.ext .datetime))
@@ -199,7 +199,7 @@ private theorem pe_datetime_offset {dt : Ext.Datetime} {dur : Ext.Datetime.Durat
     simp only [Int64.toInt] at hbmod
     rw [hbmod]
 
-private theorem pe_datetime_durationSince {dt₁ dt₂ : Ext.Datetime}:
+public theorem pe_datetime_durationSince {dt₁ dt₂ : Ext.Datetime}:
   Datetime.durationSince (.prim (.ext (Ext.datetime dt₁))) (.prim (.ext (Ext.datetime dt₂))) =
   match dt₁.durationSince dt₂ with
   | none => .none (.prim (.ext .duration))
@@ -223,7 +223,7 @@ private theorem pe_datetime_durationSince {dt₁ dt₂ : Ext.Datetime}:
     simp only [Int64.toInt] at hbmod
     rw [hbmod]
 
-private theorem pe_datetime_toDate {dt : Ext.Datetime}:
+public theorem pe_datetime_toDate {dt : Ext.Datetime}:
   Datetime.toDate (.prim (.ext (Ext.datetime dt))) =
   match dt.toDate with
   | none => .none (.prim (.ext .datetime))
@@ -289,7 +289,7 @@ private theorem pe_datetime_toDate {dt : Ext.Datetime}:
     simp only [Int64.smod, Int64.toInt_ofBitVec, BitVec.toInt_smod, Int64.toInt_toBitVec] at h₁
     exact BitVec.overflows_false_64.mp h₁
 
-private theorem pe_datetime_toTime {dt : Ext.Datetime}:
+public theorem pe_datetime_toTime {dt : Ext.Datetime}:
   Datetime.toTime (.prim (.ext (Ext.datetime dt))) = .prim (.ext (Ext.duration dt.toTime))
 := by
   simp only [Datetime.toTime, pe_ext_datetime_val, pe_bvsrem, pe_bvadd, pe_bvsle,
@@ -336,11 +336,11 @@ private theorem pe_datetime_toTime {dt : Ext.Datetime}:
       exact h₀
     simp only [h₁, ↓reduceIte, pe_ite_true, pe_ext_duration_ofBitVec, Int64.ofInt, BitVec.ofInt_toInt]
 
-private theorem pe_duration_toMilliseconds {dur : Ext.Datetime.Duration} :
+public theorem pe_duration_toMilliseconds {dur : Ext.Datetime.Duration} :
   Duration.toMilliseconds (.prim (.ext (Ext.duration dur))) = dur.toMilliseconds
 := by simp only [Duration.toMilliseconds, pe_ext_duration_val] ; rfl
 
-private theorem pe_duration_toSeconds {dur : Ext.Datetime.Duration} :
+public theorem pe_duration_toSeconds {dur : Ext.Datetime.Duration} :
   Duration.toSeconds (.prim (.ext (Ext.duration dur))) = dur.toSeconds
 := by simp only [Duration.toSeconds] ; rfl
 
@@ -348,11 +348,11 @@ theorem pe_duration_toMinutes {dur : Ext.Datetime.Duration} :
   Duration.toMinutes (.prim (.ext (Ext.duration dur))) = dur.toMinutes
 := by simp only [Duration.toMinutes] ; rfl
 
-private theorem pe_duration_toHours {dur : Ext.Datetime.Duration} :
+public theorem pe_duration_toHours {dur : Ext.Datetime.Duration} :
   Duration.toHours (.prim (.ext (Ext.duration dur))) = dur.toHours
 := by simp only [Duration.toHours] ; rfl
 
-private theorem pe_duration_toDays {dur : Ext.Datetime.Duration} :
+public theorem pe_duration_toDays {dur : Ext.Datetime.Duration} :
   Duration.toDays (.prim (.ext (Ext.duration dur))) = dur.toDays
 := by simp only [Duration.toDays] ; rfl
 

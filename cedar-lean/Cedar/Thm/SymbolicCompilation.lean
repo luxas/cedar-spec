@@ -208,14 +208,15 @@ the type `TermType.ofType tx.typeOf`.
 theorem compile_well_typed {tx : TypedExpr} {Γ : TypeEnv} :
   Γ.WellFormed →
   TypedExpr.WellTyped Γ tx →
+  tx.SymCCSupported →
   ∃ t : Term,
     compile tx.toExpr (SymEnv.ofEnv Γ) = .ok t ∧
     t.WellFormed (SymEnv.ofEnv Γ).entities ∧
     t.typeOf = .option (TermType.ofType tx.typeOf)
 := by
-  intros hwf hwt
+  intros hwf hwt hnq
   have hwf_tx := ofEnv_wf_for_expr hwf hwt
-  have ⟨t, hok, hty⟩ := compile_well_typed_on_wf_expr (And.intro rfl (And.intro hwt hwf_tx))
+  have ⟨t, hok, hty⟩ := compile_well_typed_on_wf_expr (And.intro rfl (And.intro hwt hwf_tx)) hnq
   have hwf_t := compile_wf hwf_tx hok
   exists t
   simp [hok, hwf_t, hty]
@@ -688,5 +689,36 @@ theorem compile_ok_implies_option {x : Expr} {εnv : SymEnv} {t : Term} :
     simp only [compileRecord]
     apply typeOf_ifAllSome
     apply typeOf_someOf
+  case all x₁ p =>
+    -- D-70 guard, D-69 `.none` receiver, D-68 literal fold, and the symbolic `set.all` path:
+    -- every `.ok` result is option-typed.
+    have hnone : OptionTyped (Factory.noneOf .bool) := ⟨.bool, by simp only [Factory.noneOf, typeOf_term_none]⟩
+    have hsetall : ∀ S P E, OptionTyped (Factory.set.all S P E) := by
+      intro S P E; exact ⟨.bool, by simp only [Factory.set.all, Term.typeOf]⟩
+    split
+    · simp only [reduceCtorEq, false_implies]
+    · cases hr : compile x₁ εnv <;> simp only [Except.bind_err, Except.bind_ok, reduceCtorEq, false_implies]
+      rename_i t₁
+      split
+      · split <;> simp only [Except.ok.injEq, reduceCtorEq, false_implies]
+        intro h ; subst t
+        exact hnone
+      · split
+        · split
+          · split
+            · generalize hm : (List.mapM _ _ : Except SymCC.Error (List Term)) = r
+              cases r <;> simp only [Except.bind_err, Except.bind_ok, Except.ok.injEq, reduceCtorEq, false_implies]
+              intro h ; subst t
+              apply typeOf_ifSome
+              exact typeOf_ite hnone (typeOf_someOf _)
+            · cases hp : compilePred p _ εnv <;> simp only [Except.bind_err, Except.bind_ok, reduceCtorEq, false_implies]
+              split <;> simp only [Except.ok.injEq, reduceCtorEq, false_implies]
+              intro h ; subst t
+              exact typeOf_ifSome (hsetall _ _ _)
+          · cases hp : compilePred p _ εnv <;> simp only [Except.bind_err, Except.bind_ok, reduceCtorEq, false_implies]
+            split <;> simp only [Except.ok.injEq, reduceCtorEq, false_implies]
+            intro h ; subst t
+            exact typeOf_ifSome (hsetall _ _ _)
+        · simp only [reduceCtorEq, false_implies]
 
 end Cedar.Thm

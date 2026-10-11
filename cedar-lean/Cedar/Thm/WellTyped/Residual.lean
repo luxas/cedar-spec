@@ -81,5 +81,20 @@ theorem residual_well_typed_is_sound {r : Residual} {v : Value} {env : TypeEnv} 
     -- h₃ : Except.error Error.extensionError = Except.ok v
     -- This is a contradiction since error ≠ ok
     cases h₃
+  case all x₁ p τ _ _ _ _ =>
+    -- `.all` evaluates (via `evalAll`) to `ok (bool _)` or `quantifierError`;
+    -- a successful result is therefore a boolean, instance of `.bool .anyBool`.
+    simp only [Residual.evaluate] at h₃
+    cases hev : x₁.evaluate request entities <;>
+      rw [hev] at h₃ <;>
+      simp only [Result.as, Except.bind_err, Except.bind_ok, reduceCtorEq] at h₃
+    rename_i rv
+    cases rv <;>
+      simp only [Coe.coe, Value.asSet, Except.bind_ok, Except.bind_err, reduceCtorEq] at h₃
+    rename_i s
+    rcases evalAll_bool_or_qerr s (fun v => evaluatePred p v request entities) with ⟨b, hb⟩ | hq
+    · rw [hb] at h₃; simp only [Except.ok.injEq] at h₃; subst h₃
+      exact bool_is_instance_of_anyBool b
+    · rw [hq] at h₃; simp only [reduceCtorEq] at h₃
 
 end Cedar.Thm

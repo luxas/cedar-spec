@@ -226,6 +226,7 @@ private theorem type_of_wt_op_is_wf {εs : SymEntities} {op : Op} {ts : List Ter
     rename_i ih _
     exact ih a ty h₂
   case' ext_wt h₂ => cases h₂
+  case set.all_wt => exact TermType.WellFormed.option_wf TermType.WellFormed.bool_wf
   all_goals {
     first
     | exact TermType.WellFormed.bool_wf

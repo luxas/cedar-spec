@@ -173,7 +173,8 @@ theorem validation_is_sound_response (policies : Policies) (schema : Schema) (re
   ∀ p ∈ policies, p.id ∈ (isAuthorized request entities policies).erroringPolicies →
     evaluate p.toExpr request entities = .error .entityDoesNotExist ∨
     evaluate p.toExpr request entities = .error .extensionError ∨
-    evaluate p.toExpr request entities = .error .arithBoundsError
+    evaluate p.toExpr request entities = .error .arithBoundsError ∨
+    evaluate p.toExpr request entities = .error .quantifierError
 := by
   intro p hp hmem
   obtain ⟨p', hp', hid, e, herr⟩ := error_of_mem_erroringPolicies hmem
@@ -184,10 +185,11 @@ theorem validation_is_sound_response (policies : Policies) (schema : Schema) (re
   have hev : EvaluatesToBool p.toExpr request entities := hsound p hp
   obtain ⟨b, hev⟩ := hev
   unfold EvaluatesTo at hev
-  rcases hev with h | h | h | h
+  rcases hev with h | h | h | h | h
   · exact Or.inl h
   · exact Or.inr (Or.inl h)
-  · exact Or.inr (Or.inr h)
+  · exact Or.inr (Or.inr (Or.inl h))
+  · exact Or.inr (Or.inr (Or.inr h))
   · rw [herr] at h; exact absurd h (by simp)
 
 end Cedar.Thm

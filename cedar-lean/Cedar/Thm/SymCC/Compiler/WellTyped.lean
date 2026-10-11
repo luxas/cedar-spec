@@ -6,6 +6,11 @@ import Cedar.Thm.SymCC.Compiler.WF
 import Cedar.Thm.SymCC.Env.ofEnv
 import Cedar.Thm.SymCC.Env.WF
 import Cedar.Thm.SymCC.Term.ofType
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.GetAttr
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.ExtHasAttr
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.RecordCall
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.BinaryApp
+import Cedar.Thm.SymCC.Compiler.WellTypedPred.Control
 
 /-!
 This file contains theorems saying that `compile` succeeds
@@ -424,7 +429,7 @@ theorem compile_well_typed_var {v : Var} {ty : CedarType} {Γ : TypeEnv} {εnv :
   CompileWellTyped (.var v ty) εnv
 := by
   have ⟨hεnv, hwt, hwf⟩ := hcond
-  have ⟨⟨⟨_, hprincipal, _, haction, _, hresource, _, hcontext⟩, _⟩, _⟩ := hwf
+  have ⟨⟨⟨_, hprincipal, _, _, _, haction, _, _, _, hresource, _, _, _, hcontext, _, _⟩, _⟩, _⟩ := hwf
   cases hwt with | var hwt =>
   cases hwt
   all_goals simp only [
@@ -1965,22 +1970,45 @@ theorem compile_well_typed_call
 Compiling a well-typed expression should produce a term of the corresponding `TermType`,
 assuming that the expression is well-formed in the symbolic environment.
 -/
+private theorem noQuantifier_set' {ls : List TypedExpr} {ty : CedarType} {x : TypedExpr}
+    (h : (TypedExpr.set ls ty).SymCCSupported = true) (hx : x ∈ ls) : x.SymCCSupported = true := by
+  simp only [TypedExpr.SymCCSupported, List.all_eq_true] at h
+  have := h ⟨x, by simpa using hx⟩ (by simp)
+  simpa using this
+
+private theorem noQuantifier_call' {xfn : ExtFun} {args : List TypedExpr} {ty : CedarType} {x : TypedExpr}
+    (h : (TypedExpr.call xfn args ty).SymCCSupported = true) (hx : x ∈ args) : x.SymCCSupported = true := by
+  simp only [TypedExpr.SymCCSupported, List.all_eq_true] at h
+  have := h ⟨x, by simpa using hx⟩ (by simp)
+  simpa using this
+
+private theorem noQuantifier_record' {m : List (Attr × TypedExpr)} {ty : CedarType} {a : Attr} {x : TypedExpr}
+    (h : (TypedExpr.record m ty).SymCCSupported = true) (hx : (a, x) ∈ m) : x.SymCCSupported = true := by
+  simp only [TypedExpr.SymCCSupported, List.all_attach₂_snd, List.all_eq_true] at h
+  have := h (a, x) hx
+  simpa using this
+
 theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : TypedExpr} :
   CompileWellTypedCondition tx Γ εnv →
+  tx.SymCCSupported →
   CompileWellTyped tx εnv
 := by
-  intros h
+  intros h hnq
   cases tx
   case lit => exact compile_well_typed_lit h
   case var => exact compile_well_typed_var h
   case ite =>
     have ⟨h1, h2, h3⟩ := h.eliminate_ite
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
+    obtain ⟨⟨hq1, hq2⟩, hq3⟩ := hnq
     apply compile_well_typed_ite
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     any_goals assumption
   case and =>
     have ⟨ha, hb⟩ := h.eliminate_or_and ?_
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
+    obtain ⟨hqa, hqb⟩ := hnq
     apply (compile_well_typed_or_and ?_ ?_).right
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
@@ -1988,6 +2016,8 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals simp
   case or =>
     have ⟨ha, hb⟩ := h.eliminate_or_and ?_
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
+    obtain ⟨hqa, hqb⟩ := hnq
     apply (compile_well_typed_or_and ?_ ?_).left
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
@@ -1995,33 +2025,39 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     any_goals simp
   case unaryApp =>
     have hcond := h.eliminate_unaryApp
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_unaryApp
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case binaryApp =>
     have ⟨ha, hb⟩ := h.eliminate_binaryApp
+    simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
+    obtain ⟨hqa, hqb⟩ := hnq
     apply compile_well_typed_binaryApp
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     any_goals assumption
   case getAttr =>
     have hcond := h.eliminate_getAttr
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_getAttr
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case hasAttr =>
     have hcond := h.eliminate_hasAttr
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_hasAttr
     any_goals apply CompileWellTyped.add_wf
     any_goals apply compile_well_typed_on_wf_expr
     all_goals assumption
   case extHasAttr =>
     have hcond := h.eliminate_extHasAttr
+    simp only [TypedExpr.SymCCSupported] at hnq
     apply compile_well_typed_extHasAttr
     · apply CompileWellTyped.add_wf
-      · apply compile_well_typed_on_wf_expr hcond
+      · apply compile_well_typed_on_wf_expr hcond hnq
       · exact hcond
     · exact h
   case set =>
@@ -2029,7 +2065,7 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     apply compile_well_typed_set
     · intros x hx
       apply CompileWellTyped.add_wf
-      apply compile_well_typed_on_wf_expr (hcond x hx)
+      apply compile_well_typed_on_wf_expr (hcond x hx) (noQuantifier_set' hnq hx)
       apply hcond
       assumption
     assumption
@@ -2038,7 +2074,7 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     apply compile_well_typed_record
     · intros a x hx
       apply CompileWellTyped.add_wf
-      apply compile_well_typed_on_wf_expr (hcond a x hx)
+      apply compile_well_typed_on_wf_expr (hcond a x hx) (noQuantifier_record' hnq hx)
       apply hcond
       assumption
     assumption
@@ -2047,10 +2083,27 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
     apply compile_well_typed_call
     · intros x hx
       apply CompileWellTyped.add_wf
-      apply compile_well_typed_on_wf_expr (hcond x hx)
+      apply compile_well_typed_on_wf_expr (hcond x hx) (noQuantifier_call' hnq hx)
       apply hcond
       assumption
     assumption
+  case all x₁ p ty =>
+    -- D-74-INTERIM: `TypedExpr.SymCCSupported (.all _ _ _) = false`, so the guard `hnq`
+    -- is `False` and this arm closes by contradiction. The real arm (reused when D-74
+    -- lands and the guard becomes `x₁.SymCCSupported && p.NoItDependentIn`) is kept below,
+    -- behind the contradiction, so nothing is re-derived from scratch:
+    --
+    --   have ⟨hεnv, hwt, hwf⟩ := h
+    --   simp only [TypedExpr.SymCCSupported, Bool.and_eq_true] at hnq
+    --   obtain ⟨hrecv, hnoit⟩ := hnq        -- hrecv : x₁.SymCCSupported, hnoit : p.NoItDependentIn
+    --   cases hwt with
+    --   | all h₁ h₂ h₃ h₄ =>
+    --     -- Needs: receiver compiles well-typed via the ih; the D-70/D-71 guard passes by
+    --     -- `hnoit`; the per-element predicate compiles Bool via `compilePred_well_typed`
+    --     -- applied to the SOURCE predicate (h₄ + D-73b `p = normalize p₀`). BLOCKED on D-74.
+    --     have hall_arm : CompileWellTyped (.all x₁ p (.bool .anyBool)) εnv := by skip
+    --     exact hall_arm
+    simp only [TypedExpr.SymCCSupported, Bool.false_eq_true] at hnq
   decreasing_by
     repeat case _ =>
       simp [*]; omega
@@ -2068,4 +2121,529 @@ theorem compile_well_typed_on_wf_expr {Γ : TypeEnv} {εnv : SymEnv} {tx : Typed
       have h := List.sizeOf_lt_of_mem hx
       omega
 
+/--
+D-72 step (3), `.unaryApp` arm (mirror of `compile_well_typed_unaryApp`). Driven by
+`typeOfUnaryApp`'s success (not an `op.WellTyped` cases, which the predicate relation
+does not carry): after unfolding `typeOfUnaryApp`, each `ok` branch pins `typ` to
+`.unaryApp op ty₁ resultTy` so `typ.typeOf` reduces to the per-op result type.
+-/
+theorem compilePred_well_typed_unaryApp
+    {op : UnaryOp} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr}
+    {elemTy : TermType} {c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    (hwε : (SymEnv.ofEnv Γ).WellFormed)
+    (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
+    (hitty : it.typeOf = .option elemTy)
+    (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
+    (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (htp : typeOfUnaryApp op ty₁ = .ok (typ, c')) :
+    ∃ t, compilePred (.unaryApp op x₁) it (SymEnv.ofEnv Γ) = .ok t ∧
+      t.typeOf = .option (TermType.ofType typ.typeOf) := by
+  have ⟨hwf_comp_x, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
+  have ⟨hwf_get_comp_x, hty_get_comp_x⟩ := wf_option_get hwf_comp_x hty₁
+  -- Pin `typ` from `typeOfUnaryApp`'s success (the run-37 opener), then reduce
+  -- `compilePred (.unaryApp ..)` to `ifSome t₁ (compileApp₁ op (option.get t₁))`.
+  unfold typeOfUnaryApp at htp
+  split at htp <;>
+    simp only [Function.comp_apply, Validation.ok, Except.ok.injEq, Prod.mk.injEq,
+      reduceCtorEq, false_and] at htp
+  case h_6 => simp only [Validation.err, reduceCtorEq] at htp
+  all_goals (first | (obtain ⟨htyp, -⟩ := htp; subst typ) | skip)
+  -- `.not`
+  case _ x hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [typeOf_term_some, TypedExpr.typeOf, TermType.ofType, TermType.option.injEq]
+    apply (wf_not (εs := (SymEnv.ofEnv Γ).entities) ?_ ?_).right
+    · exact hwf_get_comp_x
+    · simp [hty_get_comp_x, hty_expr, TermType.ofType]
+  -- `.neg`
+  case _ hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [TypedExpr.typeOf, TermType.ofType, Factory.ifFalse, Factory.noneOf, Factory.someOf]
+    have ⟨hwf_bvnego_get_expr, hty_bvnego_get_expr⟩ := wf_bvnego hwf_get_comp_x hty_get_comp_x
+    have ⟨hwf_bvneg_get_expr, hty_bvneg_get_expr⟩ := wf_bvneg hwf_get_comp_x hty_get_comp_x
+    apply wf_typeOf_ite
+    any_goals assumption
+    any_goals simp only [typeOf_term_some, typeOf_term_none, TermType.option.injEq]
+    · constructor
+      simp [*]
+      constructor
+    · constructor; assumption
+    · simp [*]
+    · simp [*]
+  -- `.isEmpty`
+  case _ elem_ty hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [Factory.set.isEmpty, Term.typeOf, TypedExpr.typeOf, TermType.ofType,
+      TermType.option.injEq]
+    split
+    · simp [typeOf_bool]
+    · simp only [hty_get_comp_x]
+      apply (wf_eq ?_ ?_ ?_).right
+      any_goals assumption
+      · constructor
+        · intros; contradiction
+        · intros; contradiction
+        · have h : TermType.WellFormed (SymEnv.ofEnv Γ).entities (.set (TermType.ofType elem_ty)) := by
+            simp only [← hty_get_comp_x]
+            apply typeOf_wf_term_is_wf
+            assumption
+          cases h; assumption
+        · constructor
+      · simp only [hty_get_comp_x, Term.typeOf]
+  -- `.like`
+  case _ _ hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp only [Term.typeOf, TypedExpr.typeOf, TermType.ofType, TermType.option.injEq]
+    exact (wf_string_like (εs := (SymEnv.ofEnv Γ).entities) hwf_get_comp_x hty_get_comp_x).right
+  -- `.is`
+  case _ ety₁ ety₂ hty_expr =>
+    simp only [hty_expr, TermType.ofType] at hty_get_comp_x
+    simp only [compilePred, hok₁, Except.bind_ok, compileApp₁, hty_get_comp_x,
+      Factory.someOf, Except.ok.injEq, exists_eq_left']
+    rw [typeOf_ifSome_option]
+    simp [TypedExpr.typeOf, TermType.ofType]
+
+/--
+D-72 step (3), `.hasAttr` arm (fork-independent — `typeOfHasAttr` does not short-circuit
+on constant types). `typeOfHasAttr` always yields a `.bool`-typed result and
+`compileHasAttr` always yields a `.option .bool` term, so from the sub-result type we
+get entity/record-ness, `compileHasAttr_always_ok` gives success, and `compileHasAttr_wf`
+gives the `.option .bool` type. No per-op casing needed.
+-/
+theorem compilePred_well_typed_hasAttr
+    {a : Attr} {x₁ : Cedar.Spec.PredExpr} {ty₁ typ : TypedExpr} {e₁ : Cedar.Spec.Expr}
+    {elemTy : TermType} {c c' : Capabilities} {Γ : TypeEnv} {it t₁ : Term}
+    (hwε : (SymEnv.ofEnv Γ).WellFormed)
+    (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
+    (hitty : it.typeOf = .option elemTy)
+    (hok₁ : compilePred x₁ it (SymEnv.ofEnv Γ) = .ok t₁)
+    (hty₁ : t₁.typeOf = .option (TermType.ofType ty₁.typeOf))
+    (htp : typeOfHasAttr ty₁ e₁ a c Γ = .ok (typ, c')) :
+    ∃ t, compilePred (.hasAttr x₁ a) it (SymEnv.ofEnv Γ) = .ok t ∧
+      t.typeOf = .option (TermType.ofType typ.typeOf) := by
+  have ⟨hwf_comp_x, _, _⟩ := compilePred_wf hwε hitw hitty hok₁
+  have ⟨hwf_get_comp_x, hty_get_comp_x⟩ := wf_option_get hwf_comp_x hty₁
+  -- From `typeOfHasAttr` success: `ty₁.typeOf` is record or entity, and `typ.typeOf = .bool _`.
+  have hbool_rec :
+      (∃ ety, ty₁.typeOf = .entity ety) ∨ (∃ rty, ty₁.typeOf = .record rty) := by
+    unfold typeOfHasAttr at htp
+    split at htp
+    · rename_i rty h; exact Or.inr ⟨rty, h⟩
+    · rename_i ety h; exact Or.inl ⟨ety, h⟩
+    · simp only [Validation.err, reduceCtorEq] at htp
+  have htyp_bool : ∃ b, typ.typeOf = .bool b := by
+    have hb : ∃ tb, typ = TypedExpr.hasAttr ty₁ a tb ∧ ∃ b, tb = .bool b := by
+      simp only [typeOfHasAttr, hasAttrInRecord, Validation.ok, Validation.err] at htp
+      repeat' split at htp
+      all_goals simp_all only [bind, Except.bind, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq,
+        and_false, false_and, and_true, true_and]
+      all_goals (
+        first
+          | (obtain ⟨rfl, -⟩ := htp; exact ⟨_, rfl, _, rfl⟩)
+          | (subst htp; exact ⟨_, rfl, _, rfl⟩)
+          | exact ⟨_, htp.symm, _, rfl⟩
+          | exact ⟨_, htp, _, rfl⟩)
+    obtain ⟨tb, htypeq, b, htbeq⟩ := hb
+    exact ⟨b, by rw [htypeq, TypedExpr.typeOf, htbeq]⟩
+  -- Receiver is entity/record-typed, so compileHasAttr succeeds and is `.option .bool`.
+  have hgt_rec : (∃ ety, (Factory.option.get t₁).typeOf = .entity ety) ∨
+      (∃ rty, (Factory.option.get t₁).typeOf = .record rty) := by
+    rcases hbool_rec with ⟨ety, h⟩ | ⟨rty, h⟩
+    · exact Or.inl ⟨ety, by simp only [hty_get_comp_x, h, TermType.ofType]⟩
+    · cases rty with | mk rl =>
+      exact Or.inr ⟨Data.Map.mk (TermType.ofRecordType rl),
+        by simp only [hty_get_comp_x, h, TermType.ofType]⟩
+  have ⟨tha, hha⟩ := compileHasAttr_always_ok (a := a) hwε.right hwf_get_comp_x hgt_rec
+  have ⟨hwf_tha, hty_tha⟩ := compileHasAttr_wf hwε.right hwf_get_comp_x hha
+  obtain ⟨b, htyp_bool⟩ := htyp_bool
+  refine ⟨_, by simp only [compilePred, hok₁, Except.bind_ok, hha]; rfl, ?_⟩
+  apply typeOf_ifSome_option
+  rw [hty_tha, htyp_bool]
+  simp only [TermType.ofType]
+
+theorem predExpr_toExpr_eq_lit {x : Cedar.Spec.PredExpr} {p : Prim}
+    (h : x.toExpr = .lit p) : x = .lit p := by
+  cases x <;> simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq, PredExpr.lit.injEq]
+
+/--
+D-72 step (3) / D-73b: a well-typed source predicate `p₀` compiles — AFTER NORMALIZATION —
+to a well-typed term. Recursion is on the SOURCE `p₀` (following `typeOfPred`'s case
+structure), concluding about `compilePred (normalize p₀ …)`; `.and`/`.or`/`.ite`
+short-circuits are handled by `normalize`, and surviving nodes have both operands
+`.bool`-typed from `typeOfAnd`/`typeOfOr`/`typeOfIf` success. Its `.bool` conclusion
+discharges the D-65 Bool guard in the `.all` arm. (binaryApp arm wired; red elsewhere until done.)
+-/
+theorem compilePred_well_typed {p₀ : Cedar.Spec.PredExpr} {itTy : CedarType} {typ : TypedExpr}
+    {c c' : Capabilities} {Γ : TypeEnv} {it : Term}
+    (hwf : Γ.WellFormed)
+    (htp : typeOfPred p₀ itTy c Γ = .ok (typ, c'))
+    (hitw : it.WellFormed (SymEnv.ofEnv Γ).entities)
+    (hitty : it.typeOf = .option (TermType.ofType itTy)) :
+    ∃ t, compilePred (PredExpr.normalize p₀ itTy c Γ) it (SymEnv.ofEnv Γ) = .ok t ∧
+      t.typeOf = .option (TermType.ofType typ.typeOf) := by
+  have hwε := ofEnv_is_wf hwf
+  match p₀ with
+  | .item =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+    obtain ⟨htyp, _⟩ := htp
+    refine ⟨it, by simp only [compilePred], ?_⟩
+    subst htyp; simp only [TypedExpr.typeOf]; exact hitty
+  | .lit l =>
+    simp only [PredExpr.normalize]
+    cases l with
+    | entityUID uid =>
+      simp only [typeOfPred, typeOfLit] at htp
+      split at htp <;> simp only [Validation.ok, Validation.err, Function.comp_apply,
+        Except.ok.injEq, Prod.mk.injEq, reduceCtorEq, if_true] at htp
+      rename_i hcond
+      obtain ⟨htyp, _⟩ := htp; subst htyp
+      have h₁ : Γ.ets.isValidEntityUID uid ∨ Γ.acts.contains uid := by
+        rw [Bool.or_eq_true] at hcond; exact hcond
+      have hvalid : (SymEnv.ofEnv Γ).entities.isValidEntityUID uid = true :=
+        entity_uid_wf_implies_sym_entities_is_valid_entity_uid hwf h₁
+      exact ⟨⊙Term.prim (TermPrim.entity uid),
+        by simp only [compilePred, compilePrim, hvalid, if_true],
+        by simp [TypedExpr.typeOf, Factory.someOf, TermType.ofType]⟩
+    | bool b =>
+      cases b <;>
+        (simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
+          Prod.mk.injEq] at htp
+         obtain ⟨htyp, _⟩ := htp; subst htyp
+         refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
+         simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType])
+    | int i =>
+      simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, _⟩ := htp; subst htyp
+      refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
+      simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType]
+    | string str =>
+      simp only [typeOfPred, typeOfLit, Function.comp_apply, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, _⟩ := htp; subst htyp
+      refine ⟨_, by simp only [compilePred, compilePrim]; rfl, ?_⟩
+      simp [TypedExpr.typeOf, compilePrim, Factory.someOf, TermType.ofType]
+  | .var v =>
+    simp only [PredExpr.normalize]
+    cases v <;>
+      (simp only [typeOfPred, typeOfVar, Function.comp_apply, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+       obtain ⟨htyp, _⟩ := htp; subst htyp
+       exact ⟨_,
+         by simp only [compilePred, compileVar, SymEnv.ofEnv, SymRequest.ofRequestType,
+              Term.typeOf, TermType.ofType, TermType.isEntityType, TermType.isRecordType, if_true]; rfl,
+         by simp [compilePred, compileVar, SymEnv.ofEnv, SymRequest.ofRequestType,
+              Term.typeOf, TermType.ofType, TypedExpr.typeOf, Factory.someOf]⟩)
+  | .unaryApp op x₁ =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_unaryApp hwε hitw hitty hok₁ hty₁ htp
+  | .hasAttr x₁ a =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_hasAttr hwε hitw hitty hok₁ hty₁ htp
+  | .getAttr x₁ a =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_getAttr hwε hitw hitty hok₁ hty₁ htp
+  | .extHasAttr x₁ a attrs =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hehp : typeOfExtHasAttr ty₁ x₁.toExpr (a :: attrs) c Γ <;> rw [hehp] at htp <;>
+      simp only [Validation.ok, Validation.err, Except.bind_ok, Except.bind_err, Except.ok.injEq,
+        Prod.mk.injEq, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨bty, c₂⟩ := r₂
+    obtain ⟨htyp, _⟩ := htp; subst htyp
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    exact compilePred_well_typed_extHasAttr hwε hitw hitty hok₁ hty₁ hehp
+  | .binaryApp op x₁ x₂ =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hx₂ : typeOfPred x₂ itTy c Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+    refine compilePred_well_typed_binaryApp hwε hitw hitty hok₁ hty₁ hok₂ hty₂ ?_ ?_ htp
+    · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
+    · intro pr he; rw [predExpr_toExpr_eq_lit he]; simp only [PredExpr.normalize]
+  | .ite x₁ x₂ x₃ =>
+    simp only [typeOfPred] at htp
+    cases hxc : typeOfPred x₁ itTy c Γ <;> rw [hxc] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i rc; obtain ⟨tyc, c₁⟩ := rc
+    cases hx₂ : typeOfPred x₂ itTy (c ∪ c₁) Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    cases hx₃ : typeOfPred x₃ itTy c Γ <;> rw [hx₃] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₃; obtain ⟨ty₃, c₃⟩ := r₃
+    have ⟨tc, hokc, htyc⟩ := compilePred_well_typed hwf hxc hitw hitty
+    have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+    have ⟨t₃, hok₃, hty₃⟩ := compilePred_well_typed hwf hx₃ hitw hitty
+    have ⟨hwfc, _, _⟩ := compilePred_wf hwε hitw hitty hokc
+    have ⟨hwf₂, _, _⟩ := compilePred_wf hwε hitw hitty hok₂
+    have ⟨hwf₃, _, _⟩ := compilePred_wf hwε hitw hitty hok₃
+    simp only [PredExpr.normalize, hxc]
+    match hbc : tyc.typeOf with
+    | .bool .tt =>
+      have htcb : tc.typeOf = .option .bool := by rw [htyc, hbc]; simp only [TermType.ofType]
+      simp only [typeOfIf, hbc, bind, Except.bind, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp
+      have ⟨t, hci, hcty⟩ := compileIf_ok hwfc hwf₂ hwf₂ htcb hty₂ hty₂
+      have htt : typ.typeOf = ty₂.typeOf := by rw [← htyp]; simp only [TypedExpr.typeOf]
+      exact ⟨t, by simp only [compilePred, hokc, hok₂, Except.bind_ok, hci], by rw [hcty, htt]⟩
+    | .bool .ff =>
+      have htcb : tc.typeOf = .option .bool := by rw [htyc, hbc]; simp only [TermType.ofType]
+      simp only [typeOfIf, hbc, bind, Except.bind, Validation.ok, Except.ok.injEq,
+        Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp
+      have ⟨t, hci, hcty⟩ := compileIf_ok hwfc hwf₃ hwf₃ htcb hty₃ hty₃
+      have htt : typ.typeOf = ty₃.typeOf := by rw [← htyp]; simp only [TypedExpr.typeOf]
+      exact ⟨t, by simp only [compilePred, hokc, hok₃, Except.bind_ok, hci], by rw [hcty, htt]⟩
+    | .bool .anyBool =>
+      have htcb : tc.typeOf = .option .bool := by rw [htyc, hbc]; simp only [TermType.ofType]
+      simp only [typeOfIf, hbc, bind, Except.bind, Validation.ok] at htp
+      split at htp
+      case _ τ hlub =>
+        simp only [Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+        obtain ⟨htyp, -⟩ := htp
+        have hofeq : TermType.ofType ty₂.typeOf = TermType.ofType ty₃.typeOf := lub_implies_ofType_eq hlub
+        rw [hofeq] at hty₂
+        have ⟨t, hci, hcty⟩ := compileIf_ok hwfc hwf₂ hwf₃ htcb hty₂ hty₃
+        have htt : typ.typeOf = τ := by rw [← htyp]; simp only [TypedExpr.typeOf]
+        refine ⟨t, by simp only [compilePred, hokc, hok₂, hok₃, Except.bind_ok, hci], ?_⟩
+        rw [hcty, htt, lub_result_ofType_eq hlub, hofeq]
+      case _ hlub =>
+        simp only [Validation.err, reduceCtorEq] at htp
+    | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+      exfalso; simp only [typeOfIf, hbc, Validation.err, reduceCtorEq] at htp
+  | .and x₁ x₂ =>
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hx₂ : typeOfPred x₂ itTy (c ∪ c₁) Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    simp only [PredExpr.normalize, hx₁]
+    -- Case on the left operand's bool subtype (= `normalize`'s and-fold condition).
+    match hb₁ : ty₁.typeOf with
+    | .bool .ff =>
+      -- `typeOfAnd` short-circuits: `typ = ty₁`.
+      simp only [typeOfAnd, hb₁, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp; subst htyp
+      exact ⟨t₁, hok₁, hty₁⟩
+    | .bool .tt =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfAnd, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_and hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .bool .anyBool =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfAnd, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_and hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+      exfalso; simp only [typeOfAnd, hb₁, Validation.err, reduceCtorEq] at htp
+  | .or x₁ x₂ =>
+    simp only [typeOfPred] at htp
+    cases hx₁ : typeOfPred x₁ itTy c Γ <;> rw [hx₁] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₁; obtain ⟨ty₁, c₁⟩ := r₁
+    cases hx₂ : typeOfPred x₂ itTy c Γ <;> rw [hx₂] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i r₂; obtain ⟨ty₂, c₂⟩ := r₂
+    have ⟨t₁, hok₁, hty₁⟩ := compilePred_well_typed hwf hx₁ hitw hitty
+    simp only [PredExpr.normalize, hx₁]
+    match hb₁ : ty₁.typeOf with
+    | .bool .tt =>
+      simp only [typeOfOr, hb₁, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+      obtain ⟨htyp, -⟩ := htp; subst htyp
+      exact ⟨t₁, hok₁, hty₁⟩
+    | .bool .ff =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfOr, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_or hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .bool .anyBool =>
+      have ⟨t₂, hok₂, hty₂⟩ := compilePred_well_typed hwf hx₂ hitw hitty
+      have hb₂ : ∃ b, ty₂.typeOf = .bool b := by
+        have htp' := htp
+        simp only [typeOfOr, hb₁, bind, Except.bind, Validation.ok] at htp'
+        match hty : ty₂.typeOf with
+        | .bool b => exact ⟨b, rfl⟩
+        | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+          exfalso; rw [hty] at htp'; simp only [Validation.err, reduceCtorEq] at htp'
+      obtain ⟨b₂, hb₂⟩ := hb₂
+      exact compilePred_well_typed_or hwε hitw hitty hok₁ hty₁ hok₂ hty₂ hb₁ hb₂ htp
+    | .int | .string | .entity _ | .set _ | .record _ | .ext _ =>
+      exfalso; simp only [typeOfOr, hb₁, Validation.err, reduceCtorEq] at htp
+  | .record axs =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hm : axs.mapM₂ (fun x => (typeOfPred x.1.2 itTy c Γ).map (fun r => (x.1.1, r.1)))
+      <;> rw [hm] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i atys
+    -- `htp : .ok (.record atys M) = .ok (typ, c')`; pin `typ`.
+    have htyp : typ = .record atys
+        (.record (Map.make (atys.map (λ (a, ty) => (a, Qualified.required ty.typeOf))))) := by
+      simp only [Validation.ok, Except.ok.injEq, Prod.mk.injEq] at htp
+      exact htp.left.symm
+    -- Decompose the `mapM₂` into a per-field `Forall₂` over the SOURCE fields.
+    rw [List.mapM₂_eq_mapM (fun x => (typeOfPred x.2 itTy c Γ).map (fun r => (x.1, r.1)))] at hm
+    have hsrc := List.mapM_ok_iff_forall₂.mp hm
+    -- Build the record-arm IH over the NORMALIZED fields `axs.map g`.
+    have ih :
+      List.Forall₂ (λ (ax : Attr × Cedar.Spec.PredExpr) (aty : Attr × TypedExpr) => ax.fst = aty.fst ∧
+        ∃ t, compilePred ax.snd it (SymEnv.ofEnv Γ) = .ok t ∧
+          t.typeOf = .option (TermType.ofType aty.snd.typeOf) ∧
+          t.WellFormed (SymEnv.ofEnv Γ).entities)
+        (axs.map (λ x => (x.1, PredExpr.normalize x.2 itTy c Γ))) atys := by
+      apply List.forall₂_map_left_of_mem
+        (λ (x : Attr × Cedar.Spec.PredExpr) => (x.1, PredExpr.normalize x.2 itTy c Γ))
+        ?_ hsrc
+      intro ax hax aty hR
+      -- From `hR : (typeOfPred ax.2 …).map (fun r => (ax.1, r.1)) = .ok aty`, pin the field.
+      cases hpf : typeOfPred ax.2 itTy c Γ <;> rw [hpf] at hR <;>
+        simp only [Except.map, Except.ok.injEq, reduceCtorEq] at hR
+      rename_i rpf
+      obtain ⟨typf, cpf⟩ := rpf
+      -- `hR : (ax.1, typf) = aty`; recover `aty = (ax.1, typf)`.
+      subst hR
+      -- Recurse on the sub-field `ax.2` (membership gives termination).
+      have ⟨t, hok, hty⟩ := compilePred_well_typed hwf hpf hitw hitty
+      have ⟨hwft, _, _⟩ := compilePred_wf hwε hitw hitty hok
+      exact ⟨rfl, t, hok, hty, hwft⟩
+    -- The record arm's normalized-field list matches `axs.map g` (via `map₂_eq_map_snd`).
+    have hnorm_eq :
+      (axs.map₂ (λ x : {x : (Attr × Cedar.Spec.PredExpr) // sizeOf x.snd < 1 + sizeOf axs} =>
+        match x with | ⟨(a, x), _⟩ => (a, PredExpr.normalize x itTy c Γ)))
+      = axs.map (λ x => (x.1, PredExpr.normalize x.2 itTy c Γ)) := by
+      rw [List.map₂_eq_map_snd (λ x => PredExpr.normalize x itTy c Γ)]
+    rw [hnorm_eq]
+    exact compilePred_well_typed_record ih htyp
+  | .call xfn xs =>
+    simp only [PredExpr.normalize]
+    simp only [typeOfPred] at htp
+    cases hm : xs.mapM₁ (fun x => justType (typeOfPred x.1 itTy c Γ))
+      <;> rw [hm] at htp <;>
+      simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at htp
+    rename_i tys
+    -- Normalized arg list `xs.map₁ (λ ⟨x,_⟩ => normalize x …)` is just `xs.map (normalize · …)`.
+    have hnorm_eq :
+      (xs.map₁ (λ x : {x : Cedar.Spec.PredExpr // x ∈ xs} => PredExpr.normalize x.1 itTy c Γ))
+      = xs.map (λ x => PredExpr.normalize x itTy c Γ) :=
+      List.map₁_eq_map (λ x => PredExpr.normalize x itTy c Γ) xs
+    rw [hnorm_eq]
+    -- `htp : typeOfCall xfn tys (xs.map₁ (·.toExpr)) = .ok (typ, c')` (SOURCE args).
+    -- Decompose the `mapM₁` into a per-arg `Forall₂` over the SOURCE args.
+    rw [List.mapM₁_eq_mapM (fun x => justType (typeOfPred x itTy c Γ))] at hm
+    have hsrc := List.mapM_ok_iff_forall₂.mp hm
+    -- Build the call-arm IH over the NORMALIZED args `xs.map g`.
+    have ih :
+      List.Forall₂ (λ (x : Cedar.Spec.PredExpr) (ty : TypedExpr) =>
+        ∃ t, compilePred x it (SymEnv.ofEnv Γ) = .ok t ∧
+          t.typeOf = .option (TermType.ofType ty.typeOf) ∧
+          t.WellFormed (SymEnv.ofEnv Γ).entities)
+        (xs.map (λ x => PredExpr.normalize x itTy c Γ)) tys := by
+      apply List.forall₂_map_left_of_mem
+        (λ (x : Cedar.Spec.PredExpr) => PredExpr.normalize x itTy c Γ) ?_ hsrc
+      intro x hax ty hR
+      -- `hR : justType (typeOfPred x …) = .ok ty`, so `typeOfPred x … = .ok (ty, _)`.
+      cases hpf : typeOfPred x itTy c Γ <;> rw [hpf] at hR <;>
+        simp only [justType, Except.map, Except.ok.injEq, reduceCtorEq] at hR
+      rename_i rpf
+      obtain ⟨typf, cpf⟩ := rpf
+      subst hR
+      have ⟨t, hok, hty⟩ := compilePred_well_typed hwf hpf hitw hitty
+      have ⟨hwft, _, _⟩ := compilePred_wf hwε hitw hitty hok
+      exact ⟨t, hok, hty, hwft⟩
+    -- Convert the SOURCE `htp` to the NORMALIZED argument list (normalize = id on `.lit`,
+    -- which is all `typeOfCall` reads of the arg exprs).
+    have hagree :
+      List.Forall₂ (λ (e e' : Cedar.Spec.Expr) => ∀ p, e = .lit p → e' = .lit p)
+        (xs.map₁ (λ ⟨x₁, _⟩ => x₁.toExpr))
+        ((xs.map (λ x => PredExpr.normalize x itTy c Γ)).map₁ (λ ⟨x₁, _⟩ => x₁.toExpr)) := by
+      rw [List.map₁_eq_map (λ x : Cedar.Spec.PredExpr => x.toExpr),
+          List.map₁_eq_map (λ x : Cedar.Spec.PredExpr => x.toExpr), List.map_map]
+      clear ih hsrc hnorm_eq htp hm
+      induction xs with
+      | nil => simp only [List.map_nil, List.Forall₂.nil]
+      | cons hd tl ihtl =>
+        simp only [List.map_cons, Function.comp_apply]
+        refine List.Forall₂.cons ?_ ihtl
+        intro p h
+        -- `hd.toExpr = .lit p` ⇒ `hd = .lit p` ⇒ normalize id ⇒ `(normalize hd).toExpr = .lit p`.
+        have hhd : hd = .lit p := by
+          cases hd <;>
+            simp_all only [PredExpr.toExpr, itExpr, reduceCtorEq, Expr.lit.injEq, PredExpr.lit.injEq]
+        subst hhd; simp only [PredExpr.normalize, PredExpr.toExpr]
+    have htp' := typeOfCall_arg_lit_agree_ok hagree htp
+    exact compilePred_well_typed_call ih htp'
+termination_by sizeOf p₀
+decreasing_by
+  all_goals simp_wf
+  all_goals (try omega)
+  all_goals
+    (first
+       | (rename_i h
+          first
+            | (replace h := List.sizeOf_lt_of_mem h; omega)
+            | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+            | omega)
+       | (have h := List.sizeOf_snd_lt_sizeOf_list hax; omega)
+       | (have h := List.sizeOf_lt_of_mem hax; omega))
 end Cedar.Thm

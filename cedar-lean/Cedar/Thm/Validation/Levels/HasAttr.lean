@@ -42,7 +42,7 @@ theorem level_based_slicing_is_sound_has_attr_entity {e : Expr} {tx₁: TypedExp
   specialize ihe hc hr ht hl₁'
   rw [←ihe]
   unfold EvaluatesTo at he
-  rcases he with he | he | he | he <;> simp only [he, Except.bind_err]
+  rcases he with he | he | he | he | he <;> simp only [he, Except.bind_err]
   have hfeq := checked_eval_entity_find_entities_eq_find_slice hc hr ht hl₁ he
   simp [hfeq, hasAttr, attrsOf, Entities.attrsOrEmpty]
 
