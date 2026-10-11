@@ -427,6 +427,27 @@ reverts red drafts (the learned rule — spawn a fresh worker or drive the file 
   SymCC lesson). So each arm is a near-copy of its Expr twin with `typeOf→typeOfPred`,
   `evaluate→evaluatePred`, inheriting the per-op helpers (`typeOfUnaryApp`, `typeOfBinaryApp`,
   `typeOfGetAttr`, `typeOfHasAttr`, …) which `typeOfPred` calls identically on `.toExpr` args.
+- **D-P9c-5 — CAPABILITY THREADING is the real difficulty in `.getAttr`/`.hasAttr`/`.binaryApp`
+  (found while scoping M2; §5.2 under-specified this).** The Expr `.getAttr`/`.hasAttr` soundness
+  leans on `capability_implies_entity_attribute` / `capability_implies_record_attribute`, which read
+  `(x₁, .attr a) ∈ c` as `EvaluatesTo (.hasAttr x₁ a) request entities true` — i.e. capabilities are
+  interpreted through `evaluate`, binding `it`↦`request.principal`, NOT through `evaluatePred`
+  binding `it`↦the real element. `typeOfPred` nonetheless threads capabilities keyed by `x₁.toExpr`
+  (and `.and`/`.ite` extend them with `c ∪ c₁`). So a capability about an `it`-DEPENDENT subterm is
+  meaningless under `evaluate`, and the Expr capability lemmas cannot be reused verbatim. §5.2's "the
+  invariant is not predicate-indexed" is correct for the QUANTIFIER BOUNDARY (`typeOfAll` discards
+  the predicate's OUTPUT caps, D-39) but does NOT by itself discharge the WITHIN-predicate getAttr
+  capability check. **Resolution options for M2's capability arms (next worker, decide in M2):**
+  (a) prove that the capabilities `typeOfPred` consults for a getAttr/hasAttr check are only ever
+  about `it`-free subterms (so `evaluate = evaluatePred` on them, and the Expr lemmas transfer) —
+  likely true because `it` has no attrs capability established (an `it has a` is dropped at the
+  boundary, D-39), but must be proven as a `evaluatePred`-vs-`evaluate` agreement lemma on the
+  capability-keyed subterm; OR (b) state a predicate-aware capability invariant
+  `CapabilitiesInvariantPred c it request entities` (over `evaluatePred` with `it` bound) and thread
+  it, re-proving the two `capability_implies_*` lemmas for `evaluatePred`. Option (a) is lighter if
+  the it-free claim holds; (b) is the general fallback. The `.binaryApp .hasTag`/`.getTag` arms have
+  the same shape (tag capabilities). The `.item`/`.lit`/`.var`/`.unaryApp`/`.record`/`.call` arms do
+  NOT hit this (unaryApp/record/call output `∅` caps and read none from `c`).
 
 **Milestones (9c):**
 - **M1** — foundation: `EvaluatesToPred`, `TypeOfPredIsSound`, prove `.item`/`.lit`/`.var`; stub the
