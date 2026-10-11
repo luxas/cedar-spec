@@ -344,6 +344,12 @@ regression-threshold gate on the smoke summary is a possible later add, but not 
 - **D-P8-unopt** — benchmark pins the un-optimized check verbs for `.all` (D-77 interim); no `_opt`.
 - **D-P8-nonvac** — every quantified row MUST assert a `set.filter`/`HO_ALL` term is present, or the
   harness fails; a folded or rejected policy is never silently recorded.
+- **D-P8-cliff128** (review R1 N-1) — the default `--full` set-size axis now ends at **128**
+  (`full_sizes()` = `{0,1,2,4,8,16,32,64,128}`), folding the cliff onset (N=128, ~4.5 s `sat`;
+  N≥192 OOMs) into the headline sweep instead of leaving it only to the side probe. The dedicated
+  cliff probe (`data/cliff-setsize.json`, `--full --sizes 64,128,192,256`) is run at **repeats 3**.
+  The baseline unroll stays capped at N≤64 (parser overflow), so N=128 is a quantified-only row.
+  Default `--full` wall ≈ 25 s (well under a minute), 0 vacuous rows.
 
 ## User-decision fork — RESOLVED as D-87
 

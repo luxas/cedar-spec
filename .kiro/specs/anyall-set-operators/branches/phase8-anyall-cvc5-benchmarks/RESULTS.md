@@ -15,14 +15,14 @@ numeric body; the harness design and decisions live in `PLAN.md` and
 |---|---|
 | cvc5 | `1.4.1 [git 2b2e844]` |
 | cedar SDK | `4.13.0` |
-| cedar-spec SHA | `b684099` (harness commit) |
+| cedar-spec SHA | `da231bf` (F-2 commit — the full sweep is regenerated from it) |
 | cedar (Rust) SHA | `9fd7bcf5` |
 | per-query timeout | 300 s (DRT `TIMEOUT_DUR`, D-87) |
 | memory cap | 1 GiB (`setrlimit`, via `local_solver()`) |
 | pathway | `unopt` (D-P8-unopt / D-77 — SymCCOpt rejects `.all`) |
 | seed | `0x0a110a11` (hand-built policy text is deterministic; seed only labels the run) |
 | host | 24 logical CPUs, ~92 GiB RAM |
-| main sweep | `--full`, repeats = 3, 114 rows, wall ≈ 10 s, budget not exhausted |
+| main sweep | `--full`, repeats = 3, 117 rows, wall ≈ 25 s, budget not exhausted |
 
 Every quantified row's emitted SMT was asserted to contain a `set.filter` term
 under `(set-logic HO_ALL)` before timing (D-P8-nonvac): **0 vacuous rows**, so no
@@ -43,40 +43,48 @@ D-P8-size). The **baseline** is the same `.all` unrolled over those N members
 
 | N | quantified (ms) | baseline (ms) | Δ encoding (ms) |
 |---:|---:|---:|---:|
-| 0 | 7 | 0 | 7 |
+| 0 | 8 | 0 | 8 |
 | 1 | 9 | 3 | 6 |
 | 2 | 11 | 5 | 6 |
-| 4 | 16 | 8 | 8 |
-| 8 | 30 | 20 | 10 |
-| 16 | 81 | 66 | 15 |
-| 32 | 280 | 242 | 38 |
-| 64 | 1049 | 981 | 68 |
+| 4 | 16 | 9 | 7 |
+| 8 | 31 | 21 | 10 |
+| 16 | 82 | 66 | 16 |
+| 32 | 285 | 239 | 46 |
+| 64 | 1049 | 956 | 93 |
+| 128 | 4494 | — | — |
+
+The baseline unroll is capped at N ≤ 64 (its N-way conjunction overflows the
+Cedar parser past that, D-P8-size), so N = 128 carries a quantified row only; it
+is the cliff onset now folded into the headline sweep (N-1).
 
 Both curves grow super-linearly in N (≈ N^1.6 over this range), and the encoding
-delta grows with N (7 → 68 ms): the two-`set.filter` comprehension costs cvc5
-progressively more as the number of reasoned-about members rises, but it is a
-*modest fraction* of the total — most of the cost is the membership/arithmetic
-reasoning the baseline also pays.
+delta grows with N (8 → 93 ms through N=64): the two-`set.filter` comprehension
+costs cvc5 progressively more as the number of reasoned-about members rises, but
+it is a *modest fraction* of the total — most of the cost is the
+membership/arithmetic reasoning the baseline also pays.
 
 ## 2. The cliff — where cvc5 degrades (`data/cliff-setsize.json`)
 
-Pushing N past the main sweep (`--full --sizes 64,128,192,256`, repeats = 1,
+Pushing N past the main sweep (`--full --sizes 64,128,192,256`, repeats = 3,
 quantified only — the baseline unroll overflows the Cedar parser past N = 64, so
 it is capped there):
 
 | N | outcome | solve (ms) | note |
 |---:|---|---:|---|
-| 64 | sat | 1046 | — |
-| 128 | sat | 4545 | — |
-| 192 | **encode_error** | 5842 | cvc5 process killed by the 1 GiB cap before `bad_alloc` |
-| 256 | **oom** | 6051 | `std::bad_alloc` under the 1 GiB cap |
+| 64 | sat | 1036 | — |
+| 128 | sat | 4458 | — |
+| 192 | **oom** | 5920 | cvc5 process killed under the 1 GiB cap, no exit status |
+| 256 | **oom** | 6111 | `std::bad_alloc` under the 1 GiB cap |
 
 **The practical cliff is N ≈ 128 → 192.** cvc5 decides N = 128 in ~4.5 s, then at
-N ≥ 192 the 1 GiB memory cap is exhausted. (`encode_error` vs `oom` is the R4
-heuristic classifier splitting on the solver's termination signature — both are
-the same 1 GiB-cap exhaustion; the raw solver text is kept in each row's `note`
-for audit.) No row ever returned `unknown` or hit the 300 s time budget: on this
-encoding, cvc5 fails by **running out of memory, not time**.
+N ≥ 192 the 1 GiB memory cap is exhausted and both N = 192 and N = 256 classify
+`oom`. The two rows are the same mem-cap death surfaced two ways: at N = 192 the
+process is killed abruptly with no exit status (`terminated unexpectedly with
+status: None` — the `RLIMIT_AS`/OOM-killer signature), and at N = 256 cvc5
+reports `std::bad_alloc` before it dies. The F-2 fix makes `classify_err` label
+both as `oom`; each row keeps the raw solver text in its `note` for audit. No row
+ever returned `unknown` or hit the 300 s time budget: on this encoding, cvc5
+fails by **running out of memory, not time**.
 
 ## 3. The other six dimensions are flat and cheap
 
@@ -86,7 +94,7 @@ All medians below are the symbolic `.all` query at the baseline set size
 | dimension | point | median (ms) |
 |---|---|---:|
 | predicate complexity | `it > 0` → range → `if` → nested `if` | 7 → 8 → 9 → 10 |
-| element type | Long / String / Bool / EntityUID | 7 / 4 / 4 / 3 |
+| element type | Long / String / Bool / EntityUID | 7 / 4 / 3 / 3 |
 | quantifier count | k = 1 / 2 / 3 / 4 sibling `.all`s | 7 / 8 / 11 / 15 |
 | verb | always_allows / always_denies / equivalent / implies / disjoint / never_errors | 7 / 5 / 12 / 7 / 11 / 4 |
 | `.all` vs `.any` | — | 7 / 6 (no asymmetry) |
