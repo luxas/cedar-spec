@@ -409,20 +409,18 @@ bottom-up:
   `compile_well_typed` `.all` arm (lift the D-74-interim) so SymCC `.all` **completeness** holds
   honestly; and (D-79) fold `normalize`'s constant-`ite` to the live branch once instead of
   duplicating, now that `normalize_evaluatePred` licenses it. _Satisfies:_ 5.1 (completeness), 6.4
-  (closes the F2 dead-code debt). _Status: BLOCKED on D-96 (9c implementer, 2026-10-11)._ Landed as
-  red sorry-free drafts under `Thm/Validation/Typechecker/Pred/`: Basic (EvaluatesToPred/
-  TypeOfPredIsSound, WEAK form D-94 — green), UnaryApp (green), And (M3, red draft), and the straight-line
-  arms getAttr/hasAttr/extHasAttr/record/binaryApp/call (red drafts). **BLOCKER D-96:** under weak
-  soundness (D-94) the `.hasAttr`/`.getAttr`/`.extHasAttr`/`.binaryApp .hasTag`/`.getTag` arms are
-  genuinely FALSE in the capability-`.tt` case — `hasAttrInRecord`/`typeOfHasTag` type `it.a`/`it has a`
-  as a precise `.bool .tt` from a `(.var .principal, .attr a)` capability (because `itExpr = .var
-  .principal`, D-95), but the element may lack the attr so the success value is `false`, not an instance
-  of `.tt`. So `type_of_pred_is_sound` (the dispatcher), `normalize_evaluatePred` (M4) and the honest
-  `compile_well_typed` `.all` arm (M5) CANNOT complete in 9c. **Resolution needs the D-95 `itExpr`
-  collision-free fix, which is explicitly OUT of 9c scope** — escalated as a user-level fork. The D-74
-  interim `SymCCSupported (.all _ _ _) := false` remains in place; `lake build Cedar` is green (the new
-  modules are standalone, not wired into `typeOfAll`). Sound arms (item/lit/var/unaryApp/record/call and
-  binaryApp eq/cmp/arith/contains/mem) are mirrorable; the capability arms wait on D-95.
+  (closes the F2 dead-code debt). _Status: IN PROGRESS, D-97 unblocked (9c implementer, 2026-10-11)._
+  **M0 landed GREEN** (D-97): collision-free `it` capability key (`PredExpr.toCapKey`/`itCapKey`,
+  `typeOfPred` rewired) — `lake build Cedar` 616 jobs, `CedarSymTests` 1216/1216, `CedarUnitTests`
+  466/466; resolves the D-95/D-96 parity bug at the source. **Predicate capability invariant landed:**
+  `CapabilitiesInvariantPred` + full-mirror `TypeOfPredIsSound` (`Pred/Basic.lean`, green). Arms GREEN:
+  `.item`/`.lit`/`.var`/`.unaryApp`/`.record` (record axiom-clean). Arms as near-green red drafts: the
+  capability-`.tt` VALUE case of `.hasAttr`/`.getAttr`/`.extHasAttr`/`.binaryApp`(hasTag/getTag) now
+  closes via `hci`; residual red (2–4 errs each) is ONLY the guarded PRODUCTION side, which needs
+  `toCapKey` injectivity via a `TypeEnv.NoReservedItKey` side condition (PLAN §5.7). `.and` (M3) is a
+  red draft (inversion field-shaping). Remaining: finish the production side + `.and`/`.or`/`.ite` +
+  dispatcher + M4 `normalize_evaluatePred` + M5 wiring + M6. D-74 interim guard still in place.
+  _Satisfies (when complete):_ 5.1 (completeness), 6.4 (F2 dead-code debt).
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the

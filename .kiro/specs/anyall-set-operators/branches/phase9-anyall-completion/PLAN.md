@@ -595,3 +595,34 @@ under `branches/phase9-anyall-completion/probe/d70b/`.
 See DECISIONS.md **D-89..D-93** (sub-branch split; D-70 B probe = go; D-74 A as the chosen D-74
 resolution; req-7.3 `AllPartial` shape; D-70 B footprint-entry representation). The forks above are
 recorded there with their recommended defaults.
+
+### 5.7 D-97 implementation notes (9c implementer, resumed 2026-10-11)
+
+- **M0 landed green:** `PredExpr.toCapKey`/`itCapKey` + `typeOfPred` rewire; `lake build Cedar`
+  616 jobs, `CedarSymTests` 1216/1216, `CedarUnitTests` 466/466. Only re-green needed was the
+  Phase-5B `compilePred_well_typed` chain (`predExpr_toCapKey_eq_lit` + the extHasAttr key arg).
+- **Predicate capability invariant landed:** `CapabilitiesInvariantPred` /
+  `GuardedCapabilitiesInvariantPred` + `empty_*` + `capability_union_invariant_pred`;
+  `TypeOfPredIsSound` restated as the full mirror. `.item`/`.lit`/`.var`/`.unaryApp`/`.record`
+  arms GREEN under it (record axiom-clean). The attr/tag arms' VALUE side now closes via `hci`
+  (the capability-`.tt` case that D-96 showed unprovable under weak-only soundness).
+- **OPEN gap for the resumer — the guarded PRODUCTION side needs `toCapKey` injectivity.**
+  `CapabilitiesInvariantPred`'s fields quantify `∀ q, q.toCapKey = e → <fact of q>`. The attr/tag
+  arms' guarded conclusion must PRODUCE `CapabilitiesInvariantPred (singleton (x₁.toCapKey) (.attr a))`,
+  i.e. show the fact for EVERY `q` with `q.toCapKey = x₁.toCapKey` — which needs `q = x₁`, i.e.
+  `toCapKey` injectivity. **`toCapKey` is NOT unconditionally injective**: `.item` and the predicate
+  `.getAttr (.var .context) "__cedar::anyall::it"` both map to `itCapKey`. Injectivity holds only
+  for predicates whose context does NOT declare the reserved attribute — exactly the
+  `TypeEnv.NoReservedItKey` side condition the D-97 brief requires. **Resolution:** (a) add
+  `TypeEnv.NoReservedItKey` (decidable: `"__cedar::anyall::it" ∉ env.reqty.context` keys) and thread
+  it into `TypeOfPredIsSound`; (b) prove `toCapKey_injective_of_no_reserved` (structural induction);
+  (c) use it to discharge the `∀q` production side. Alternatively reformulate
+  `CapabilitiesInvariantPred` so the production side asserts the fact for the single producing `q`
+  (carry the `q` witness in the capability) — avoids injectivity but changes the invariant shape.
+  Until this lands, the attr/tag arms are red ONLY on the production side (2–4 errs each); their value
+  side is done.
+- **Then:** finish `.and` inversion field-shaping (the recurring post-`simp` Eq-vs-And shape of the
+  `h_1` pair-equality — use the exact goal state, not guessed `rfl`/`obtain`), `.or`/`.ite` (same
+  shape as `.and`), the dispatcher `type_of_pred_is_sound`, M4 `normalize_evaluatePred`, M5 wiring,
+  M6. The Lean validator regression (reject `principal has "a" && context.s.all(it.a==1)`) and the
+  DRT differential are M6 non-vacuity items, not yet done.
