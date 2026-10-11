@@ -407,11 +407,6 @@ theorem type_of_pred_binaryApp_is_sound {op₂ : BinaryOp} {x₁ x₂ : PredExpr
       | _ => simp only [hety₁, hety₂, err, reduceCtorEq] at htb
     | _ => simp only [hety₁, err, reduceCtorEq] at htb
 
-  -- `hasTag`: result from `typeOfHasTag`. The output cap is empty (`.ff`/`.tt`
-  -- branches) or a singleton tag capability (`.anyBool` branch). The capability
-  -- `.tt` case IS discharged via `hci.2 x₁.toCapKey x₂.toCapKey _ x₁ x₂ rfl rfl`
-  -- (shown below); the schema `.ff` cases and the singleton guarded ∀q producer
-  -- side (D-95/D-97) are the residual RED gaps (no `sorry`).
   -- `hasTag`: result from `typeOfHasTag`. Output cap is empty (`.ff`/`.tt`
   -- branches) or a singleton tag capability (`.anyBool` branch). Full mirror of
   -- `Typechecker/BinaryApp/HasTag.lean` over `evaluatePred` /
@@ -519,27 +514,105 @@ theorem type_of_pred_binaryApp_is_sound {op₂ : BinaryOp} {x₁ x₂ : PredExpr
       | _ => simp only [hety₁, hety₂, typeOfBinaryApp, err, reduceCtorEq] at htb
     | _ => simp only [hety₁, typeOfBinaryApp, err, reduceCtorEq] at htb
 
-  -- `getTag`: value is the tag type; the capability branch gives tag-present and
-  -- the tag-absent error is admitted via the any-error side. The tag-present
-  -- value typing against the schema mirrors `Typechecker/BinaryApp/GetTag.lean`.
+  -- `getTag`: the only `ok` branch of `typeOfGetTag` is `some (some ty)` with the
+  -- `.tag` capability present, giving result type `ty` and empty caps. Value side
+  -- mirrors `Typechecker/BinaryApp/GetTag.lean`: the entity-not-found and
+  -- tag-not-found errors ride the any-error side, and the tag-present value is an
+  -- instance of the schema tag type (`InstanceOfEntityTags`). The predicate
+  -- invariant supplies `hasTag = true`, ruling out the tag-absent subcase.
   case getTag =>
+    have hofk₁ : PredExpr.ofCapKey x₁.toCapKey = x₁ :=
+      ofCapKey_toCapKey (type_of_pred_implies_no_reserved hnr ht₁)
+    have hofk₂ : PredExpr.ofCapKey x₂.toCapKey = x₂ :=
+      ofCapKey_toCapKey (type_of_pred_implies_no_reserved hnr ht₂)
     simp only [typeOfBinaryApp] at htb
     cases hety₁ : tx₁.typeOf with
     | entity ety₁ =>
       cases hety₂ : tx₂.typeOf with
       | string =>
         simp only [hety₁, hety₂, bind, Except.bind] at htb
+        rw [hety₁] at hinst₁
+        have ⟨uid, huidty, hvv₁⟩ := instance_of_entity_type_is_entity hinst₁
+        rw [hety₂] at hinst₂
+        have ⟨s, hvv₂⟩ := instance_of_string_is_string hinst₂
+        subst hvv₁ hvv₂
         cases hgt : typeOfGetTag ety₁ x₁.toCapKey x₂.toCapKey c₁ env with
         | error e => simp only [hgt, reduceCtorEq] at htb
         | ok p =>
-          obtain ⟨tyr, cr⟩ := p
-          simp only [hgt, ok, Except.ok.injEq, Prod.mk.injEq] at htb
-          obtain ⟨htyeq, hceq⟩ := htb
-          subst htyeq; subst hceq
-          -- RED (unsolved, no sorry): the getTag value is the schema tag type in
-          -- the capability branch, or the tag-absent error on the any-error side;
-          -- and `cr = ∅` from `typeOfGetTag`. Both halves left unproven.
-          refine ⟨?_, ?_⟩
+        obtain ⟨tyr, cr⟩ := p
+        simp only [hgt, ok, Except.ok.injEq, Prod.mk.injEq] at htb
+        obtain ⟨htyeq, hceq⟩ := htb
+        subst htyeq; subst hceq
+        simp only [TypedExpr.typeOf]
+        -- Invert `typeOfGetTag`: only the `some (some tyr)` + cap-present branch is `ok`.
+        have hinv : env.ets.tags? ety₁ = some (some tyr) ∧ (x₁.toCapKey, Key.tag x₂.toCapKey) ∈ c₁ ∧ cr = ∅ := by
+          simp only [typeOfGetTag] at hgt
+          split at hgt
+          · simp only [err, reduceCtorEq] at hgt
+          · split at hgt <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at hgt
+            rename_i hty hin
+            obtain ⟨htyeq, hceq⟩ := hgt
+            subst htyeq; subst hceq
+            exact ⟨hty, hin, rfl⟩
+          · simp only [err, reduceCtorEq] at hgt
+        obtain ⟨htags, hc₁, hcr⟩ := hinv
+        subst hcr
+        -- Operand-error short-circuits ⇒ the whole predicate errors (any-error side).
+        rcases hev₁ with ⟨e₁, hev₁⟩ | hev₁
+        · have ⟨w₀, hw₀⟩ := type_is_inhabited h₂.wf_env (wf_env_implies_wf_tag_type h₂.wf_env htags)
+          exact ⟨empty_guarded_capabilities_invariant_pred,
+            w₀, Or.inl ⟨e₁, by simp only [evaluatePred, hev₁, Except.bind_err]⟩, hw₀⟩
+        rcases hev₂ with ⟨e₂, hev₂⟩ | hev₂
+        · have ⟨w₀, hw₀⟩ := type_is_inhabited h₂.wf_env (wf_env_implies_wf_tag_type h₂.wf_env htags)
+          exact ⟨empty_guarded_capabilities_invariant_pred,
+            w₀, Or.inl ⟨e₂, by simp only [evaluatePred, hev₁, hev₂, Except.bind_ok, Except.bind_err]⟩, hw₀⟩
+        refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
+        -- Both operands are values; `apply₂ .getTag uid s = getTag uid s entities`.
+        subst huidty
+        have hf₁ := Map.findOrErr_returns entities uid Error.entityDoesNotExist
+        rcases hf₁ with ⟨d, hf₁⟩ | hf₁
+        · rw [Map.findOrErr_ok_iff_find?_some] at hf₁
+          cases h₂.instance_of_schema_entry hf₁ with
+          | inl h =>
+            replace ⟨entry, hf₂, _, _, _, htags₂⟩ := h
+            simp only [InstanceOfEntityTags] at htags₂
+            simp only [EntitySchema.tags?, Option.map_eq_some_iff] at htags
+            replace ⟨_, ht₁, ht₂⟩ := htags
+            simp only [hf₂, Option.some.injEq] at ht₁
+            subst ht₁
+            simp only [EntitySchemaEntry.tags?] at htags₂ ht₂
+            split at ht₂
+            · simp only [ht₂] at htags₂
+              have hf₃ := Map.findOrErr_returns d.tags s Error.tagDoesNotExist
+              rcases hf₃ with ⟨v, hf₃⟩ | hf₃
+              · have hfo : Map.findOrErr entities uid Error.entityDoesNotExist = Except.ok d :=
+                  Map.findOrErr_ok_iff_find?_some.mpr hf₁
+                refine ⟨v, Or.inr ?_, ?_⟩
+                · simp only [evaluatePred, hev₁, hev₂, apply₂, getTag, Entities.tags, hfo,
+                    Except.bind_ok, hf₃]
+                · apply htags₂
+                  exact Map.findOrErr_ok_implies_in_values hf₃
+              · -- tag-absent is impossible: the invariant says `hasTag = true`.
+                exfalso
+                replace hc := hci.right x₁.toCapKey x₂.toCapKey hc₁
+                rw [hofk₁, hofk₂] at hc
+                simp only [EvaluatesToPred, evaluatePred, hev₁, hev₂, apply₂, hasTag, Except.bind_ok,
+                  Except.ok.injEq, Value.prim.injEq, Prim.bool.injEq, reduceCtorEq, exists_false, false_or] at hc
+                simp only [Entities.tagsOrEmpty, hf₁, Map.contains_iff_some_find?] at hc
+                replace ⟨_, hc⟩ := hc
+                simp only [Map.findOrErr_err_iff_find?_none, hc, reduceCtorEq] at hf₃
+            · cases ht₂
+          | inr h =>
+            replace ⟨_, _, ⟨_, hacts, _⟩⟩ := h
+            simp only [EntitySchema.tags?, Option.map] at htags
+            split at htags
+            · exact absurd (wf_env_disjoint_ets_acts h₂.wf_env (by assumption) hacts) (by simp)
+            · simp only [reduceCtorEq] at htags
+        · -- entity-not-found error rides the any-error side.
+          have ⟨w₀, hw₀⟩ := type_is_inhabited h₂.wf_env (wf_env_implies_wf_tag_type h₂.wf_env htags)
+          exact ⟨w₀, Or.inl ⟨Error.entityDoesNotExist,
+            by simp only [evaluatePred, hev₁, hev₂, apply₂, getTag, Entities.tags, hf₁,
+              Except.bind_ok, Except.bind_err]⟩, hw₀⟩
       | _ => simp only [hety₁, hety₂, typeOfBinaryApp, err, reduceCtorEq] at htb
     | _ => simp only [hety₁, typeOfBinaryApp, err, reduceCtorEq] at htb
 
