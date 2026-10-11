@@ -99,58 +99,85 @@ theorem type_of_pred_call_inversion {f : ExtFun} {xs : List PredExpr} {itTy : Ce
   exact ⟨hc₂, tys, ty₀, htx, h₁⟩
 
 /--
-Reduce `htc : typeOfCall f tys exprs = ok (.call f tys ty₀, c)` for a CONCRETE
-`f` (after `cases f`), closing the spurious `match xfn` branches via
-`contradiction` and pinning `ty₀` into the goal by `subst`. The constructor arms
-need the `typeOfConstructor` cases; the operator arms fall through to `skip`.
+Prove `call_result_instance_of_typeOfCall` for a CONSTRUCTOR arm (`decimal`,
+`ip`, `datetime`, `duration`), bound by the enclosing `cases f`. `$h` is
+`typeOfCall $fn tys exprs = ok (.call $fn tys ty₀, c)` after `simp only
+[typeOfCall]`; `$mk` is the constructor's partial function, `$extTy` the ext
+type it returns, `$inst` the instance lemma. Validated against the decimal arm.
+
+`typeOfCall` is a `do`-bind over `typeOfConstructor $mk exprs $extTy`; `cases` it
+(error contradicts `$h`); the ok branch pins `ty₀ = $extTy` by unfolding
+`typeOfConstructor`. Then `cases` on `call $fn vs`: the `.ok` row's value is an
+`$extTy`-instance, the spurious `call`-table rows closing by contradiction.
 -/
-local macro "reduce_htc " h:ident e:ident : tactic =>
+local macro "prove_ctor_arm " h:ident e:ident fn:term " mkfn " mk:term " resty " extTy:term " inst " inst:ident " with " vst:ident envt:ident : tactic =>
   `(tactic| (
-    split at $h:ident <;>
-      first
-        | contradiction
-        | (cases hc : typeOfConstructor Ext.Decimal.decimal $e (CedarType.ext ExtType.decimal) <;> simp only [hc] at $h:ident)
-        | (cases hc : typeOfConstructor Ext.IPAddr.ip $e (CedarType.ext ExtType.ipAddr) <;> simp only [hc] at $h:ident)
-        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.parse $e (.ext .datetime) <;> simp only [hc] at $h:ident)
-        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.Duration.parse $e (.ext .duration) <;> simp only [hc] at $h:ident)
-        | skip
-    all_goals (simp only [ok, err, reduceCtorEq, Except.ok.injEq, Prod.mk.injEq,
-      TypedExpr.call.injEq, true_and, and_true, Except.bind_ok, Except.bind_err] at $h:ident)
-    all_goals (obtain ⟨hty, _⟩ := $h:ident; subst hty)))
+    cases hcon : typeOfConstructor $mk $e:ident $extTy with
+    | error e => simp only [hcon, Except.bind_err, reduceCtorEq] at $h:ident
+    | ok val =>
+      simp only [hcon, Validation.ok, Except.bind_ok, Except.ok.injEq, Prod.mk.injEq,
+        TypedExpr.call.injEq, true_and] at $h:ident
+      obtain ⟨hty, _⟩ := $h:ident
+      simp only [typeOfConstructor] at hcon
+      split at hcon <;> (try split at hcon) <;>
+        simp only [Validation.ok, Validation.err, Except.ok.injEq, reduceCtorEq] at hcon
+      subst hty
+      rw [← hcon]
+      cases hcv : call $fn $vst with
+      | error e => exact ⟨_, @$inst $envt default, Or.inl ⟨e, rfl⟩⟩
+      | ok w =>
+        refine ⟨w, ?_, Or.inr rfl⟩
+        simp only [call] at hcv
+        split at hcv <;>
+          (try simp only [res, reduceCtorEq, Except.ok.injEq] at hcv) <;>
+          (try (split at hcv <;> (try simp only [res, reduceCtorEq, Except.ok.injEq] at hcv))) <;>
+          (try subst hcv) <;>
+          first
+            | exact $inst
+            | contradiction
+            | simp_all))
 
 /--
-Close a `call_result_instance_of_typeOfCall` goal for a CONCRETE extension
-function `$fn`, given that `ty₀` is already pinned to its concrete value.
-Cases on `call $fn vs` (concrete, so elimination is non-dependent): `.error`
-takes the left disjunct with a fixed inhabitant of `ty₀`; `.ok` reads the
-matching `call` arm, whose coerced value is an instance of `ty₀`.
+Prove `call_result_instance_of_typeOfCall` for an OPERATOR arm (comparators,
+recognizers, converters, `isInRange`, `offset`, `durationSince`, `toDate`,
+`toTime`), bound by the enclosing `cases f`. Validated against the lessThan arm.
+
+`split at $h` peels the `match xfn, tys.map typeOf` table; `simp_all` discharges
+every arm but `$fn`'s own via its FALSE `$fn = <otherFn>` discriminant equation.
+The one surviving row pins `ty₀`. Then `cases` on `call $fn vs`: the matching
+value row is a `ty₀`-instance (`$inst` tries every possible witness), the spurious
+`call`-table rows closing by contradiction.
 -/
-local macro "close_call " fn:term " with " vst:ident envt:ident : tactic =>
+local macro "prove_op_arm " h:ident fn:term " with " vst:ident envt:ident : tactic =>
   `(tactic| (
+    split at $h:ident <;>
+      simp_all only [Validation.ok, Validation.err, Except.ok.injEq, Prod.mk.injEq,
+        TypedExpr.call.injEq, Except.bind_ok, Except.bind_err, reduceCtorEq, true_and, and_true]
+    obtain ⟨hty, _⟩ := $h:ident
+    subst hty
     cases hcv : call $fn $vst with
     | error e =>
       first
-        | exact ⟨_, @decimal_is_instance_of_decimal $envt default, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, @ipaddr_is_instance_of_ipaddr $envt default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @bool_is_instance_of_anyBool $envt false, Or.inl ⟨e, rfl⟩⟩
         | exact ⟨_, @datetime_is_instance_of_datetime $envt default, Or.inl ⟨e, rfl⟩⟩
         | exact ⟨_, @duration_is_instance_of_duration $envt default, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, @bool_is_instance_of_anyBool $envt false, Or.inl ⟨e, rfl⟩⟩
         | exact ⟨_, @InstanceOfType.instance_of_int $envt default, Or.inl ⟨e, rfl⟩⟩
     | ok w =>
       refine ⟨w, ?_, Or.inr rfl⟩
       simp only [call] at hcv
       split at hcv <;>
-        (try (simp only [res] at hcv; split at hcv)) <;>
-        simp only [res, reduceCtorEq, Except.ok.injEq] at hcv <;>
+        (try simp only [res, reduceCtorEq, Except.ok.injEq] at hcv) <;>
+        (try (split at hcv <;> (try simp only [res, reduceCtorEq, Except.ok.injEq] at hcv))) <;>
         (try subst hcv) <;>
         first
-          | exact decimal_is_instance_of_decimal
-          | exact ipaddr_is_instance_of_ipaddr
+          | exact bool_is_instance_of_anyBool _
           | exact datetime_is_instance_of_datetime
           | exact duration_is_instance_of_duration
-          | exact bool_is_instance_of_anyBool _
-          | exact InstanceOfType.instance_of_int))
+          | exact InstanceOfType.instance_of_int
+          | contradiction
+          | simp_all))
 
+set_option maxHeartbeats 4000000 in
 /--
 Extension-function result typing, WEAK shape (D-94): if
 `typeOfCall f tys exprs = .ok (.call f tys ty₀, c)` then for ANY argument values
@@ -169,28 +196,28 @@ theorem call_result_instance_of_typeOfCall {f : ExtFun} {tys : List TypedExpr}
     ∃ v, InstanceOfType env v ty₀ ∧
          ((∃ e, call f vs = Except.error e) ∨ call f vs = Except.ok v) := by
   cases f <;> simp only [typeOfCall] at htc
-  case decimal => reduce_htc htc exprs; close_call ExtFun.decimal with vs env
-  case ip => reduce_htc htc exprs; close_call ExtFun.ip with vs env
-  case datetime => reduce_htc htc exprs; close_call ExtFun.datetime with vs env
-  case duration => reduce_htc htc exprs; close_call ExtFun.duration with vs env
-  case lessThan => reduce_htc htc exprs; close_call ExtFun.lessThan with vs env
-  case lessThanOrEqual => reduce_htc htc exprs; close_call ExtFun.lessThanOrEqual with vs env
-  case greaterThan => reduce_htc htc exprs; close_call ExtFun.greaterThan with vs env
-  case greaterThanOrEqual => reduce_htc htc exprs; close_call ExtFun.greaterThanOrEqual with vs env
-  case isIpv4 => reduce_htc htc exprs; close_call ExtFun.isIpv4 with vs env
-  case isIpv6 => reduce_htc htc exprs; close_call ExtFun.isIpv6 with vs env
-  case isLoopback => reduce_htc htc exprs; close_call ExtFun.isLoopback with vs env
-  case isMulticast => reduce_htc htc exprs; close_call ExtFun.isMulticast with vs env
-  case isInRange => reduce_htc htc exprs; close_call ExtFun.isInRange with vs env
-  case toMilliseconds => reduce_htc htc exprs; close_call ExtFun.toMilliseconds with vs env
-  case toSeconds => reduce_htc htc exprs; close_call ExtFun.toSeconds with vs env
-  case toMinutes => reduce_htc htc exprs; close_call ExtFun.toMinutes with vs env
-  case toHours => reduce_htc htc exprs; close_call ExtFun.toHours with vs env
-  case toDays => reduce_htc htc exprs; close_call ExtFun.toDays with vs env
-  case offset => reduce_htc htc exprs; close_call ExtFun.offset with vs env
-  case durationSince => reduce_htc htc exprs; close_call ExtFun.durationSince with vs env
-  case toDate => reduce_htc htc exprs; close_call ExtFun.toDate with vs env
-  case toTime => reduce_htc htc exprs; close_call ExtFun.toTime with vs env
+  case decimal => prove_ctor_arm htc exprs ExtFun.decimal mkfn Cedar.Spec.Ext.Decimal.decimal resty (CedarType.ext ExtType.decimal) inst decimal_is_instance_of_decimal with vs env
+  case ip => prove_ctor_arm htc exprs ExtFun.ip mkfn Cedar.Spec.Ext.IPAddr.ip resty (CedarType.ext ExtType.ipAddr) inst ipaddr_is_instance_of_ipaddr with vs env
+  case datetime => prove_ctor_arm htc exprs ExtFun.datetime mkfn Cedar.Spec.Ext.Datetime.parse resty (CedarType.ext ExtType.datetime) inst datetime_is_instance_of_datetime with vs env
+  case duration => prove_ctor_arm htc exprs ExtFun.duration mkfn Cedar.Spec.Ext.Datetime.Duration.parse resty (CedarType.ext ExtType.duration) inst duration_is_instance_of_duration with vs env
+  case lessThan => prove_op_arm htc ExtFun.lessThan with vs env
+  case lessThanOrEqual => prove_op_arm htc ExtFun.lessThanOrEqual with vs env
+  case greaterThan => prove_op_arm htc ExtFun.greaterThan with vs env
+  case greaterThanOrEqual => prove_op_arm htc ExtFun.greaterThanOrEqual with vs env
+  case isIpv4 => prove_op_arm htc ExtFun.isIpv4 with vs env
+  case isIpv6 => prove_op_arm htc ExtFun.isIpv6 with vs env
+  case isLoopback => prove_op_arm htc ExtFun.isLoopback with vs env
+  case isMulticast => prove_op_arm htc ExtFun.isMulticast with vs env
+  case isInRange => prove_op_arm htc ExtFun.isInRange with vs env
+  case toMilliseconds => prove_op_arm htc ExtFun.toMilliseconds with vs env
+  case toSeconds => prove_op_arm htc ExtFun.toSeconds with vs env
+  case toMinutes => prove_op_arm htc ExtFun.toMinutes with vs env
+  case toHours => prove_op_arm htc ExtFun.toHours with vs env
+  case toDays => prove_op_arm htc ExtFun.toDays with vs env
+  case offset => prove_op_arm htc ExtFun.offset with vs env
+  case durationSince => prove_op_arm htc ExtFun.durationSince with vs env
+  case toDate => prove_op_arm htc ExtFun.toDate with vs env
+  case toTime => prove_op_arm htc ExtFun.toTime with vs env
 
 
 /--
