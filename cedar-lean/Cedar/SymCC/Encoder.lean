@@ -86,6 +86,24 @@ def EncoderState.init (εnv : SymEnv) : EncoderState :=
 
 abbrev EncoderM (α) := StateT EncoderState SolverM α
 
+/-- Does the term contain a `set.all` application node anywhere (D-78)? Mirrors
+`Term.mentionsAnyAllIt`'s structural walk: `true` on any `.app Op.set.all _ _`,
+otherwise recurse into children. `Encoder.encode` uses this to pick the SMT
+logic: a query carrying a `set.all` needs the higher-order `HO_ALL` (its
+`set.filter` comprehension encoding, D-52), while a `set.all`-free query only
+needs the first-order `ALL` the pre-`.all` encoder used. (This is the structural
+complement of `Term.NoSetAll` in Factory.lean; kept as its own
+`mentionsAnyAllIt`-shaped walk per the Phase 9 plan §2.) -/
+public partial def Term.containsSetAll : Term → Bool
+  | .var _        => false
+  | .prim _       => false
+  | .none _       => false
+  | .some t       => Term.containsSetAll t
+  | .set ts _     => ts.elts.any (fun t => Term.containsSetAll t)
+  | .record ats   => ats.toList.any (fun p => Term.containsSetAll p.2)
+  | .app Op.set.all _ _ => true
+  | .app _ ts _   => ts.any (fun t => Term.containsSetAll t)
+
 namespace Encoder
 
 def termId (n : Nat)                     : String := s!"t{n}"
@@ -430,7 +448,14 @@ etc.
 public def encode (ts : List Term) (εnv : SymEnv) (produceModels : Bool := false) : SolverM EncoderState := do
   Solver.reset
   Solver.setOptionProduceModels produceModels
-  Solver.setLogic "HO_ALL"
+  -- D-78: only widen to the higher-order `HO_ALL` logic when some asserted term
+  -- actually carries a `set.all` node (its `set.filter` comprehension encoding
+  -- needs HO). A `set.all`-free query emits the first-order `ALL` the encoder
+  -- used before `.all` support, keeping every existing query in the narrower
+  -- logic. The Rust `cedar-policy-symcc` encoder makes the byte-identical choice
+  -- (D-36) so the `symcc-*` differential stays in lockstep.
+  let needsHO := ts.any (fun t => Term.containsSetAll t)
+  Solver.setLogic (if needsHO then "HO_ALL" else "ALL")
   Solver.declareDatatype "Option" ["X"] ["(none)", "(some (val X))"]
   let (ids, s) ← ts.mapM encodeTerm |>.run (EncoderState.init εnv)
   for id in ids do

@@ -32,7 +32,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
 | 7 | `phase7-anyall-docs` | DONE — review converged (R1: 2 findings fixed, docsrs badge + a local path; R2: NO ACTIONABLE FINDINGS); see `branches/phase7-anyall-docs/OUTCOMES.md`. A1–E1 done: rustdoc (`anyall` in both `lib.rs`, enriched `Expr::all`/`any`, runnable gated doctest on `SetTermInQuantifier`), CHANGELOGs (`cedar-policy` + `cedar-policy-symcc`; core has none), Lean doc comments verified (already complete), `cedar-drt` README `anyall` section, paste-ready `docs/language-reference-anyall.md` + `docs/CEDAR-DOCS-HANDOFF.md`, design.md Phase-7 feature-summary/open-items section, OQ-1 cross-link. D-84/85/86. Doctests 34→35; rustdoc adds no new diagnostics (pre-existing repo doc-lint debt only). |
 | 8 | `phase8-anyall-cvc5-benchmarks` | DONE — review converged (R1: 2 LOW fixed; R2: 2 provenance fixed; R3: NO ACTIONABLE FINDINGS); see `branches/phase8-anyall-cvc5-benchmarks/OUTCOMES.md`. harness `cedar-drt/fuzz/fuzz_targets/anyall_symcc_bench.rs` (`anyall`-gated `bench=false` bin, un-opt verbs, D-P8-nonvac `set.filter`/`HO_ALL` gate). Full sweep: 117 rows, 0 vacuous, repeats=3, wall ≈25 s (D-87 cap 5400 s not exhausted). Set-size is the only steep axis (7→1049 ms, N=0→64); cliff at N≈128→192 where the 1 GiB cap OOMs (`data/cliff-setsize.json`). Other six dimensions flat (≤15 ms). Smoke=27 rows in ~1 s. See `branches/phase8-anyall-cvc5-benchmarks/{PLAN,RESULTS}.md` + `data/`. Prereq: fixed `cedar-lean-ffi` proto mapper's missing `.all` TPE-residual arm. |
-| 9 | `phase9-anyall-completion` | PLANNED — completion phase (D-74 A + D-70 B + req 7.3 + D-78 + D-79); see `branches/phase9-anyall-completion/PLAN.md`. Four stacked sub-branches: `phase9a-anyall-ho-all-logic` (D-78, XS), `phase9b-anyall-tpe-refinement` (req 7.3/D-80, M, Rust-only), `phase9c-anyall-pred-type-soundness` (D-74 A + D-79, L–XL, critical path), `phase9d-anyall-set-footprint` (D-70 B, L, stacked on 9c). D-70 B decidability **settled GO** by a raw-cvc5 1.4.1 probe (nested `set.filter` transitivity decides sat/unsat in ms; `branches/phase9-anyall-completion/probe/d70b/`). Decisions D-89..D-93. |
+| 9 | `phase9-anyall-completion` | IN PROGRESS — completion phase (D-74 A + D-70 B + req 7.3 + D-78 + D-79); see `branches/phase9-anyall-completion/PLAN.md`. Four stacked sub-branches: `phase9a-anyall-ho-all-logic` (D-78, XS) **IMPLEMENTED** (review follows), `phase9b-anyall-tpe-refinement` (req 7.3/D-80, M, Rust-only), `phase9c-anyall-pred-type-soundness` (D-74 A + D-79, L–XL, critical path), `phase9d-anyall-set-footprint` (D-70 B, L, stacked on 9c). D-70 B decidability **settled GO** by a raw-cvc5 1.4.1 probe (nested `set.filter` transitivity decides sat/unsat in ms; `branches/phase9-anyall-completion/probe/d70b/`). Decisions D-89..D-93. |
 
 ---
 
@@ -380,9 +380,19 @@ Branches: cedar-spec `phase9-anyall-completion` cut from `phase8-anyall-cvc5-ben
 cedar `phase9-anyall-completion` cut from `phase7-anyall-docs`. Four stacked sub-branches, merge
 bottom-up:
 
-- **T9a — D-78** (`phase9a-anyall-ho-all-logic`, XS, independent). Select SMT logic `HO_ALL` only
+- **T9a — D-78** (`phase9a-anyall-ho-all-logic`, XS, independent) — **IMPLEMENTED** (review follows).
+  Select SMT logic `HO_ALL` only
   when the asserted terms contain a `set.all` term; keep the first-order logic otherwise (Lean
-  encoder; Rust encoder byte-matches per D-36).
+  encoder; Rust encoder byte-matches per D-36). Lean `Term.containsSetAll` + `encode` logic
+  selection (`Cedar/SymCC/Encoder.lean`); identical Rust `Term::contains_set_all` + `logic_for`
+  helper at both `set_logic` call sites (`cedar-policy-symcc/src/symcc/{term,symcc}.rs`). First-order
+  literal confirmed `ALL` by git blame (pre-Phase-5B, 82b32d4). Green: `lake build Cedar SymCC
+  SymTest`; `CedarSymTests` 1216/1216 unchanged; `cargo test -p cedar-policy-symcc --features anyall
+  --lib` 145/145 + cvc5 `--test anyall` 3/3. Non-vacuity: per-engine deterministic logic-selection
+  checks (Lean build-time `#eval` + `#guard`s in `SymTest/AnyAll.lean`; Rust
+  `d78_logic_selection_ho_all_only_for_set_all` unit test). Mutations caught per engine (force
+  `needsHO` true/false; force `logic_for` → one constant). Differential: `symcc-smt-script-drt`
+  (60044 runs) and `symcc-cex-drt` (41996 runs) byte-match after rebuilding the Lean FFI static lib.
 - **T9b — req 7.3 / D-80 full** (`phase9b-anyall-tpe-refinement`, M, Rust-only, independent). Rust
   TPE per-element residual refinement: a new residual shape (`AllPartial`) that keeps only the
   undecided elements of a concrete-receiver `.all` while preserving the 2.8 no-short-circuit +

@@ -116,6 +116,25 @@ policy, assert the emitted `(set-logic …)` line differs (`HO_ALL` vs `ALL`). M
 
 **Size.** XS. One encoder predicate + one call-site change per engine + one unit test per engine.
 
+**Implementation decisions (recorded during 9a).**
+- **D-P9a-1.** `Term.containsSetAll` is a `public` def in the `Cedar.SymCC` namespace (not inside
+  `Encoder`), so dot-projection resolves from both `encode` and `SymTest`. `encode` calls it as
+  `ts.any (fun t => Term.containsSetAll t)` (the `mentionsAnyAllIt` idiom), not `(·.containsSetAll)`.
+- **D-P9a-2.** The Rust `Op::SetAll` match arm in `Term::contains_set_all` is `#[cfg(feature =
+  "anyall")]`-gated (the variant only exists under `anyall`); without the feature no term can carry a
+  `set.all`, so every `App` recurses and `logic_for` always yields `ALL` — which is exactly the
+  pre-`.all` behavior and byte-matches Lean (whose inert `.all` code never produces a `set.all` node
+  in the default build). The logic selection is factored into a private `fn logic_for(&Asserts) ->
+  &'static str` used at both `set_logic` call sites in `symcc.rs`.
+- **D-P9a-3.** The per-engine deterministic logic-selection check is a **build-time** check (Lean
+  `#eval`/`#guard` in `SymTest/AnyAll.lean`; Rust `#[cfg(test)]` unit test), NOT a runtime
+  `CedarSymTests` case, so the 1216 `CedarSymTests` count is preserved as the green bar requires.
+- **D-P9a-4.** The DRT `symcc-smt-script-drt` differential initially flagged a real
+  Lean-emits-`HO_ALL`/Rust-emits-`ALL` mismatch because the Lean FFI static lib
+  (`libCedar_CedarFFI.a`) was stale; rebuilding it via `cedar-drt/build_lean_lib.sh` (plus forcing
+  the `Cedar.SymCC.Encoder:c.o` native recompile) made both engines byte-match. Any later consumer
+  of the Lean side must rebuild the FFI lib after an `Encoder.lean` change.
+
 ---
 
 ## 3. `phase9b-anyall-tpe-refinement` — req 7.3 / D-80 full per-element residual refinement
