@@ -140,4 +140,65 @@ private def isErr (r : EnvironmentValidationResult) : Bool :=
 
 end D98
 
+/-! ### D-99 regression (Phase 9c): capability boundary of the `.all` predicate.
+
+`typeOfAll` types the predicate under `it : τ` with the OUTER capabilities filtered to the
+clean (`it`-free) keys. So a `has` on `principal` in the enclosing `&&` DOES reach the predicate
+(its capability key is clean), but no attribute is accessible on `it` unless the predicate itself
+guards it. With `a` OPTIONAL on the element entity type `E`:
+
+  * `principal has "a" && context.s.all(it.a == 1)` must be REJECTED — the outer `has` is about
+    `principal`, not `it`, so `it.a` reads an optional attr with no capability.
+  * `principal has "a" && context.s.all(principal.a == it)` must be ACCEPTED — the outer `has`
+    establishes the clean `principal` capability, which survives into the predicate. -/
+section D99
+open Cedar.Validation
+
+private def elemTy : EntityType := ⟨"E", []⟩
+private def princTy : EntityType := ⟨"User", []⟩
+private def resTy99  : EntityType := ⟨"Res", []⟩
+private def actUid99 : EntityUID := ⟨⟨"Action", []⟩, "act"⟩
+
+-- `a` is OPTIONAL on both entity types: `int` on the element `E` (so `it.a == 1` type-checks when
+-- a capability exists), and `E` on the principal (so `principal.a == it` compares `E == E`).
+private def optAInt : RecordType := Map.mk [("a", Qualified.optional (.int))]
+private def optAElem : RecordType := Map.mk [("a", Qualified.optional (.entity elemTy))]
+-- context has `s : Set<E>`.
+private def ctx99 : RecordType := Map.mk [("s", Qualified.required (.set (.entity elemTy)))]
+
+private def env99 : TypeEnv where
+  ets := Map.mk [
+    (elemTy, .standard { ancestors := Set.empty, attrs := optAInt, tags := none }),
+    (princTy, .standard { ancestors := Set.empty, attrs := optAElem, tags := none }),
+    (resTy99, .standard { ancestors := Set.empty, attrs := Map.empty, tags := none })]
+  acts := Map.mk [(actUid99, {
+    appliesToPrincipal := Set.mk [princTy]
+    appliesToResource := Set.mk [resTy99]
+    ancestors := Set.mk []
+    context := ctx99 })]
+  reqty := {
+    principal := princTy
+    action := actUid99
+    resource := resTy99
+    context := ctx99 }
+
+-- `context.s` : Set<E>
+private def ctxS : Expr := .getAttr (.var .context) "s"
+-- predicate `it.a == 1` (reads optional attr on `it` with no capability)
+private def predItA : PredExpr := .binaryApp .eq (.getAttr .item "a") (.lit (.int (Int64.ofInt 1)))
+-- predicate `principal.a == it` (uses the clean principal capability from the outer `has`)
+private def predPrincA : PredExpr := .binaryApp .eq (.getAttr (.var .principal) "a") .item
+
+private def hasPrincA : Expr := .hasAttr (.var .principal) "a"
+
+private def isOkT (r : ResultType) : Bool := match r with | .ok _ => true | .error _ => false
+private def isErrT (r : ResultType) : Bool := match r with | .ok _ => false | .error _ => true
+
+-- REJECTED: `it.a` on an optional attr with no capability inside the predicate.
+#guard isErrT (typeOf (.and hasPrincA (.all ctxS predItA)) [] env99)
+-- ACCEPTED: `principal.a` is capability-covered by the outer `principal has "a"` (clean key, D-99).
+#guard isOkT (typeOf (.and hasPrincA (.all ctxS predPrincA)) [] env99)
+
+end D99
+
 end UnitTest.AnyAll
