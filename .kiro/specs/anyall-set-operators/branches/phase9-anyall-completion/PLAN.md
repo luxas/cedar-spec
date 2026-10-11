@@ -193,6 +193,32 @@ fails.
 
 **Size.** M (~2–3 days). Rust only; independent of every Lean branch.
 
+### 3.1 Decisions taken while implementing 9b (`D-P9b-*`)
+
+- **D-P9b-1 — `AllPartial` re-expansion is `[<pending bools>, <!decided_false>].all(it)`.**
+  `From<Residual> for Expr` re-expands an `AllPartial` into a literal set of the pending
+  element booleans plus a `!decided_false` marker element, quantified by the identity predicate
+  `it`, rather than a hand-built non-short-circuiting conjunction. Rationale: `Expr::all` is the
+  *one* operator whose no-short-circuit + deterministic-`QuantifierError` semantics are already
+  the spec and already proven (reqs 2.5/2.8), so re-authorization parity is inherited rather than
+  re-derived; a `&&` chain would short-circuit on the pinned `false` and lose the "a pending
+  element may still error" guarantee (the very thing D-92 requires). Eager set-literal evaluation
+  makes a pending-element error surface as a (kind-free, D-80) evaluation error before the
+  quantifier runs, which matches the full `.all`'s `QuantifierError` under the parity definition
+  "same value or both error" (D-81). Set-literal dedup of the booleans does not change the
+  conjunction result because every element is evaluated before dedup.
+- **D-P9b-2 — idempotent `AllPartial` re-interpret arm.** `Evaluator::interpret` handles a
+  received `AllPartial` by re-interpreting each pending element (an unknown it reads may now be
+  known), applying the same per-element fold and collapsing to `Concrete(!decided_false)` when
+  `pending` empties. A second TPE pass is therefore sound and monotone — a pending element can
+  only become decided, never un-decided — so TPE is safe to run on an already-refined residual.
+- **D-P9b-3 — clippy bar is `cargo clippy --all-features --lib` (the Phase-6.5 OUTCOMES bar).**
+  That invocation is clean (0 new warnings in `tpe/`). The repo's `--lib --tests` clippy is
+  *already* non-clean at the 9b base (147 warnings — a pervasive test-code idiom:
+  `Evaluator::new(req, &entities, &exts)` trips `needless_borrow`), so it is not the clean bar;
+  the new tests follow the identical surrounding-test idiom. The genuinely needless borrows the
+  new tests *did* introduce (`&residual.into()`) were removed.
+
 ---
 
 ## 4. `phase9d`'s decidability question — SETTLED **GO** (raw-cvc5 probe, this plan)
