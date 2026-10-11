@@ -15,7 +15,7 @@ numeric body; the harness design and decisions live in `PLAN.md` and
 |---|---|
 | cvc5 | `1.4.1 [git 2b2e844]` |
 | cedar SDK | `4.13.0` |
-| cedar-spec SHA | `da231bf` (F-2 commit — the full sweep is regenerated from it) |
+| cedar-spec SHA | `97515ec` (the Phase 8 R2 F-2 commit — all three files are regenerated from it) |
 | cedar (Rust) SHA | `9fd7bcf5` |
 | per-query timeout | 300 s (DRT `TIMEOUT_DUR`, D-87) |
 | memory cap | 1 GiB (`setrlimit`, via `local_solver()`) |
@@ -43,15 +43,15 @@ D-P8-size). The **baseline** is the same `.all` unrolled over those N members
 
 | N | quantified (ms) | baseline (ms) | Δ encoding (ms) |
 |---:|---:|---:|---:|
-| 0 | 8 | 0 | 8 |
+| 0 | 7 | 0 | 7 |
 | 1 | 9 | 3 | 6 |
 | 2 | 11 | 5 | 6 |
 | 4 | 16 | 9 | 7 |
-| 8 | 31 | 21 | 10 |
-| 16 | 82 | 66 | 16 |
-| 32 | 285 | 239 | 46 |
-| 64 | 1049 | 956 | 93 |
-| 128 | 4494 | — | — |
+| 8 | 30 | 20 | 10 |
+| 16 | 81 | 67 | 14 |
+| 32 | 290 | 247 | 43 |
+| 64 | 1048 | 952 | 96 |
+| 128 | 4462 | — | — |
 
 The baseline unroll is capped at N ≤ 64 (its N-way conjunction overflows the
 Cedar parser past that, D-P8-size), so N = 128 carries a quantified row only; it
@@ -66,20 +66,20 @@ monotonically across the range:
 |---|---|---:|
 | 1 → 2 | 9 → 11 | 0.29 |
 | 2 → 4 | 11 → 16 | 0.54 |
-| 4 → 8 | 16 → 31 | 0.95 |
-| 8 → 16 | 31 → 82 | 1.40 |
-| 16 → 32 | 82 → 285 | 1.80 |
-| 32 → 64 | 285 → 1049 | 1.88 |
-| 64 → 128 | 1049 → 4494 | 2.10 |
+| 4 → 8 | 16 → 30 | 0.91 |
+| 8 → 16 | 30 → 81 | 1.43 |
+| 16 → 32 | 81 → 290 | 1.84 |
+| 32 → 64 | 290 → 1048 | 1.85 |
+| 64 → 128 | 1048 → 4462 | 2.09 |
 
 So cvc5's solve time is **sub-linear at small N (~N^0.3 near N=1..2), crosses
 ~N^1 around N≈4..8, and steepens to ~N^1.9 by N=32..64 and ~N^2.1 by
 N=64..128** — a cost that grows faster the larger the set, not the fixed `N^1.6`
 a single label would suggest. The baseline tracks the same accelerating shape
-(local exponent 0.74 → 2.00 across N=1..64), so the acceleration is the
+(local exponent 0.74 → 1.95 across N=1..64), so the acceleration is the
 membership/arithmetic reasoning both shapes pay, not an artifact of the
 `set.filter` encoding. The encoding delta `Δ = quantified − baseline` grows with
-N (8 → 93 ms through N=64): the two-`set.filter` comprehension costs cvc5
+N (7 → 96 ms through N=64): the two-`set.filter` comprehension costs cvc5
 progressively more as the number of reasoned-about members rises, but it stays a
 *modest fraction* of the total — most of the cost is the membership/arithmetic
 reasoning the baseline also pays.
@@ -92,10 +92,10 @@ it is capped there):
 
 | N | outcome | solve (ms) | note |
 |---:|---|---:|---|
-| 64 | sat | 1036 | — |
-| 128 | sat | 4458 | — |
-| 192 | **oom** | 5920 | cvc5 process killed under the 1 GiB cap, no exit status |
-| 256 | **oom** | 6111 | `std::bad_alloc` under the 1 GiB cap |
+| 64 | sat | 1075 | — |
+| 128 | sat | 4583 | — |
+| 192 | **oom** | 5948 | cvc5 process killed under the 1 GiB cap, no exit status |
+| 256 | **oom** | 6013 | `std::bad_alloc` under the 1 GiB cap |
 
 **The practical cliff is N ≈ 128 → 192.** cvc5 decides N = 128 in ~4.5 s, then at
 N ≥ 192 the 1 GiB memory cap is exhausted and both N = 192 and N = 256 classify
@@ -117,9 +117,9 @@ All medians below are the symbolic `.all` query at the baseline set size
 | predicate complexity | `it > 0` → range → `if` → nested `if` | 7 → 8 → 9 → 10 |
 | element type | Long / String / Bool / EntityUID | 7 / 4 / 3 / 3 |
 | quantifier count | k = 1 / 2 / 3 / 4 sibling `.all`s | 7 / 8 / 11 / 15 |
-| verb | always_allows / always_denies / equivalent / implies / disjoint / never_errors | 7 / 5 / 12 / 7 / 11 / 4 |
+| verb | always_allows / always_denies / equivalent / implies / disjoint / never_errors | 7 / 5 / 12 / 7 / 11 / 5 |
 | `.all` vs `.any` | — | 7 / 6 (no asymmetry) |
-| sat vs unsat shape | sat / unsat (via `check_equivalent`) | 13 / 10 |
+| sat vs unsat shape | sat / unsat (via `check_equivalent`) | 12 / 10 |
 
 Takeaways: predicate AST depth, element theory, quantifier count (sibling, not
 nested — nesting is excluded by the feature), the specific check verb, the
