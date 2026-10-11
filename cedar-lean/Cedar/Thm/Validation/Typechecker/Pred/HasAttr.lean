@@ -107,6 +107,7 @@ theorem type_of_pred_hasAttr_is_sound_for_records {x₁ : PredExpr} {a : Attr} {
     {c₁ c₁' c₂ : Capabilities} {env : TypeEnv} {rty : RecordType} {it : Value}
     {request : Request} {entities : Entities} {v₁ : Value} {ty : TypedExpr}
     (hci : CapabilitiesInvariantPred c₁ it request entities)
+    (hofk : PredExpr.ofCapKey x₁.toCapKey = x₁)
     (h₂ : typeOfPred (.hasAttr x₁ a) itTy c₁ env = Except.ok (ty, c₂))
     (h₃ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.record rty, c₁'))
     (h₄ : evaluatePred x₁ it request entities = Except.ok v₁)
@@ -134,7 +135,8 @@ theorem type_of_pred_hasAttr_is_sound_for_records {x₁ : PredExpr} {a : Attr} {
     case inl _ h₇ =>
       -- capability `.tt` case: the predicate capability invariant provides the
       -- hasAttr-true fact over `evaluatePred`, replacing the Expr `h₁.left`.
-      have hev := hci.1 x₁.toCapKey a h₇ x₁ rfl
+      have hev := hci.1 x₁.toCapKey a h₇
+      rw [hofk] at hev
       simp [EvaluatesToPred, evaluatePred, h₄, hasAttr, attrsOf, h₆] at hev
     case inr h₇ h₈ =>
       simp [Qualified.isRequired] at h₈
@@ -160,6 +162,7 @@ theorem type_of_pred_hasAttr_is_sound_for_entities {x₁ : PredExpr} {a : Attr} 
     {c₁ c₁' c₂ : Capabilities} {env : TypeEnv} {ety : EntityType} {it : Value}
     {request : Request} {entities : Entities} {v₁ : Value} {ty : TypedExpr}
     (hci : CapabilitiesInvariantPred c₁ it request entities)
+    (hofk : PredExpr.ofCapKey x₁.toCapKey = x₁)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (h₃ : typeOfPred (.hasAttr x₁ a) itTy c₁ env = Except.ok (ty, c₂))
     (h₄ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.entity ety, c₁'))
@@ -187,7 +190,8 @@ theorem type_of_pred_hasAttr_is_sound_for_entities {x₁ : PredExpr} {a : Attr} 
     case true => exact true_is_instance_of_tt
     rename_i _ _ _ _  h₉
     -- capability `.tt` case over `evaluatePred`.
-    have hev := hci.1 x₁.toCapKey a h₉ x₁ rfl
+    have hev := hci.1 x₁.toCapKey a h₉
+    rw [hofk] at hev
     simp [EvaluatesToPred, evaluatePred, h₅, hasAttr, attrsOf, h₈] at hev
   case h_2 =>
     simp [ok] at h₃
@@ -232,6 +236,7 @@ production of `CapabilitiesInvariantPred c₂`.
 -/
 theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
+    (hnr : NoReservedItKey env)
     (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
@@ -241,6 +246,9 @@ theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : Cedar
     ∃ v, EvaluatesToPred (.hasAttr x₁ a) it request entities v ∧ InstanceOfType env v ty.typeOf
 := by
   have ⟨h₅, ⟨bty, hbtyeq⟩, ty₁, c₁', hty₁, hty, h₄⟩ := type_of_pred_hasAttr_inversion h₃
+  -- `x₁` has no reserved `it` access, so `ofCapKey x₁.toCapKey = x₁`.
+  have hx1nr : x₁.NoReservedItAccess = true := type_of_pred_implies_no_reserved hnr hty₁
+  have hofk : PredExpr.ofCapKey x₁.toCapKey = x₁ := ofCapKey_toCapKey hx1nr
   apply And.intro
   case left =>
     -- Guarded capabilities: output caps are empty or the singleton keyed by
@@ -249,25 +257,21 @@ theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : Cedar
     rcases h₅ with h₅ | h₅ <;> subst h₅
     · exact empty_capabilities_invariant_pred it request entities
     · constructor
-      · intro e k hmem q hq
+      · intro e k hmem
         simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, Key.attr.injEq] at hmem
         obtain ⟨he, hk⟩ := hmem
         subst he; subst hk
-        -- Guard: `evaluatePred (.hasAttr x₁ a) it … = ok true`. The invariant must
-        -- hold for EVERY `q` with `q.toCapKey = x₁.toCapKey`; but evaluation of
-        -- `.hasAttr q a` for such a `q` is not pinned by the guard about `x₁`
-        -- (toCapKey is not evaluation-injective: `.item`'s key `itCapKey` collides
-        -- with the literal predicate `.getAttr (.var .context) "__cedar::anyall::it"`,
-        -- which evaluates differently). This is the single residual gap
-        -- (D-95/D-97 ∀q producer side); reduced as far as it honestly goes and left
-        -- as a genuine red (unsolved) subgoal — NO `sorry`.
-        simp only [EvaluatesToPred, evaluatePred]
-      · intro e k hmem q r hq hr
+        -- Producer field (ofCapKey form): must show
+        -- `EvaluatesToPred (.hasAttr (ofCapKey x₁.toCapKey) a) it … true`.
+        -- `ofCapKey x₁.toCapKey = x₁`, so this is exactly the guard.
+        rw [hofk]
+        exact Or.inr hguard
+      · intro e k hmem
         simp only [Capabilities.singleton, List.mem_singleton, Prod.mk.injEq, reduceCtorEq,
           and_false] at hmem
   case right =>
     rcases h₄ with ⟨ety, h₄⟩ | ⟨rty, h₄⟩ <;>
-    have ⟨_, v₁, h₆, h₇⟩ := ih hci h₂ hit hty₁ <;>
+    have ⟨_, v₁, h₆, h₇⟩ := ih hnr hci h₂ hit hty₁ <;>
     simp only [EvaluatesToPred] at h₆ <;>
     rw [h₄] at h₇
     · -- entity operand
@@ -278,7 +282,7 @@ theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : Cedar
         simp only [evaluatePred, h₆, Except.bind_err]
       · have h₈ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.entity ety, c₁') := by
           simp [h₄, hty₁, ResultType.typeOf, Except.map]
-        have ⟨v, hd, hi⟩ := type_of_pred_hasAttr_is_sound_for_entities hci h₂ h₃ h₈ h₆ h₇
+        have ⟨v, hd, hi⟩ := type_of_pred_hasAttr_is_sound_for_entities hci hofk h₂ h₃ h₈ h₆ h₇
         refine ⟨v, ?_, hi⟩
         simp only [EvaluatesToPred, evaluatePred, h₆, Except.bind_ok]
         rcases hd with h | h | h | h <;> simp [h]
@@ -289,7 +293,7 @@ theorem type_of_pred_hasAttr_is_sound {x₁ : PredExpr} {a : Attr} {itTy : Cedar
         simp only [evaluatePred, h₆, Except.bind_err]
       · have h₈ : (typeOfPred x₁ itTy c₁ env).typeOf = Except.ok (CedarType.record rty, c₁') := by
           simp [h₄, hty₁, ResultType.typeOf, Except.map]
-        have ⟨v, hd, hi⟩ := type_of_pred_hasAttr_is_sound_for_records hci h₃ h₈ h₆ h₇
+        have ⟨v, hd, hi⟩ := type_of_pred_hasAttr_is_sound_for_records hci hofk h₃ h₈ h₆ h₇
         refine ⟨v, ?_, hi⟩
         simp only [EvaluatesToPred, evaluatePred, h₆, Except.bind_ok]
         rcases hd with h | h | h | h <;> simp [h]
