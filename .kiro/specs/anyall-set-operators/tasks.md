@@ -581,3 +581,30 @@ _See:_ `branches/phase9-anyall-completion/PLAN.md`, DECISIONS.md D-70/D-74/D-78/
    evaluator (Phase 2/3) and reuses it for concrete receivers. Until it lands, the TPE `All` arm
    may conservatively residualize, and the non-`anyall` default build is unaffected (3.1), so
    deferring it never blocks an earlier green commit.
+
+  **UPDATE 7 (LEAD worker #2 cont., 2026-10-11 ~18:30) — D-98 + D-99 landed; validation-side
+  soundness chain GREEN & axiom-clean.** `lake build Cedar` = 648 jobs green at commit 6cec01b
+  (the only open goal is now the SymCC compile `.all` arm, below). Landed this session:
+  M4 `normalize_evaluatePred` (574fe0f); `normalize_wellTyped`, `evalAll_congr`; D-98 (validator
+  rejects reserved `__cedar::anyall::it`; `RequestType.WellFormed` conjunct; `wf_env_implies_no_reserved_it_key`;
+  CedarUnitTests `#guard`); D-99 (`Expr.isCleanCapKey`/`Capability.isClean`; `typeOfAll` filters outer
+  caps to clean keys; it-free bridge `evaluatePred_eq_evaluate_toExpr`; `toCapKey_eq_toExpr_of_mentionsIt_false`;
+  entry lemma (b) `entry_capabilities_invariant_pred`); `type_of_preserves_evaluation_results` `.all`
+  CLOSED via `evalAll_congr` + receiver `type_of_is_sound` + `normalize_evaluatePred`; `normalize_validRefs`;
+  `typeOfAll` stores `normalize p`; `WellTyped.all` h₄ D-73b existential; `type_of_all_inversion` updated;
+  all env.WellFormed/reqty ripple re-greened (Residual/Soundness, TPE/WellTyped/Var, SymCC/WellTyped,
+  SymCC/ValidRefs); Pred modules imported into Thm/Validation/Typechecker. `#print axioms` on
+  type_of_preserves_evaluation_results / entry_capabilities_invariant_pred / evaluatePred_eq_evaluate_toExpr
+  / normalize_evaluatePred = [propext, Classical.choice, Quot.sound]. SymCCSupported(.all) flipped to
+  `x₁.SymCCSupported && p.NoItDependentIn` (6cec01b).
+  **REMAINING (open goal + M6):** (1) the real `compile_well_typed` `.all` arm
+  (`WellTyped.lean:2090`, `compile_well_typed_on_wf_expr case all`): build `CompileWellTyped (.all x₁ p ty)`
+  = `∃ t, compile (Expr.all x₁.toExpr p) εnv = ok t ∧ t.typeOf = .option (ofType ty.typeOf)` from
+  the receiver IH (`compile_well_typed_on_wf_expr` on x₁, guard `hnoit : p.NoItDependentIn`) and
+  `compilePred_well_typed` (per-element Bool), tracing `compile`'s `.all` concrete-fold + symbolic
+  branches — no ready compile-success/well-typedness `.all` lemma exists (the interim never needed one),
+  so this is a sizable new SymCC proof. (2) D-79 (fold the constant-`ite` once; re-run normalize_evaluatePred).
+  (3) M6: Opt.lean D-77 completeness lane re-green, Lean validator regression (REJECT
+  `principal has "a" && context.s.all(it.a == 1)` / ACCEPT `... .all(principal.a == it)`), the new `.all`
+  completeness SymTest case, the §5.5 mutations, rebuild the Lean FFI lib + short validation DRT,
+  tasks.md T9c IMPLEMENTED. Everything up to the compile arm is GREEN sorry-free.
