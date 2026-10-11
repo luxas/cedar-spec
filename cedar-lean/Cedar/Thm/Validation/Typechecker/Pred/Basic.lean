@@ -49,17 +49,53 @@ def EvaluatesToPred (p : PredExpr) (it : Value) (request : Request) (entities : 
   evaluatePred p it request entities = .ok v
 
 /--
-Predicate analogue of `TypeOfIsSound`, WEAK form (D-94). A well-typed predicate
-(under `it : itTy`, with the element value `it` an instance of `itTy`) evaluates
-to a value of the returned type or to some error. There is NO guarded-capabilities
-conclusion and NO capability-invariant hypothesis (D-P9c-5 (c)).
+Predicate analogue of `CapabilitiesInvariant` (D-97 option b). A capability
+`(e, k) ∈ c` is interpreted against the `it`-bound predicate evaluation: for the
+unique predicate `q` whose `toCapKey` is `e` (keys are `toCapKey` images, D-97),
+the attribute/tag fact holds of `evaluatePred q it`. Quantifying over all `q`
+with `q.toCapKey = e` mirrors the Expr invariant without needing an inverse of
+`toCapKey`; at the attr/tag arms the relevant `q` is the operand sub-predicate,
+whose `toCapKey` is exactly the key `typeOfHasAttr`/`typeOfHasTag` consulted.
+-/
+def CapabilitiesInvariantPred (c : Capabilities) (it : Value) (request : Request) (entities : Entities) : Prop :=
+  (∀ (e : Expr) (k : Attr), (e, .attr k) ∈ c →
+    ∀ q : PredExpr, q.toCapKey = e → EvaluatesToPred (.hasAttr q k) it request entities true) ∧
+  (∀ (e k : Expr), (e, .tag k) ∈ c →
+    ∀ q r : PredExpr, q.toCapKey = e → r.toCapKey = k →
+      EvaluatesToPred (.binaryApp .hasTag q r) it request entities true)
+
+/-- The empty capability set trivially satisfies the predicate invariant. -/
+theorem empty_capabilities_invariant_pred (it : Value) (request : Request) (entities : Entities) :
+    CapabilitiesInvariantPred ∅ it request entities := by
+  constructor <;> intro e k h <;> contradiction
+
+/--
+Predicate analogue of `GuardedCapabilitiesInvariant`: the output capabilities
+satisfy `CapabilitiesInvariantPred` provided the predicate evaluates to `true`.
+-/
+def GuardedCapabilitiesInvariantPred (p : PredExpr) (c : Capabilities) (it : Value)
+    (request : Request) (entities : Entities) : Prop :=
+  evaluatePred p it request entities = .ok true → CapabilitiesInvariantPred c it request entities
+
+theorem empty_guarded_capabilities_invariant_pred {p : PredExpr} {it : Value}
+    {request : Request} {entities : Entities} :
+    GuardedCapabilitiesInvariantPred p ∅ it request entities := by
+  intro _; exact empty_capabilities_invariant_pred it request entities
+
+/--
+Predicate analogue of `TypeOfIsSound` (D-97 option b). The true mirror: it takes
+`CapabilitiesInvariantPred c₁ it …`, and concludes the guarded production of
+`CapabilitiesInvariantPred c₂` AND that evaluation yields a value of the returned
+type or (D-94) **any** error.
 -/
 def TypeOfPredIsSound (p : PredExpr) : Prop :=
   ∀ {itTy : CedarType} {it : Value} {c₁ c₂ : Capabilities} {env : TypeEnv}
     {ty : TypedExpr} {request : Request} {entities : Entities},
+    CapabilitiesInvariantPred c₁ it request entities →
     InstanceOfWellFormedEnvironment request entities env →
     InstanceOfType env it itTy →
     typeOfPred p itTy c₁ env = Except.ok (ty, c₂) →
+    GuardedCapabilitiesInvariantPred p c₂ it request entities ∧
     ∃ v, EvaluatesToPred p it request entities v ∧ InstanceOfType env v ty.typeOf
 
 /-- An error on the left of `EvaluatesToPred` for any witness `v`. -/
@@ -80,11 +116,12 @@ theorem type_of_pred_item_is_sound {itTy : CedarType} {it : Value} {c₁ c₂ : 
     {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
     (hit : InstanceOfType env it itTy)
     (h₃ : typeOfPred .item itTy c₁ env = Except.ok (ty, c₂)) :
+    GuardedCapabilitiesInvariantPred .item c₂ it request entities ∧
     ∃ v, EvaluatesToPred .item it request entities v ∧ InstanceOfType env v ty.typeOf := by
   simp only [typeOfPred, Validation.ok, Except.ok.injEq, Prod.mk.injEq] at h₃
   obtain ⟨hty, hc⟩ := h₃
   subst hc; subst hty
-  refine ⟨it, ?_, ?_⟩
+  refine ⟨empty_guarded_capabilities_invariant_pred, it, ?_, ?_⟩
   · exact Or.inr (by simp only [evaluatePred])
   · show InstanceOfType env it (TypedExpr.var Var.principal itTy).typeOf
     simp only [TypedExpr.typeOf]
@@ -94,11 +131,16 @@ theorem type_of_pred_item_is_sound {itTy : CedarType} {it : Value} {c₁ c₂ : 
 theorem type_of_pred_lit_is_sound {l : Prim} {itTy : CedarType} {it : Value} {c₁ c₂ : Capabilities}
     {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
     (h₃ : typeOfPred (.lit l) itTy c₁ env = Except.ok (ty, c₂)) :
+    GuardedCapabilitiesInvariantPred (.lit l) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.lit l) it request entities v ∧ InstanceOfType env v ty.typeOf := by
-  have hexpr : typeOf (Expr.lit l) c₁ env = Except.ok (ty, c₂) := by
+  have hc : c₂ = ∅ := by
+    simp only [typeOfPred, typeOfLit] at h₃
+    split at h₃ <;> (try split at h₃) <;> simp_all [Validation.ok, Validation.err]
+  subst hc
+  have hexpr : typeOf (Expr.lit l) c₁ env = Except.ok (ty, ∅) := by
     simpa only [typeOf, typeOfPred] using h₃
   have ⟨_, v, hev, hinst⟩ := type_of_lit_is_sound (request := request) (entities := entities) hexpr
-  refine ⟨v, ?_, hinst⟩
+  refine ⟨empty_guarded_capabilities_invariant_pred, v, ?_, hinst⟩
   simp only [EvaluatesTo, evaluate] at hev
   simp only [EvaluatesToPred, evaluatePred]
   rcases hev with hev | hev | hev | hev | hev
@@ -113,11 +155,16 @@ theorem type_of_pred_var_is_sound {vr : Var} {itTy : CedarType} {it : Value} {c�
     {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (h₃ : typeOfPred (.var vr) itTy c₁ env = Except.ok (ty, c₂)) :
+    GuardedCapabilitiesInvariantPred (.var vr) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.var vr) it request entities v ∧ InstanceOfType env v ty.typeOf := by
-  have hexpr : typeOf (Expr.var vr) c₁ env = Except.ok (ty, c₂) := by
+  have hc : c₂ = ∅ := by
+    simp only [typeOfPred, typeOfVar] at h₃
+    cases vr <;> simp_all [Validation.ok]
+  subst hc
+  have hexpr : typeOf (Expr.var vr) c₁ env = Except.ok (ty, ∅) := by
     simpa only [typeOf, typeOfPred] using h₃
   have ⟨_, v, hev, hinst⟩ := type_of_var_is_sound h₂ hexpr
-  refine ⟨v, ?_, hinst⟩
+  refine ⟨empty_guarded_capabilities_invariant_pred, v, ?_, hinst⟩
   have heval : evaluatePred (.var vr) it request entities = evaluate (.var vr) request entities := by
     cases vr <;> simp only [evaluatePred, evaluate]
   simp only [EvaluatesToPred, heval]
