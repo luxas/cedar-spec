@@ -50,19 +50,26 @@ def EvaluatesToPred (p : PredExpr) (it : Value) (request : Request) (entities : 
 
 /--
 Predicate analogue of `CapabilitiesInvariant` (D-97 option b). A capability
-`(e, k) ∈ c` is interpreted against the `it`-bound predicate evaluation: for the
-unique predicate `q` whose `toCapKey` is `e` (keys are `toCapKey` images, D-97),
-the attribute/tag fact holds of `evaluatePred q it`. Quantifying over all `q`
-with `q.toCapKey = e` mirrors the Expr invariant without needing an inverse of
-`toCapKey`; at the attr/tag arms the relevant `q` is the operand sub-predicate,
-whose `toCapKey` is exactly the key `typeOfHasAttr`/`typeOfHasTag` consulted.
+`(e, k) ∈ c` is interpreted against the `it`-bound predicate evaluation: the
+capability-key `Expr` `e` is inverted to the predicate `ofCapKey e` and the
+attribute/tag fact must hold of `evaluatePred (ofCapKey e) it` (D-P9c-7,
+approach A). On the consumer side `typeOfHasAttr` consults `(x₁.toCapKey, .attr a)
+∈ c`, and `ofCapKey x₁.toCapKey = x₁` for `x₁.NoReservedItAccess`
+(`ofCapKey_toCapKey`), so the invariant yields the fact about `x₁` directly. On
+the production side a new singleton key `x₁.toCapKey` carries exactly the fact
+`evaluatePred x₁ it = true`, with no `∀ q` quantifier to discharge.
 -/
 def CapabilitiesInvariantPred (c : Capabilities) (it : Value) (request : Request) (entities : Entities) : Prop :=
   (∀ (e : Expr) (k : Attr), (e, .attr k) ∈ c →
-    ∀ q : PredExpr, q.toCapKey = e → EvaluatesToPred (.hasAttr q k) it request entities true) ∧
+    EvaluatesToPred (.hasAttr (PredExpr.ofCapKey e) k) it request entities true) ∧
   (∀ (e k : Expr), (e, .tag k) ∈ c →
-    ∀ q r : PredExpr, q.toCapKey = e → r.toCapKey = k →
-      EvaluatesToPred (.binaryApp .hasTag q r) it request entities true)
+    EvaluatesToPred (.binaryApp .hasTag (PredExpr.ofCapKey e) (PredExpr.ofCapKey k)) it request entities true)
+
+/-- The context record type does not declare the reserved `it` capability-key
+attribute `__cedar::anyall::it` (D-P9c-7). A predicate well-typed under this can
+never contain the reserved access, so `toCapKey` is injective on it. -/
+def NoReservedItKey (env : TypeEnv) : Prop :=
+  ¬ env.reqty.context.contains "__cedar::anyall::it"
 
 /-- The empty capability set trivially satisfies the predicate invariant. -/
 theorem empty_capabilities_invariant_pred (it : Value) (request : Request) (entities : Entities) :
@@ -76,17 +83,15 @@ theorem capability_union_invariant_pred {c₁ c₂ : Capabilities} {it : Value}
     (h₂ : CapabilitiesInvariantPred c₂ it request entities) :
     CapabilitiesInvariantPred (c₁ ∪ c₂) it request entities := by
   simp only [CapabilitiesInvariantPred, List.mem_union_iff] at *
-  constructor
-  case left =>
-    intro e k h₃ q hq
+  refine ⟨?_, ?_⟩
+  · intro e k h₃
     rcases h₃ with h₃ | h₃
-    · exact h₁.left e k h₃ q hq
-    · exact h₂.left e k h₃ q hq
-  case right =>
-    intro e k h₃ q r hq hr
+    · exact h₁.left e k h₃
+    · exact h₂.left e k h₃
+  · intro e k h₃
     rcases h₃ with h₃ | h₃
-    · exact h₁.right e k h₃ q r hq hr
-    · exact h₂.right e k h₃ q r hq hr
+    · exact h₁.right e k h₃
+    · exact h₂.right e k h₃
 
 /--
 Predicate analogue of `GuardedCapabilitiesInvariant`: the output capabilities
@@ -101,15 +106,98 @@ theorem empty_guarded_capabilities_invariant_pred {p : PredExpr} {it : Value}
     GuardedCapabilitiesInvariantPred p ∅ it request entities := by
   intro _; exact empty_capabilities_invariant_pred it request entities
 
+/-- `ofCapKey` inverts `toCapKey` on predicates without the reserved `it` access
+(D-P9c-7, approach A). Structural induction on `q`; the only non-structural arm
+is `.item`, whose `toCapKey` is `itCapKey`, inverted to `.item`. The `.getAttr`
+arm uses `NoReservedItAccess` to rule out the colliding
+`context["__cedar::anyall::it"]` shape. -/
+theorem ofCapKey_toCapKey {q : PredExpr} (h : q.NoReservedItAccess = true) :
+    PredExpr.ofCapKey q.toCapKey = q := by
+  match q with
+  | .item => simp only [PredExpr.toCapKey, itCapKey, PredExpr.ofCapKey, and_self, ↓reduceIte]
+  | .lit _ => simp only [PredExpr.toCapKey, PredExpr.ofCapKey]
+  | .var _ => simp only [PredExpr.toCapKey, PredExpr.ofCapKey]
+  | .ite a b c =>
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, ofCapKey_toCapKey h.1.1,
+      ofCapKey_toCapKey h.1.2, ofCapKey_toCapKey h.2]
+  | .and a b =>
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, ofCapKey_toCapKey h.1, ofCapKey_toCapKey h.2]
+  | .or a b =>
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, ofCapKey_toCapKey h.1, ofCapKey_toCapKey h.2]
+  | .unaryApp op a =>
+    simp only [PredExpr.NoReservedItAccess] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, ofCapKey_toCapKey h]
+  | .binaryApp op a b =>
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, ofCapKey_toCapKey h.1, ofCapKey_toCapKey h.2]
+  | .getAttr a attr =>
+    have hguard : ¬ (a.toCapKey = Expr.var Var.context ∧ attr = "__cedar::anyall::it") := by
+      rintro ⟨ha, hattr⟩
+      have havar : a = PredExpr.var Var.context := by
+        cases a <;> simp only [PredExpr.toCapKey, itCapKey, Expr.var.injEq, reduceCtorEq] at ha ⊢
+        rename_i v
+        simp only [PredExpr.var.injEq]
+        exact ha
+      subst havar
+      simp only [PredExpr.NoReservedItAccess, hattr, ne_eq, not_true, decide_false,
+        Bool.false_eq_true] at h
+    have hrec : a.NoReservedItAccess = true := by
+      cases a with
+      | var v => cases v <;> simp_all only [PredExpr.NoReservedItAccess]
+      | _ => simp_all only [PredExpr.NoReservedItAccess]
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, if_neg hguard, ofCapKey_toCapKey hrec]
+  | .hasAttr a attr =>
+    simp only [PredExpr.NoReservedItAccess] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, ofCapKey_toCapKey h]
+  | .extHasAttr a attr attrs =>
+    simp only [PredExpr.NoReservedItAccess] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey, ofCapKey_toCapKey h]
+  | .record axs =>
+    simp only [PredExpr.NoReservedItAccess, List.all_attach₂_snd, List.all_eq_true] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey]
+    congr 1
+    rw [List.map₂_eq_map_snd, List.map₂_eq_map_snd, List.map_map]
+    conv => rhs; rw [← List.map_id axs]
+    apply List.map_congr_left
+    intro x hx
+    have := List.sizeOf_snd_lt_sizeOf_list hx
+    obtain ⟨a, b⟩ := x
+    simp only [Function.comp_apply, id_eq, Prod.mk.injEq, true_and]
+    exact ofCapKey_toCapKey (h (a, b) hx)
+  | .call f xs =>
+    simp only [PredExpr.NoReservedItAccess, List.all_eq_true] at h
+    simp only [PredExpr.toCapKey, PredExpr.ofCapKey]
+    congr 1
+    rw [List.map₁_eq_map, List.map₁_eq_map, List.map_map]
+    conv => rhs; rw [← List.map_id xs]
+    apply List.map_congr_left
+    intro x hx
+    have := List.sizeOf_lt_of_mem hx
+    simp only [Function.comp_apply, id_eq]
+    exact ofCapKey_toCapKey (h ⟨x, hx⟩ (List.mem_attach xs ⟨x, hx⟩))
+termination_by sizeOf q
+decreasing_by
+  all_goals simp_wf
+  all_goals (try omega)
+  all_goals
+    (first
+      | (have := List.sizeOf_snd_lt_sizeOf_list hx; omega)
+      | (have := List.sizeOf_lt_of_mem hx; omega)
+      | omega)
+
 /--
 Predicate analogue of `TypeOfIsSound` (D-97 option b). The true mirror: it takes
-`CapabilitiesInvariantPred c₁ it …`, and concludes the guarded production of
-`CapabilitiesInvariantPred c₂` AND that evaluation yields a value of the returned
-type or (D-94) **any** error.
+`CapabilitiesInvariantPred c₁ it …` and `env.NoReservedItKey`, and concludes the
+guarded production of `CapabilitiesInvariantPred c₂` AND that evaluation yields a
+value of the returned type or (D-94) **any** error.
 -/
 def TypeOfPredIsSound (p : PredExpr) : Prop :=
   ∀ {itTy : CedarType} {it : Value} {c₁ c₂ : Capabilities} {env : TypeEnv}
     {ty : TypedExpr} {request : Request} {entities : Entities},
+    NoReservedItKey env →
     CapabilitiesInvariantPred c₁ it request entities →
     InstanceOfWellFormedEnvironment request entities env →
     InstanceOfType env it itTy →
