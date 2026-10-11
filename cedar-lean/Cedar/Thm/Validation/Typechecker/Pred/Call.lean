@@ -7,28 +7,32 @@ import Cedar.Thm.Validation.Typechecker.Pred.Basic
 import Cedar.Thm.Validation.Typechecker.Call
 
 /-!
-# Predicate type soundness — `.call` arm (Phase 9c, WEAK form D-94)
+# Predicate type soundness — `.call` arm (Phase 9c, D-94)
 
 Mirror of `type_of_call_is_sound` (`Typechecker/Call.lean`) over
-`PredExpr`/`evaluatePred`/`typeOfPred`, in the WEAK form: no capability
-invariant, the error side admits ANY error.
+`PredExpr`/`evaluatePred`/`typeOfPred`, in the full (D-97 option b) form: it takes
+`hci : CapabilitiesInvariantPred c₁ …` and concludes
+`GuardedCapabilitiesInvariantPred (.call f xs) c₂ …` AND the type-soundness
+existential. `.call`'s output capabilities are **empty**, so the guarded
+conclusion is discharged by `empty_guarded_capabilities_invariant_pred` with no
+use of `hci`.
 
 `typeOfPred (.call f xs)` maps `justType ∘ (typeOfPred · itTy c env)` over `xs`
 to produce `tys`, then calls the SAME `typeOfCall f tys (xs.map toExpr)` helper
-the expression typechecker uses. `evaluatePred (.call f xs)` maps `evaluatePred`
-over `xs` then `call f vs`.
+the expression typechecker uses (the extension-constructor arms inspect their
+argument via `toExpr` string literals, exactly as the Expr typechecker does).
+`evaluatePred (.call f xs)` maps `evaluatePred` over `xs` then `call f vs`.
 
-Weak soundness means the two interesting cases are:
+Under D-94 weak soundness the two interesting cases are:
 * some argument errors — the whole `.call` errors (left disjunct of
   `EvaluatesToPred`), witness is any inhabitant of the result type;
 * every argument yields a value `vs` — then `call f vs` either errors (left
   disjunct again) or returns a value of the call's result type.
 
-The last fact — that an extension-function call on well-typed arguments returns a
-value of `typeOfCall`'s result type or an error — is the extension-function
-result-typing lemma, mirrored from the per-function arms of the Expr proof
-(`type_of_call_is_sound`). Under weak soundness we need only its *shape* (type or
-error), so it is captured by `call_result_instance_of_typeOfCall` below.
+The last fact — that `call f vs` on any argument values returns a value of
+`typeOfCall`'s result type or an error — is `call_result_instance_of_typeOfCall`,
+mirrored from the per-function result-type facts of `type_of_call_is_sound`.
+Weak soundness needs only its *shape* (type or error).
 -/
 
 namespace Cedar.Thm
@@ -36,40 +40,6 @@ namespace Cedar.Thm
 open Cedar.Data
 open Cedar.Spec
 open Cedar.Validation
-
-/--
-Discharge a `∃ v, InstanceOfType env v <concrete ty₀> ∧ (call f vs errors ∨
-call f vs = .ok v)` goal where `f` is a concrete `ExtFun`. Cases on the actual
-`call f vs` value: `.error` takes the left disjunct (witness is any inhabitant of
-the concrete `ty₀`), `.ok w` forces the matching `call` arm via `split`, whose
-returned value is of the declared type (the parse arms wrap `res`, so an extra
-`split` reads the option).
--/
-local macro "solve_call_result" vs:term : tactic =>
-  `(tactic| (
-    cases hcv : call _ $vs with
-    | error e =>
-      first
-        | exact ⟨_, decimal_is_instance_of_decimal, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, ipaddr_is_instance_of_ipaddr, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, datetime_is_instance_of_datetime, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, duration_is_instance_of_duration, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, bool_is_instance_of_anyBool false, Or.inl ⟨e, rfl⟩⟩
-        | exact ⟨_, InstanceOfType.instance_of_int, Or.inl ⟨e, rfl⟩⟩
-    | ok w =>
-      refine ⟨w, ?_, Or.inr rfl⟩
-      simp only [call] at hcv
-      split at hcv <;>
-        (try (simp only [res] at hcv; split at hcv)) <;>
-        simp only [res, reduceCtorEq, Except.ok.injEq, Coe.coe] at hcv <;>
-        (try subst hcv) <;>
-        first
-          | exact decimal_is_instance_of_decimal
-          | exact ipaddr_is_instance_of_ipaddr
-          | exact datetime_is_instance_of_datetime
-          | exact duration_is_instance_of_duration
-          | exact bool_is_instance_of_anyBool _
-          | exact InstanceOfType.instance_of_int))
 
 /--
 Per-argument inversion for the mapped `typeOfPred` list (pred twin of
@@ -101,52 +71,96 @@ theorem type_of_pred_call_args_inversion {xs : List PredExpr} {tys : List TypedE
 
 /--
 Inversion of `typeOfPred (.call f xs)` (pred twin of `type_of_call_inversion`).
-The result type is `.call f tys ty₀`, with each argument typed by `typeOfPred`.
+The result type is `.call f tys ty₀`, the output capabilities are empty, and the
+SAME `typeOfCall f tys (xs.map toExpr)` equation the Expr proof uses holds.
 -/
 theorem type_of_pred_call_inversion {f : ExtFun} {xs : List PredExpr} {itTy : CedarType}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {tx : TypedExpr}
     (h₁ : typeOfPred (.call f xs) itTy c₁ env = Except.ok (tx, c₂)) :
-    ∃ tys,
-      (∃ ty₀, tx = .call f tys ty₀) ∧
-      typeOfCall f tys (xs.map (fun x => x.toExpr)) = Except.ok (tx, c₂) ∧
-      List.Forall₂ (fun xᵢ txᵢ => ∃ cᵢ, typeOfPred xᵢ itTy c₁ env = .ok (txᵢ, cᵢ)) xs tys := by
+    c₂ = ∅ ∧
+    ∃ tys ty₀,
+      tx = .call f tys ty₀ ∧
+      typeOfCall f tys (xs.map (fun x => x.toExpr)) = Except.ok (tx, c₂) := by
   simp only [typeOfPred] at h₁
   -- the mapped argument types
   simp_do_let (xs.mapM₁ fun x => justType (typeOfPred x.val itTy c₁ env)) as htys at h₁
   rename_i tys
-  -- normalize `map₁`/`mapM₁` to `map`/`mapM`
+  -- normalize `map₁`/`mapM₁` to `map`/`mapM`; now `h₁ : typeOfCall f tys … = ok (tx, c₂)`.
   simp only [List.map₁_eq_map] at h₁
-  have hmap : (xs.mapM fun x => justType (typeOfPred x itTy c₁ env)) = Except.ok tys := by
-    rw [← List.mapM₁_eq_mapM (fun x => justType (typeOfPred x itTy c₁ env))]; exact htys
-  exists tys
-  refine ⟨?_, ?_, type_of_pred_call_args_inversion hmap⟩
-  · -- the result shape: typeOfCall produces `.call f tys _`
-    simp only [typeOfCall] at h₁
-    split at h₁ <;>
-    (first
-      | contradiction
-      | cases hc : typeOfConstructor Ext.Decimal.decimal (xs.map (fun x => x.toExpr)) (CedarType.ext ExtType.decimal) <;> simp only [hc] at h₁
-      | cases hc : typeOfConstructor Ext.IPAddr.ip (xs.map (fun x => x.toExpr)) (CedarType.ext ExtType.ipAddr) <;> simp only [hc] at h₁
-      | cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.parse (xs.map (fun x => x.toExpr)) (.ext .datetime) <;> simp only [hc] at h₁
-      | cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.Duration.parse (xs.map (fun x => x.toExpr)) (.ext .duration) <;> simp only [hc] at h₁
-      | skip) <;>
-    simp only [ok, Except.ok.injEq, Prod.mk.injEq, Except.bind_ok, Except.bind_err, reduceCtorEq] at h₁ <;>
-    simp only [← h₁] <;>
-    exact ⟨_, rfl⟩
-  · -- the typeOfCall equation
-    exact h₁
+  -- derive the result shape (and empty caps) from `h₁`, keeping `h₁` for the equation
+  have hshape : (∃ ty₀, tx = .call f tys ty₀) ∧ c₂ = ∅ := by
+    simp only [typeOfCall, typeOfConstructor] at h₁
+    split at h₁ <;> (try split at h₁) <;> (try split at h₁) <;>
+    simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, Except.bind_ok, Except.bind_err,
+      reduceCtorEq] at h₁ <;>
+    (obtain ⟨htx, hc₂⟩ := h₁) <;>
+    exact ⟨⟨_, htx.symm⟩, hc₂.symm⟩
+  obtain ⟨⟨ty₀, htx⟩, hc₂⟩ := hshape
+  exact ⟨hc₂, tys, ty₀, htx, h₁⟩
+
+/--
+Reduce `htc : typeOfCall f tys exprs = ok (.call f tys ty₀, c)` for a CONCRETE
+`f` (after `cases f`), closing the spurious `match xfn` branches via
+`contradiction` and pinning `ty₀` into the goal by `subst`. The constructor arms
+need the `typeOfConstructor` cases; the operator arms fall through to `skip`.
+-/
+local macro "reduce_htc" : tactic =>
+  `(tactic| (
+    split at htc <;>
+      first
+        | contradiction
+        | (cases hc : typeOfConstructor Ext.Decimal.decimal exprs (CedarType.ext ExtType.decimal) <;> simp only [hc] at htc)
+        | (cases hc : typeOfConstructor Ext.IPAddr.ip exprs (CedarType.ext ExtType.ipAddr) <;> simp only [hc] at htc)
+        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.parse exprs (.ext .datetime) <;> simp only [hc] at htc)
+        | (cases hc : typeOfConstructor Cedar.Spec.Ext.Datetime.Duration.parse exprs (.ext .duration) <;> simp only [hc] at htc)
+        | skip
+    all_goals (simp only [ok, err, reduceCtorEq, Except.ok.injEq, Prod.mk.injEq,
+      TypedExpr.call.injEq, true_and, and_true, Except.bind_ok, Except.bind_err] at htc)
+    all_goals (obtain ⟨hty, _⟩ := htc; subst hty)))
+
+/--
+Close a `call_result_instance_of_typeOfCall` goal for a CONCRETE extension
+function `$fn`, given that `ty₀` is already pinned to its concrete value.
+Cases on `call $fn vs` (concrete, so elimination is non-dependent): `.error`
+takes the left disjunct with a fixed inhabitant of `ty₀`; `.ok` reads the
+matching `call` arm, whose coerced value is an instance of `ty₀`.
+-/
+local macro "close_call " fn:term : tactic =>
+  `(tactic| (
+    cases hcv : call $fn vs with
+    | error e =>
+      first
+        | exact ⟨_, @decimal_is_instance_of_decimal env default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @ipaddr_is_instance_of_ipaddr env default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @datetime_is_instance_of_datetime env default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @duration_is_instance_of_duration env default, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @bool_is_instance_of_anyBool env false, Or.inl ⟨e, rfl⟩⟩
+        | exact ⟨_, @InstanceOfType.instance_of_int env default, Or.inl ⟨e, rfl⟩⟩
+    | ok w =>
+      refine ⟨w, ?_, Or.inr rfl⟩
+      simp only [call] at hcv
+      split at hcv <;>
+        (try (simp only [res] at hcv; split at hcv)) <;>
+        simp only [res, reduceCtorEq, Except.ok.injEq] at hcv <;>
+        (try subst hcv) <;>
+        first
+          | exact decimal_is_instance_of_decimal
+          | exact ipaddr_is_instance_of_ipaddr
+          | exact datetime_is_instance_of_datetime
+          | exact duration_is_instance_of_duration
+          | exact bool_is_instance_of_anyBool _
+          | exact InstanceOfType.instance_of_int))
 
 /--
 Extension-function result typing, WEAK shape (D-94): if
 `typeOfCall f tys exprs = .ok (.call f tys ty₀, c)` then for ANY argument values
 `vs`, `call f vs` either errors or returns a value that is an instance of `ty₀`.
 
-Proved by cases on `f`: `typeOfCall` pins `ty₀` (and, for the operator arms, the
-argument-type shape), and `call f vs` either matches that function's value
-pattern — returning a value of `ty₀` (or `.error .extensionError` through `res`
-for the fallible parse/arith arms) — or falls through to `.error .typeError`.
-Mirrors the per-function result-type facts of `type_of_call_is_sound`; weak
-soundness needs only the type-or-error shape.
+Proved by cases on `f`: `typeOfCall` pins `ty₀`, and `call f vs` either matches
+that function's value pattern — a value of `ty₀` (or `.error .extensionError`
+through `res` for the fallible parse arms) — or falls through to
+`.error .typeError`. Mirrors the per-function result facts of
+`type_of_call_is_sound`; weak soundness needs only the type-or-error shape.
 -/
 theorem call_result_instance_of_typeOfCall {f : ExtFun} {tys : List TypedExpr}
     {ty₀ : CedarType} {c : Capabilities} {env : TypeEnv} {exprs : List Expr}
@@ -154,64 +168,49 @@ theorem call_result_instance_of_typeOfCall {f : ExtFun} {tys : List TypedExpr}
     (htc : typeOfCall f tys exprs = Except.ok (.call f tys ty₀, c)) :
     ∃ v, InstanceOfType env v ty₀ ∧
          ((∃ e, call f vs = Except.error e) ∨ call f vs = Except.ok v) := by
-  -- Pin the result type `ty₀` per function from `typeOfCall`.
-  simp only [typeOfCall] at htc
-  cases f <;>
-    simp only [bind, Except.bind] at htc
-  -- Constructor arms: unfold `typeOfConstructor`; the ok case pins `ty₀` to the
-  -- declared ext type, every other case is `err = .ok _` and closes.
-  case decimal =>
-    simp only [typeOfConstructor] at htc
-    split at htc <;> (try split at htc) <;>
-      simp only [ok, err, Except.bind_ok, Except.bind_err, reduceCtorEq, Except.ok.injEq,
-        Prod.mk.injEq, TypedExpr.call.injEq, true_and] at htc
-    obtain ⟨hty, _⟩ := htc; subst hty
-    solve_call_result vs
-  case ip =>
-    simp only [typeOfConstructor] at htc
-    split at htc <;> (try split at htc) <;>
-      simp only [ok, err, Except.bind_ok, Except.bind_err, reduceCtorEq, Except.ok.injEq,
-        Prod.mk.injEq, TypedExpr.call.injEq, true_and] at htc
-    obtain ⟨hty, _⟩ := htc; subst hty
-    solve_call_result vs
-  case datetime =>
-    simp only [typeOfConstructor] at htc
-    split at htc <;> (try split at htc) <;>
-      simp only [ok, err, Except.bind_ok, Except.bind_err, reduceCtorEq, Except.ok.injEq,
-        Prod.mk.injEq, TypedExpr.call.injEq, true_and] at htc
-    obtain ⟨hty, _⟩ := htc; subst hty
-    solve_call_result vs
-  case duration =>
-    simp only [typeOfConstructor] at htc
-    split at htc <;> (try split at htc) <;>
-      simp only [ok, err, Except.bind_ok, Except.bind_err, reduceCtorEq, Except.ok.injEq,
-        Prod.mk.injEq, TypedExpr.call.injEq, true_and] at htc
-    obtain ⟨hty, _⟩ := htc; subst hty
-    solve_call_result vs
-  -- Operator / recognizer / converter arms: `split` keeps the matching tys arm
-  -- (binding `ty₀`), the `err` fallthrough (closed by `reduceCtorEq`), and the
-  -- cross-constructor arms whose `xfn = _` discriminant equation is impossible.
-  all_goals
-    (split at htc <;>
-      (try (rename_i heq; exact absurd heq (by decide))) <;>
-      simp only [ok, err, reduceCtorEq, Except.ok.injEq, Prod.mk.injEq, TypedExpr.call.injEq,
-        true_and, and_true] at htc) <;>
-    (obtain ⟨hty, _⟩ := htc) <;>
-    subst hty <;>
-    solve_call_result vs
+  cases f <;> simp only [typeOfCall] at htc
+  case decimal => reduce_htc; close_call ExtFun.decimal
+  case ip => reduce_htc; close_call ExtFun.ip
+  case datetime => reduce_htc; close_call ExtFun.datetime
+  case duration => reduce_htc; close_call ExtFun.duration
+  case lessThan => reduce_htc; close_call ExtFun.lessThan
+  case lessThanOrEqual => reduce_htc; close_call ExtFun.lessThanOrEqual
+  case greaterThan => reduce_htc; close_call ExtFun.greaterThan
+  case greaterThanOrEqual => reduce_htc; close_call ExtFun.greaterThanOrEqual
+  case isIpv4 => reduce_htc; close_call ExtFun.isIpv4
+  case isIpv6 => reduce_htc; close_call ExtFun.isIpv6
+  case isLoopback => reduce_htc; close_call ExtFun.isLoopback
+  case isMulticast => reduce_htc; close_call ExtFun.isMulticast
+  case isInRange => reduce_htc; close_call ExtFun.isInRange
+  case toMilliseconds => reduce_htc; close_call ExtFun.toMilliseconds
+  case toSeconds => reduce_htc; close_call ExtFun.toSeconds
+  case toMinutes => reduce_htc; close_call ExtFun.toMinutes
+  case toHours => reduce_htc; close_call ExtFun.toHours
+  case toDays => reduce_htc; close_call ExtFun.toDays
+  case offset => reduce_htc; close_call ExtFun.offset
+  case durationSince => reduce_htc; close_call ExtFun.durationSince
+  case toDate => reduce_htc; close_call ExtFun.toDate
+  case toTime => reduce_htc; close_call ExtFun.toTime
+
 
 /--
-`.call` predicate soundness (pred twin of `type_of_call_is_sound`), WEAK form.
+`.call` predicate soundness (pred twin of `type_of_call_is_sound`). `.call`'s
+output capabilities are empty, so the guarded conclusion is discharged by
+`empty_guarded_capabilities_invariant_pred`; `hci` is unused.
 -/
 theorem type_of_pred_call_is_sound {f : ExtFun} {xs : List PredExpr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
     (h₃ : typeOfPred (.call f xs) itTy c₁ env = Except.ok (ty, c₂))
     (ih : ∀ x, x ∈ xs → TypeOfPredIsSound x) :
+    GuardedCapabilitiesInvariantPred (.call f xs) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.call f xs) it request entities v ∧ InstanceOfType env v ty.typeOf := by
-  have ⟨tys, ⟨ty₀, hty⟩, htc, _⟩ := type_of_pred_call_inversion h₃
+  have ⟨hc₂, tys, ty₀, hty, htc⟩ := type_of_pred_call_inversion h₃
+  subst hc₂
   subst hty
+  refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
   simp only [TypedExpr.typeOf]
   -- Evaluate the argument list.
   simp only [EvaluatesToPred, evaluatePred,
