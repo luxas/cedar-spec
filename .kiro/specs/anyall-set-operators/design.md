@@ -473,7 +473,7 @@ In Lean this is `Error.quantifierError`; in Rust it is a new evaluation-error va
 ## Analyzability (explicit)
 
 `.all` / `.any` are decidable **iff the predicate contains no set term** — exactly the
-restriction `PredExpr` encodes. Source: Mohamed Mudathir, Nick Feng, Clark Barrett, Cesare
+restriction `PredExpr` encodes. Source: Mudathir Mohamed, Nick Feng, Clark Barrett, Cesare
 Tinelli, Andrew Reynolds, Marsha Chechik (2025), *Solving Set Constraints with Comprehensions
 and Bounded Quantifiers*, FMCAD 2025,
 [PDF](https://repositum.tuwien.at/bitstream/20.500.12708/219545/1/Mohamed%20Mudathir%20-%202025%20-%20Solving%20Set%20Constraints%20with%20Comprehensions%20and...pdf).

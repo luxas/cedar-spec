@@ -56,9 +56,9 @@ Nested cedar repo (`cedar/`):
   **`anyall` is NOT yet listed in either `cedar-policy-core/src/lib.rs` or
   `cedar-policy/src/lib.rs` feature docs** (it IS wired into the `experimental` meta-feature in
   `cedar-policy/Cargo.toml:64`).
-- RFC 0021 reference file: present locally at
-  `/local/home/luxask/code/rfcs/archive/rfc/0021-any-and-all-operators.md` (OUTSIDE both
-  worktrees; reference by title+URL, do not copy into the repo).
+- RFC 0021 reference file: the archived `0021-any-and-all-operators.md` from the cedar-policy
+  RFCs repository, available locally OUTSIDE both worktrees (reference by title+URL, do not copy
+  into the repo).
 
 cedar-spec repo (`cedar-lean/`, `cedar-drt/`):
 - `cedar-lean/README.md`, `cedar-lean/GUIDE.md` (GUIDE does not enumerate operators).
