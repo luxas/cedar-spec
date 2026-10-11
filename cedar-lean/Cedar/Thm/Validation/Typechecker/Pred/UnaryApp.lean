@@ -61,15 +61,18 @@ inversion + IH + eval-result case split carries over verbatim with
 -/
 theorem type_of_pred_unaryApp_is_sound {op₁ : UnaryOp} {x₁ : PredExpr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
+    (hci : CapabilitiesInvariantPred c₁ it request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
     (h₃ : typeOfPred (.unaryApp op₁ x₁) itTy c₁ env = Except.ok (ty, c₂))
     (ih : TypeOfPredIsSound x₁) :
+    GuardedCapabilitiesInvariantPred (.unaryApp op₁ x₁) c₂ it request entities ∧
     ∃ v, EvaluatesToPred (.unaryApp op₁ x₁) it request entities v ∧ InstanceOfType env v ty.typeOf := by
   have ⟨hc, tx₁, tyr, c₁', htx, h₄, hmatch⟩ := type_of_pred_unary_inversion h₃
   subst hc
+  refine ⟨empty_guarded_capabilities_invariant_pred, ?_⟩
   -- IH on the operand
-  have ⟨v₁, hev₁, hinst₁⟩ := ih h₂ hit h₄
+  have ⟨_, v₁, hev₁, hinst₁⟩ := ih hci h₂ hit h₄
   subst htx
   simp only [TypedExpr.typeOf]
   simp only [EvaluatesToPred] at hev₁
