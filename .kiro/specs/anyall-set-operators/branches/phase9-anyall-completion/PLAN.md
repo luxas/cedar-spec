@@ -466,6 +466,20 @@ reverts red drafts (the learned rule — spawn a fresh worker or drive the file 
   — NOT a full equality. Proof is structural (M4-sized); the fold arms pin the folded branch's bool
   type via `type_of_pred_is_sound`. Keep `PredExpr.Normal` consistent but do not state a cap-equality.
 
+- **D-P9c-13 — D-79 static-`ite` branch sharing (LEAD worker #3, 2026-10-11).** `PredExpr.normalize`'s
+  statically-constant `.ite` arms (`.bool .tt` / `.bool .ff`) kept the condition `cond'` (an erroring
+  condition must still error, D-73a — the condition cannot be dropped) but emitted `.ite cond' (normalize
+  live) (normalize live)` by calling `normalize` on the SAME live branch TWICE, which doubles work at
+  every nested static `ite` — the exponential blow-up. **Resolution:** compute the live branch ONCE with
+  `let t' := normalize …; .ite cond' t' t'` (same for the `.ff` arm with `e'`). The emitted `PredExpr`
+  is DEFINITIONALLY `.ite cond' t' t'` — identical to before — so `normalize_evaluatePred`,
+  `normalize_wellTyped` and `normalize_validRefs` need NO change (their `normalize.induct` tt/ff cases
+  already produce `.ite (ihc hc) (iht ht) (iht ht)`, sharing one `iht ht`). Confirmed: `lake build Cedar`
+  stays 648 jobs green after the change, no proof edited. The `.and`/`.or` arms never duplicated (they
+  fold to the single surviving operand), so only `.ite` is touched. An `.and c' t'` / `.or (.not c') t'`
+  rewrite was rejected: it would require proving a new evaluation-equivalence (incl. error behaviour),
+  whereas `let`-sharing is defeq and free.
+
 **Milestones (9c):**
 - **M1** — foundation: `EvaluatesToPred`, `TypeOfPredIsSound`, prove `.item`/`.lit`/`.var`; stub the
   recursive arms as separate lemmas; dispatcher assembled. Validates the mirror strategy.

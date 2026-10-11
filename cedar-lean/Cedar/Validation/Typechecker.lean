@@ -466,8 +466,12 @@ public def PredExpr.normalize (p : PredExpr) (itTy : CedarType) (c : Capabilitie
     match typeOfPred cond itTy c env with
     | .ok (tyc, c₁) =>
       match tyc.typeOf with
-      | .bool .tt => .ite cond' (PredExpr.normalize t itTy (c ∪ c₁) env) (PredExpr.normalize t itTy (c ∪ c₁) env)
-      | .bool .ff => .ite cond' (PredExpr.normalize e itTy c env) (PredExpr.normalize e itTy c env)
+      -- D-79: a statically-constant condition keeps `cond'` (an erroring condition
+      -- must still error, D-73a) but the live branch is computed ONCE and shared, so
+      -- `normalize` does not recompute it twice (the source of the exponential blow-up).
+      -- The emitted term is definitionally `.ite cond' t' t'`, unchanged for proofs.
+      | .bool .tt => let t' := PredExpr.normalize t itTy (c ∪ c₁) env; .ite cond' t' t'
+      | .bool .ff => let e' := PredExpr.normalize e itTy c env; .ite cond' e' e'
       | _         => .ite cond' (PredExpr.normalize t itTy (c ∪ c₁) env) (PredExpr.normalize e itTy c env)
     | .error _ => .ite cond' (PredExpr.normalize t itTy c env) (PredExpr.normalize e itTy c env)
   | .and a b =>
