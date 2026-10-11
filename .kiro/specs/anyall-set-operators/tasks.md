@@ -409,7 +409,7 @@ bottom-up:
   `compile_well_typed` `.all` arm (lift the D-74-interim) so SymCC `.all` **completeness** holds
   honestly; and (D-79) fold `normalize`'s constant-`ite` to the live branch once instead of
   duplicating, now that `normalize_evaluatePred` licenses it. _Satisfies:_ 5.1 (completeness), 6.4
-  (closes the F2 dead-code debt). _Status: **IMPLEMENTED** (LEAD worker #3, 2026-10-11) — the real
+  (closes the F2 dead-code debt). _Status: **DONE** — review R1: NO ACTIONABLE FINDINGS; see `branches/phase9c-anyall-pred-type-soundness/OUTCOMES.md`. (IMPLEMENTED by LEAD worker #3, 2026-10-11) — the real
   `.all` arm of `compile_well_typed_on_wf_expr` is proved (honest guard `x₁.SymCCSupported &&
   p.NoItDependentIn`), D-79 landed (static-`ite` branch sharing, D-P9c-13), M6 green: `lake build
   Cedar` 648 jobs 0 `sorry`; the five named theorems `#print axioms` = `[propext, Classical.choice,

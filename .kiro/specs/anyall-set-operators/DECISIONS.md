@@ -227,8 +227,9 @@ e.g. `principal has "a" && context.s.all(it.a == 1)`.
 This is a Lean-spec precision/parity bug surfaced by the proof attempt, **not**
 fixed in 9c (D-94 sidesteps it with weak soundness). **Recommended fix for a
 later branch:** make `itExpr` collision-free (e.g.
-`.getAttr (.var .context) "__cedar::anyall::it"`, a reserved name the Rust schema
-validator already refuses — NOT a string-literal extension arg, since
+`.getAttr (.var .context) "__cedar::anyall::it"` (an attribute name in the `__cedar` namespace, which
+Rust reserves; note Rust refuses `namespace __cedar {…}` declarations but does NOT reject a bare
+attribute literally named `__cedar::anyall::it`, see D-98) — NOT a string-literal extension arg, since
 `typeOfCall` parses those), and add the shape to the Phase-6 generator. See the
 D-95 validator check outcome recorded alongside this entry.
 
@@ -313,8 +314,8 @@ closes the D-95 parity bug at its source, IN 9c (the earlier "do not touch
 D-95/D-96 is that `it`'s capabilities shared a key with request variables
 (`itExpr = .var .principal`). Fix: `PredExpr.toCapKey` (`Cedar/Spec/Expr.lean`),
 identical to `toExpr` except `.item ↦ itCapKey = .getAttr (.var .context)
-"__cedar::anyall::it"` (the reserved name Rust refuses, mirroring
-`IT_SENTINEL`). `typeOfPred` now passes `toCapKey` (never `toExpr`) as the
+"__cedar::anyall::it"` (the `__cedar`-namespace name Rust uses for its `IT_SENTINEL` unknown; Rust
+does not reject an attribute so named, see D-98). `typeOfPred` now passes `toCapKey` (never `toExpr`) as the
 capability-key argument to `typeOfHasAttr`/`typeOfGetAttr`/`typeOfExtHasAttr`/
 `typeOfBinaryApp`. An `it`-rooted attr/tag capability therefore can never collide
 with `(principal, …)`, so `principal has "a" && context.s.all(it.a == 1)` no
@@ -352,8 +353,13 @@ value-only weak form is subsumed.
 `.all` case) needs `NoReservedItKey env` to apply `normalize_evaluatePred` per set
 element, but that side condition was neither a hypothesis of the theorem nor
 derivable from `env.WellFormed`. Chosen fix = **option B**: the Lean environment
-validator now ENCODES the part of the Rust schema parser's `__cedar`-namespace
-refusal that the `.all` chain relies on.
+validator now REJECTS a request-context attribute literally named `__cedar::anyall::it`, the one
+fact the `.all` chain relies on. **Parity note (review R1 NIT-1):** Rust reserves the `__cedar`
+namespace (`namespace __cedar {…}` is refused) but its schema parser does NOT reject an attribute
+merely named `__cedar::anyall::it`; after this change the Lean environment validator is strictly
+stricter than Rust on that single attribute name. This is the safe direction (Lean rejects, never
+mis-accepts), is not observable by the DRT generators (0 validation mismatches over 107k executions in
+review), and is recorded here as a known, deliberate divergence.
 
 Concretely:
 - `RequestType.WellFormed` (`Thm/Validation/Typechecker/WF.lean`) gains the
