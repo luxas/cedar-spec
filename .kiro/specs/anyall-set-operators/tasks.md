@@ -380,7 +380,7 @@ Branches: cedar-spec `phase9-anyall-completion` cut from `phase8-anyall-cvc5-ben
 cedar `phase9-anyall-completion` cut from `phase7-anyall-docs`. Four stacked sub-branches, merge
 bottom-up:
 
-- **T9a — D-78** (`phase9a-anyall-ho-all-logic`, XS, independent) — **IMPLEMENTED** (review follows).
+- **T9a — D-78** (`phase9a-anyall-ho-all-logic`, XS, independent) — **DONE** (review R1: NO ACTIONABLE FINDINGS; see `branches/phase9a-anyall-ho-all-logic/OUTCOMES.md`).
   Select SMT logic `HO_ALL` only
   when the asserted terms contain a `set.all` term; keep the first-order logic otherwise (Lean
   encoder; Rust encoder byte-matches per D-36). Lean `Term.containsSetAll` + `encode` logic
