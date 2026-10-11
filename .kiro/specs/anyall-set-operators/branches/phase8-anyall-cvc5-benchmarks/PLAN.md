@@ -345,15 +345,15 @@ regression-threshold gate on the smoke summary is a possible later add, but not 
 - **D-P8-nonvac** — every quantified row MUST assert a `set.filter`/`HO_ALL` term is present, or the
   harness fails; a folded or rejected policy is never silently recorded.
 
-## Genuine user-decision forks (escalate ONCE, do not guess)
+## User-decision fork — RESOLVED as D-87
 
-- **FORK-1 (sweep budget / wall-clock cap for the FULL run).** What is the acceptable wall-clock
-  and per-query timeout for `--full`? Options: (a) **fast** — per-query 30 s, stop each family
-  after 2 consecutive timeouts, total ≲30 min; (b) **thorough** — per-query 300 s (matches DRT
-  `TIMEOUT_DUR`), set sizes to 256+, total up to several hours; (c) **paper-scale** — per-query
-  600 s+, push every dimension to its cliff, overnight. Default assumption if unanswered: **(b)**,
-  because 300 s already matches the repo's existing solver timeout, but this genuinely trades
-  review latency against envelope depth and is the owner's call.
+- **FORK-1 (sweep budget / wall-clock cap for the FULL run) — RESOLVED (user 2026-10-09, D-87):**
+  option **(b)** with a wall-clock cap. Per-query timeout = the repo's DRT `TIMEOUT_DUR` =
+  **300 s**; the first `--full` sweep is bounded to **~90 min total** via `--max-wall-secs` (default
+  5400 for `--full`), with sweep sizes chosen so the worst case fits, and the harness stops cleanly
+  on budget exhaustion recording exactly which rows it covered (a partial sweep is a first-class
+  result). Paper-scale runs stay a config knob (`--max-wall-secs 0` = uncapped, larger `--sizes`),
+  not run this phase.
 
 Everything else (harness location, set-size realisation, un-opt pinning, output format, smoke
 shape) is decided above as D-P8-* and does not need the owner.
