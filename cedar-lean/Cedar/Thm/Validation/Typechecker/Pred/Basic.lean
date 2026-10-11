@@ -189,6 +189,153 @@ decreasing_by
       | omega)
 
 /--
+**Support lemma (a) (§5.1 step 1).** A predicate that type-checks under
+`NoReservedItKey env` has `NoReservedItAccess`: it cannot contain the reserved
+capability-key access `context["__cedar::anyall::it"]`, because typing
+`context["__cedar::anyall::it"]` reads `env.reqty.context`, which `NoReservedItKey`
+says does not declare that attribute, so `getAttrInRecord` returns
+`attrNotFound` and the whole `typeOfPred` errors — contradicting the `.ok`
+hypothesis. Structural recursion on `p` (`termination_by sizeOf p`), the same
+shape as `ofCapKey_toCapKey`; every arm but `.getAttr (.var .context) …` just
+recurses into its typed operands. -/
+theorem type_of_pred_implies_no_reserved {p : PredExpr} {itTy : CedarType}
+    {c c' : Capabilities} {env : TypeEnv} {tx : TypedExpr}
+    (hnr : NoReservedItKey env)
+    (h : typeOfPred p itTy c env = Except.ok (tx, c')) :
+    p.NoReservedItAccess = true := by
+  match p with
+  | .item => simp only [PredExpr.NoReservedItAccess]
+  | .lit _ => simp only [PredExpr.NoReservedItAccess]
+  | .var _ => simp only [PredExpr.NoReservedItAccess]
+  | .ite a b d =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred b itTy (c ∪ r₁.2) env <;> simp only [h₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    cases h₃ : typeOfPred d itTy c env <;> simp only [h₃, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i r₂ r₃
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true]
+    exact ⟨⟨type_of_pred_implies_no_reserved hnr h₁, type_of_pred_implies_no_reserved hnr h₂⟩,
+      type_of_pred_implies_no_reserved hnr h₃⟩
+  | .and a b =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred b itTy (c ∪ r₁.2) env <;> simp only [h₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true]
+    exact ⟨type_of_pred_implies_no_reserved hnr h₁, type_of_pred_implies_no_reserved hnr h₂⟩
+  | .or a b =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred b itTy c env <;> simp only [h₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true]
+    exact ⟨type_of_pred_implies_no_reserved hnr h₁, type_of_pred_implies_no_reserved hnr h₂⟩
+  | .unaryApp op a =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    simp only [PredExpr.NoReservedItAccess]
+    exact type_of_pred_implies_no_reserved hnr h₁
+  | .binaryApp op a b =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i r₁
+    cases h₂ : typeOfPred b itTy c env <;> simp only [h₂, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    simp only [PredExpr.NoReservedItAccess, Bool.and_eq_true]
+    exact ⟨type_of_pred_implies_no_reserved hnr h₁, type_of_pred_implies_no_reserved hnr h₂⟩
+  | .hasAttr a attr =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    simp only [PredExpr.NoReservedItAccess]
+    exact type_of_pred_implies_no_reserved hnr h₁
+  | .extHasAttr a attr attrs =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    simp only [PredExpr.NoReservedItAccess]
+    exact type_of_pred_implies_no_reserved hnr h₁
+  | .getAttr a attr =>
+    simp only [typeOfPred] at h
+    cases h₁ : typeOfPred a itTy c env <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i r₁
+    -- First, the operand recurses.
+    have hrec := type_of_pred_implies_no_reserved (p := a) hnr h₁
+    -- `NoReservedItAccess (.getAttr a attr)` is `a.NoReservedItAccess` for every
+    -- `a` except `.var .context`, where it is `attr ≠ reserved`. Rule out the
+    -- reserved shape by showing typing it fails.
+    cases a with
+    | var v =>
+      cases v with
+      | context =>
+        by_cases hattr : attr = "__cedar::anyall::it"
+        · exfalso
+          subst hattr
+          have hvar : typeOfPred (.var Var.context) itTy c env = Except.ok (r₁.1, r₁.2) := h₁
+          simp only [typeOfPred, typeOfVar, Validation.ok, Function.comp_apply,
+            Except.ok.injEq, Prod.mk.injEq] at hvar
+          obtain ⟨hv1, _⟩ := hvar
+          simp only [typeOfGetAttr, ← hv1, TypedExpr.typeOf, getAttrInRecord] at h
+          have hnone : env.reqty.context.find? "__cedar::anyall::it" = none := by
+            have hc := hnr
+            simp only [NoReservedItKey, Map.contains, Bool.not_eq_true] at hc
+            exact Option.not_isSome_iff_eq_none.mp (by simp only [hc, Bool.false_eq_true, not_false_eq_true])
+          simp only [hnone, Validation.err, Except.bind_err, reduceCtorEq] at h
+        · simp only [PredExpr.NoReservedItAccess, PredExpr.var, ne_eq, hattr, not_false_eq_true,
+            decide_true]
+      | principal => simpa only [PredExpr.NoReservedItAccess, PredExpr.var] using hrec
+      | action => simpa only [PredExpr.NoReservedItAccess, PredExpr.var] using hrec
+      | resource => simpa only [PredExpr.NoReservedItAccess, PredExpr.var] using hrec
+    | item => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | lit _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | ite _ _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | and _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | or _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | unaryApp _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | binaryApp _ _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | getAttr _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | hasAttr _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | extHasAttr _ _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | record _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+    | call _ _ => simpa only [PredExpr.NoReservedItAccess] using hrec
+  | .record axs =>
+    simp only [typeOfPred] at h
+    cases h₁ : axs.mapM₂ (λ x => (typeOfPred x.1.snd itTy c env).map (λ (ty, _) => (x.1.fst, ty)))
+      <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i rtx
+    simp only [PredExpr.NoReservedItAccess, List.all_attach₂_snd, List.all_eq_true]
+    intro x hx
+    -- each element typed under the same env/caps; recurse via the mapM₂ success
+    simp only [List.mapM₂_eq_mapM
+      (λ (x : Attr × PredExpr) => Except.map (fun x₁ : (TypedExpr × Capabilities) => (x.fst, x₁.fst)) (typeOfPred x.snd itTy c env))] at h₁
+    have hmem := List.mapM_ok_implies_all_ok h₁ x hx
+    obtain ⟨b, _, hb⟩ := hmem
+    cases hty : typeOfPred x.snd itTy c env <;> simp only [hty, Except.map, reduceCtorEq] at hb
+    have := List.sizeOf_snd_lt_sizeOf_list hx
+    exact type_of_pred_implies_no_reserved hnr hty
+  | .call f xs =>
+    simp only [typeOfPred] at h
+    cases h₁ : xs.mapM₁ (λ x => justType (typeOfPred x.1 itTy c env))
+      <;> simp only [h₁, Except.bind_err, Except.bind_ok, reduceCtorEq] at h
+    rename_i tys
+    simp only [PredExpr.NoReservedItAccess, List.all_eq_true]
+    intro x hx
+    have hxmem : x.val ∈ xs := x.property
+    simp only [List.mapM₁_eq_mapM (λ (x : PredExpr) => justType (typeOfPred x itTy c env))] at h₁
+    have hmem := List.mapM_ok_implies_all_ok h₁ x.val hxmem
+    obtain ⟨b, _, hb⟩ := hmem
+    cases hty : typeOfPred x.val itTy c env <;> simp only [hty, justType, Except.map, reduceCtorEq] at hb
+    have := List.sizeOf_lt_of_mem hxmem
+    exact type_of_pred_implies_no_reserved hnr hty
+termination_by sizeOf p
+decreasing_by
+  all_goals simp_wf
+  all_goals (try omega)
+  all_goals
+    (first
+      | (have := List.sizeOf_snd_lt_sizeOf_list hx; omega)
+      | (have := List.sizeOf_lt_of_mem hx; omega)
+      | omega)
+
+/--
 Predicate analogue of `TypeOfIsSound` (D-97 option b). The true mirror: it takes
 `CapabilitiesInvariantPred c₁ it …` and `env.NoReservedItKey`, and concludes the
 guarded production of `CapabilitiesInvariantPred c₂` AND that evaluation yields a
