@@ -519,6 +519,34 @@ bottom-up:
   `CapabilitiesInvariant c → NoReservedItKey → InstanceOfType env it τ → CapabilitiesInvariantPred c it`
   (bridge `evaluatePred (ofCapKey e) it = evaluate e` on it-free outer cap-keys), M5 step 3's
   SymCCSupported flip + real `compile_well_typed` `.all` arm + Pred-module imports, D-79, M6.
+
+  **UPDATE 6 (LEAD worker #2 cont., 2026-10-11 ~17:55) — D-98 LANDED, entry-lemma-(b) soundness fork.**
+  D-98 (option B) is fully implemented and GREEN (commits a5aa021 + d3c90a3): `RequestType.WellFormed`
+  gains `¬ reqty.context.contains "__cedar::anyall::it"`; the executable `validateWellFormed` rejects
+  it and `request_type_validate_well_formed_is_sound` re-proves the enriched Prop; new
+  `wf_env_implies_no_reserved_it_key : env.WellFormed → NoReservedItKey env` (Pred/Basic.lean) sources
+  it from the fact callers already carry; three WF.lean reqty destructurings fixed; CedarUnitTests
+  `#guard` (UnitTest/AnyAll.lean) confirms a reserved-context env is rejected. **`NoReservedItKey` is
+  therefore now derivable at `Typechecker.lean:477` from `h₂` (`InstanceOfWellFormedEnvironment` →
+  `env.WellFormed`).** NEW BLOCKER (deeper than D-98): the entry lemma (b) that constructs
+  `CapabilitiesInvariantPred xcap it` from the outer `CapabilitiesInvariant xcap` is **unsound as a
+  for-ALL-keys statement.** `CapabilitiesInvariantPred` requires, for every `(e,.attr k) ∈ xcap`,
+  `EvaluatesToPred (.hasAttr (PredExpr.ofCapKey e) k) it = true`. `ofCapKey` collapses any `.all`/`.set`
+  subterm of `e` to `.item` (= the bound element `it`) and the reserved context access to `.item`, so
+  for an outer cap-key `e` that CONTAINS an `.all`/`.set` subterm (e.g. a cap earned by
+  `(if s.all(q) then r1 else r2) has a`, which is a legal policy), `evaluatePred (ofCapKey e) it ≠
+  evaluate e` and the bridge fails. Such keys are never actually READ by the predicate (a `PredExpr`
+  is set-/all-free by construction, so its `toCapKey` never matches an `.all`-containing outer key —
+  only request-variable-rooted, `.all`/`.set`-free keys are consulted), but `CapabilitiesInvariantPred`
+  as currently DEFINED (Pred/Basic.lean, used by all 14 proved Pred arms) quantifies over EVERY key in
+  `c`, so it still cannot be constructed for an `.all`-containing `xcap`. Resolution is a formulation
+  decision on `CapabilitiesInvariantPred` / the boundary, each rippling the proved Pred chain:
+  (A) restrict the `∀ (e,k) ∈ c` quantifier to `.all`/`.set`/reserved-free keys (and show the predicate
+  only reads such) — changes the def + re-greens the 14 arms; (B) prove/thread a typechecker invariant
+  that caps reaching an `.all` boundary have `.all`/`.set`-free keys; (C) restate `type_of_pred_is_sound`
+  to take only the keys it reads. This is the exact next decision; everything else for `:477`
+  (`evalAll_congr`, receiver `type_of_is_sound` + `instance_of_set_type_is_set`, `normalize_evaluatePred`,
+  `wf_env_implies_no_reserved_it_key`) is ready.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
