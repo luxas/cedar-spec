@@ -10,12 +10,11 @@ import Cedar.Thm.Validation.Typechecker.UnaryApp
 # Predicate type soundness — `.unaryApp` arm (Phase 9c, M2)
 
 Mirror of `type_of_unaryApp_is_sound` (`Typechecker/UnaryApp.lean`) over
-`PredExpr`/`evaluatePred`/`typeOfPred`. `typeOfPred (.unaryApp op x₁)` peels to
+`PredExpr`/`evaluatePred`/`typeOfPred`, in the WEAK form (D-94): no guarded
+capabilities, error side admits any error. `typeOfPred (.unaryApp op x₁)` peels to
 `typeOfPred x₁` then the SAME `typeOfUnaryApp op ty₁` helper the expression
 typechecker uses, and `evaluatePred (.unaryApp op x₁)` is `evaluatePred x₁ >>=
-apply₁ op` — identical to `evaluate` modulo the sub-term evaluator. The output
-capabilities are `∅` (so the guarded invariant is `empty_guarded_capabilities_invariant`),
-and `(.unaryApp op x₁).toExpr = .unaryApp op x₁.toExpr`.
+apply₁ op`.
 -/
 
 namespace Cedar.Thm
@@ -62,19 +61,15 @@ inversion + IH + eval-result case split carries over verbatim with
 -/
 theorem type_of_pred_unaryApp_is_sound {op₁ : UnaryOp} {x₁ : PredExpr} {itTy : CedarType} {it : Value}
     {c₁ c₂ : Capabilities} {env : TypeEnv} {ty : TypedExpr} {request : Request} {entities : Entities}
-    (h₁ : CapabilitiesInvariant c₁ request entities)
     (h₂ : InstanceOfWellFormedEnvironment request entities env)
     (hit : InstanceOfType env it itTy)
     (h₃ : typeOfPred (.unaryApp op₁ x₁) itTy c₁ env = Except.ok (ty, c₂))
     (ih : TypeOfPredIsSound x₁) :
-    GuardedCapabilitiesInvariant (PredExpr.unaryApp op₁ x₁).toExpr c₂ request entities ∧
     ∃ v, EvaluatesToPred (.unaryApp op₁ x₁) it request entities v ∧ InstanceOfType env v ty.typeOf := by
   have ⟨hc, tx₁, tyr, c₁', htx, h₄, hmatch⟩ := type_of_pred_unary_inversion h₃
   subst hc
-  simp only [PredExpr.toExpr]
-  refine ⟨empty_guarded_capabilities_invariant, ?_⟩
   -- IH on the operand
-  have ⟨_, v₁, hev₁, hinst₁⟩ := ih h₁ h₂ hit h₄
+  have ⟨v₁, hev₁, hinst₁⟩ := ih h₂ hit h₄
   subst htx
   simp only [TypedExpr.typeOf]
   simp only [EvaluatesToPred] at hev₁
@@ -83,60 +78,55 @@ theorem type_of_pred_unaryApp_is_sound {op₁ : UnaryOp} {x₁ : PredExpr} {itTy
     obtain ⟨bty, htyr, hbty⟩ := hmatch
     subst htyr; rw [hbty] at hinst₁
     simp only [EvaluatesToPred, evaluatePred] at hev₁ ⊢
-    rcases hev₁ with hev₁ | hev₁ | hev₁ | hev₁ <;> simp [hev₁]
-    case inr.inr.inr =>
-      cases bty
-      case anyBool =>
-        have ⟨b, h₈⟩ := instance_of_anyBool_is_bool hinst₁; subst h₈
-        simp [apply₁]; apply bool_is_instance_of_anyBool
-      case tt =>
-        have h₈ := instance_of_tt_is_true hinst₁; subst h₈
-        simp [apply₁, BoolType.not]; exact false_is_instance_of_ff
-      case ff =>
-        have h₈ := instance_of_ff_is_false hinst₁; subst h₈
-        simp [apply₁, BoolType.not]; exact true_is_instance_of_tt
-    all_goals exact type_is_inhabited_bool
+    rcases hev₁ with ⟨err, hev₁⟩ | hev₁ <;> simp [hev₁]
+    · exact type_is_inhabited_bool
+    cases bty
+    case anyBool =>
+      have ⟨b, h₈⟩ := instance_of_anyBool_is_bool hinst₁; subst h₈
+      simp [apply₁]; apply bool_is_instance_of_anyBool
+    case tt =>
+      have h₈ := instance_of_tt_is_true hinst₁; subst h₈
+      simp [apply₁, BoolType.not]; exact false_is_instance_of_ff
+    case ff =>
+      have h₈ := instance_of_ff_is_false hinst₁; subst h₈
+      simp [apply₁, BoolType.not]; exact true_is_instance_of_tt
   case neg =>
     obtain ⟨hbty, htyr⟩ := hmatch
     subst htyr; rw [hbty] at hinst₁
     simp only [EvaluatesToPred, evaluatePred] at hev₁ ⊢
-    rcases hev₁ with hev₁ | hev₁ | hev₁ | hev₁ <;> simp [hev₁]
-    case inr.inr.inr =>
-      have ⟨i, h₈⟩ := instance_of_int_is_int hinst₁; subst h₈
-      simp only [apply₁, intOrErr]
-      cases i.neg?
-      case none => simp; exact type_is_inhabited_int
-      case some i' => simp; exact InstanceOfType.instance_of_int
-    all_goals exact type_is_inhabited_int
+    rcases hev₁ with ⟨err, hev₁⟩ | hev₁ <;> simp [hev₁]
+    · exact type_is_inhabited_int
+    have ⟨i, h₈⟩ := instance_of_int_is_int hinst₁; subst h₈
+    simp only [apply₁, intOrErr]
+    cases i.neg?
+    case none => simp; exact type_is_inhabited_int
+    case some i' => simp; exact InstanceOfType.instance_of_int
   case isEmpty =>
     obtain ⟨htyr, ty₀, hbty⟩ := hmatch
     subst htyr; rw [hbty] at hinst₁
     simp only [EvaluatesToPred, evaluatePred] at hev₁ ⊢
-    rcases hev₁ with hev₁ | hev₁ | hev₁ | hev₁ <;> simp [hev₁]
-    case inr.inr.inr =>
-      have ⟨s, h₈, _⟩ := instance_of_set_type_is_set hinst₁; subst h₈
-      simp [apply₁]; exact bool_is_instance_of_anyBool _
-    all_goals exact type_is_inhabited_bool
+    rcases hev₁ with ⟨err, hev₁⟩ | hev₁ <;> simp [hev₁]
+    · exact type_is_inhabited_bool
+    have ⟨s, h₈, _⟩ := instance_of_set_type_is_set hinst₁; subst h₈
+    simp [apply₁]; exact bool_is_instance_of_anyBool _
   case like p =>
     obtain ⟨htyr, hbty⟩ := hmatch
     subst htyr; rw [hbty] at hinst₁
     simp only [EvaluatesToPred, evaluatePred] at hev₁ ⊢
-    rcases hev₁ with hev₁ | hev₁ | hev₁ | hev₁ <;> simp [hev₁]
-    case inr.inr.inr =>
-      have ⟨s, h₈⟩ := instance_of_string_is_string hinst₁; subst h₈
-      simp [apply₁]; exact bool_is_instance_of_anyBool _
-    all_goals exact type_is_inhabited_bool
+    rcases hev₁ with ⟨err, hev₁⟩ | hev₁ <;> simp [hev₁]
+    · exact type_is_inhabited_bool
+    have ⟨s, h₈⟩ := instance_of_string_is_string hinst₁; subst h₈
+    simp [apply₁]; exact bool_is_instance_of_anyBool _
   case is ety =>
     obtain ⟨ety', htyr, hbty⟩ := hmatch
     subst htyr; rw [hbty] at hinst₁
     simp only [EvaluatesToPred, evaluatePred] at hev₁ ⊢
-    rcases hev₁ with hev₁ | hev₁ | hev₁ | hev₁ <;> simp [hev₁]
-    case inr.inr.inr =>
-      have ⟨uid, h₈, h₉⟩ := instance_of_entity_type_is_entity hinst₁
-      simp [apply₁, h₉, h₈]
-      cases h₁₀ : ety == ety' <;> simp at h₁₀ <;> simp [h₁₀]
-      case false => exact false_is_instance_of_ff
-      case true => exact true_is_instance_of_tt
-    all_goals exact type_is_inhabited_bool
+    rcases hev₁ with ⟨err, hev₁⟩ | hev₁ <;> simp [hev₁]
+    · exact type_is_inhabited_bool
+    have ⟨uid, h₈, h₉⟩ := instance_of_entity_type_is_entity hinst₁
+    simp [apply₁, h₉, h₈]
+    cases h₁₀ : ety == ety' <;> simp at h₁₀ <;> simp [h₁₀]
+    case false => exact false_is_instance_of_ff
+    case true => exact true_is_instance_of_tt
 
 end Cedar.Thm
