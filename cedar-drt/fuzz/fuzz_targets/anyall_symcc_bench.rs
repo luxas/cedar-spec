@@ -56,6 +56,7 @@
 //!   --out <path>       write sweep output to a file (else stdout).
 //!   --repeats <k>      repeats per point for median/p90 (default 1 smoke, 3 full).
 //!   --max-wall-secs <n> wall-clock budget for --full (default 5400; 0 = uncapped).
+//!   --sizes a,b,..  override the set-size axis (push toward the cliff).
 
 // The un-optimized `WellTypedPolicies` + `check_*` verbs are `#[deprecated]` in
 // favour of the `CompiledPolicySet` (`_opt`) path, but that path rejects `.all`
@@ -655,23 +656,31 @@ fn baseline_unroll(pred_on: &dyn Fn(&str) -> String, n: usize) -> String {
     format!("permit(principal, action, resource) when {{ {pins}{guard} }};")
 }
 
-/// Build the "set size" dimension cases (quantified + baseline) for size `n`,
-/// verb `check_always_allows`, predicate `it > 0`.
+/// Build the "set size" dimension cases (quantified + optional baseline) for
+/// size `n`, verb `check_always_allows`, predicate `it > 0`.
+///
+/// The quantifier-free baseline is the `.all` unrolled over the N pinned
+/// members; its N-way conjunction is a deeply-nested AST, so for large N the
+/// Cedar parser's recursive descent overflows the stack. The baseline is only a
+/// comparand (P4 fairness is asserted at small N), so it is emitted only for
+/// `n <= BASELINE_MAX_N`; the quantified `.all` row (fixed-shape, the one that
+/// actually probes the cvc5 cliff) is always emitted.
 fn set_size_cases(n: usize) -> Vec<Case> {
+    const BASELINE_MAX_N: usize = 64;
     let schema = long_schema(n);
     let pred_on = |e: &str| format!("{e} > 0");
-    vec![
-        Case {
-            dims: Dims { dimension: Dimension::SetSize, point: format!("n={n}"), shape: Shape::Quantified },
-            verb: Verb::AlwaysAllows,
-            schema_src: schema.clone(),
-            pset1: quantified_all("it > 0", n),
-            pset2: None,
-            principal_ty: "User".into(),
-            action: "Action::\"view\"".into(),
-            resource_ty: "Thing".into(),
-        },
-        Case {
+    let mut cases = vec![Case {
+        dims: Dims { dimension: Dimension::SetSize, point: format!("n={n}"), shape: Shape::Quantified },
+        verb: Verb::AlwaysAllows,
+        schema_src: schema.clone(),
+        pset1: quantified_all("it > 0", n),
+        pset2: None,
+        principal_ty: "User".into(),
+        action: "Action::\"view\"".into(),
+        resource_ty: "Thing".into(),
+    }];
+    if n <= BASELINE_MAX_N {
+        cases.push(Case {
             dims: Dims { dimension: Dimension::SetSize, point: format!("n={n}"), shape: Shape::Baseline },
             verb: Verb::AlwaysAllows,
             schema_src: schema,
@@ -680,8 +689,9 @@ fn set_size_cases(n: usize) -> Vec<Case> {
             principal_ty: "User".into(),
             action: "Action::\"view\"".into(),
             resource_ty: "Thing".into(),
-        },
-    ]
+        });
+    }
+    cases
 }
 
 /// Predicate-complexity dimension: increasing predicate AST depth/op-count.
@@ -1153,11 +1163,22 @@ fn main() {
     let repeats = arg_val(&args, "--repeats")
         .and_then(|v| v.parse::<u32>().ok())
         .unwrap_or(if full { 3 } else { 1 });
-    let (mode, sizes, timeout) = if full {
+    let (mode, mut sizes, timeout) = if full {
         ("full", full_sizes(), FULL_TIMEOUT)
     } else {
         ("smoke", smoke_sizes(), SMOKE_TIMEOUT)
     };
+    // `--sizes 1,2,...,N` overrides the set-size axis (the D-87 paper-scale knob
+    // for pushing toward the cliff). Only the set-size dimension honours it.
+    if let Some(spec) = arg_val(&args, "--sizes") {
+        let parsed: Vec<usize> = spec
+            .split(',')
+            .filter_map(|t| t.trim().parse::<usize>().ok())
+            .collect();
+        if !parsed.is_empty() {
+            sizes = parsed;
+        }
+    }
 
     let report = rt.block_on(run_sweep(mode, full, sizes, timeout, max_wall_secs, repeats));
 
