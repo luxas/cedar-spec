@@ -437,23 +437,6 @@ decreasing_by
   all_goals (rename_i h; try (replace h := List.sizeOf_lt_of_mem h); omega)
 
 /--
-Type rule for `.all` (req 6.1-6.3, D-44). The receiver `tyr` must be a set
-`.set τ`; the predicate is typed with `it : τ` and must be boolean (a non-bool
-predicate is a type error at validation, matching Rust / D-16). The result is
-`.bool .anyBool`; capabilities learned inside the predicate are dropped, so the
-enclosing capabilities `c` pass through unchanged (D-39) — `it has a` cannot
-establish a capability about the outside world.
--/
-public def typeOfAll (tyr : TypedExpr) (p : PredExpr) (c : Capabilities) (env : TypeEnv) : ResultType :=
-  match tyr.typeOf with
-  | .set τ => do
-    let (typ, _) ← typeOfPred p τ c env
-    match typ.typeOf with
-    | .bool _ => ok (TypedExpr.all tyr p (.bool .anyBool)) c
-    | _       => err (.unexpectedType typ.typeOf)
-  | ty => err (.unexpectedType ty)
-
-/--
 D-73 option B: normalize a predicate so no dead `.and`/`.or`/`.ite` branch survives that
 `typeOfPred` short-circuited past without constraining its type. Mirrors `typeOfPred`'s
 and/or/ite folding EXACTLY (D-73a): `and` with a `.bool .ff` left ⇒ keep the (decisive,
@@ -511,6 +494,27 @@ decreasing_by
        | (replace h := List.sizeOf_lt_of_mem h; omega)
        | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
        | omega)
+
+/--
+Type rule for `.all` (req 6.1-6.3, D-44). The receiver `tyr` must be a set
+`.set τ`; the predicate is typed with `it : τ` and must be boolean (a non-bool
+predicate is a type error at validation, matching Rust / D-16). The result is
+`.bool .anyBool`; capabilities learned inside the predicate are dropped, so the
+enclosing capabilities `c` pass through unchanged (D-39) — `it has a` cannot
+establish a capability about the outside world.
+-/
+public def typeOfAll (tyr : TypedExpr) (p : PredExpr) (c : Capabilities) (env : TypeEnv) : ResultType :=
+  match tyr.typeOf with
+  | .set τ => do
+    let (typ, _) ← typeOfPred p τ c env
+    match typ.typeOf with
+    -- D-74 option A / D-73b: TYPE the source predicate `p`, but STORE its normalization in the
+    -- `.all` node. `compilePred_well_typed` compiles `normalize p` under `p`'s (source) typing, so
+    -- the stored predicate must be `normalize p`. The node's well-typedness is indexed by the SOURCE
+    -- `p` (D-73b existential premise), never by re-typing `normalize p` (that bridge is false — D-P9c-12).
+    | .bool _ => ok (TypedExpr.all tyr (PredExpr.normalize p τ c env) (.bool .anyBool)) c
+    | _       => err (.unexpectedType typ.typeOf)
+  | ty => err (.unexpectedType ty)
 
 /--
 D-73 option B: `Normal p itTy c env` holds iff every `.and`/`.or`/`.ite` node in `p` has

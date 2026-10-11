@@ -1750,6 +1750,98 @@ theorem typeOfPred_implies_wellTyped {p : Cedar.Spec.PredExpr} {itTy : CedarType
     cases he : typeOfPred x itTy c env <;> rw [he] at hy <;> simp [justType, Except.map] at hy
     exact ih x hmem he
 
+/-- `PredExpr.normalize` preserves `PredExpr.WellTyped`: it only folds dead
+`.and`/`.or`/`.ite` branches and recurses, never introducing a new entity
+literal, so entity-literal validity is unchanged (D-73b, used to discharge the
+`h₃` obligation of `TypedExpr.WellTyped.all` once `typeOfAll` stores the
+normalized predicate). -/
+theorem normalize_wellTyped {p : Cedar.Spec.PredExpr} {itTy : CedarType}
+    {c : Capabilities} {env : TypeEnv}
+    (h : PredExpr.WellTyped env p) :
+    PredExpr.WellTyped env (PredExpr.normalize p itTy c env) := by
+  induction p, c using PredExpr.normalize.induct (itTy := itTy) (env := env) with
+  | case1 c => simpa only [PredExpr.normalize] using h
+  | case2 c l => simpa only [PredExpr.normalize] using h
+  | case3 c v => simpa only [PredExpr.normalize] using h
+  -- `.ite` arms (tt / ff / general / typeOfPred-error)
+  | case4 c cond t e tyc c₁ htc htt ihc iht =>
+    cases h with
+    | ite hc ht he =>
+      simp only [PredExpr.normalize, htc, htt]
+      exact .ite (ihc hc) (iht ht) (iht ht)
+  | case5 c cond t e tyc c₁ htc hff ihc ihe =>
+    cases h with
+    | ite hc ht he =>
+      simp only [PredExpr.normalize, htc, hff]
+      exact .ite (ihc hc) (ihe he) (ihe he)
+  | case6 c cond t e tyc c₁ htc hntt hnff ihc iht ihe =>
+    cases h with
+    | ite hc ht he =>
+      simp only [PredExpr.normalize, htc, hntt, hnff]
+      exact .ite (ihc hc) (iht ht) (ihe he)
+  | case7 c cond t e err htc ihc iht ihe =>
+    cases h with
+    | ite hc ht he =>
+      simp only [PredExpr.normalize, htc]
+      exact .ite (ihc hc) (iht ht) (ihe he)
+  -- `.and` arms (ff-left fold / non-ff / typeOfPred-error)
+  | case8 c a b tyc c₁ hta hff iha =>
+    cases h with
+    | and ha hb => simp only [PredExpr.normalize, hta, hff]; exact iha ha
+  | case9 c a b tyc c₁ hta hnff iha ihb =>
+    cases h with
+    | and ha hb =>
+      simp only [PredExpr.normalize, hta, hnff]
+      exact .and (iha ha) (ihb hb)
+  | case10 c a b err hta iha ihb =>
+    cases h with
+    | and ha hb => simp only [PredExpr.normalize, hta]; exact .and (iha ha) (ihb hb)
+  -- `.or` arms
+  | case11 c a b tyc c₁ hta htt iha =>
+    cases h with
+    | or ha hb => simp only [PredExpr.normalize, hta, htt]; exact iha ha
+  | case12 c a b tyc c₁ hta hntt iha ihb =>
+    cases h with
+    | or ha hb =>
+      simp only [PredExpr.normalize, hta, hntt]
+      exact .or (iha ha) (ihb hb)
+  | case13 c a b err hta iha ihb =>
+    cases h with
+    | or ha hb => simp only [PredExpr.normalize, hta]; exact .or (iha ha) (ihb hb)
+  -- straight-line arms
+  | case14 c op x ih =>
+    cases h with | unaryApp hx => simp only [PredExpr.normalize]; exact .unaryApp (ih hx)
+  | case15 c op a b iha ihb =>
+    cases h with | binaryApp ha hb => simp only [PredExpr.normalize]; exact .binaryApp (iha ha) (ihb hb)
+  | case16 c x a ih =>
+    cases h with | getAttr hx => simp only [PredExpr.normalize]; exact .getAttr (ih hx)
+  | case17 c x a ih =>
+    cases h with | hasAttr hx => simp only [PredExpr.normalize]; exact .hasAttr (ih hx)
+  | case18 c x a as ih =>
+    cases h with | extHasAttr hx => simp only [PredExpr.normalize]; exact .extHasAttr (ih hx)
+  | case19 c axs ih =>
+    cases h with
+    | record hall =>
+      simp only [PredExpr.normalize]
+      apply PredExpr.WellTyped.record
+      intro ax hax
+      simp only [List.map₂_eq_map (fun x : Attr × PredExpr => (x.fst, PredExpr.normalize x.snd itTy c env)),
+        List.mem_map] at hax
+      obtain ⟨⟨a', e'⟩, hmem, heq⟩ := hax
+      subst heq
+      exact ih a' e' (List.sizeOf_snd_lt_sizeOf_list hmem) (hall (a', e') hmem)
+  | case20 c f xs ih =>
+    cases h with
+    | call hall =>
+      simp only [PredExpr.normalize]
+      apply PredExpr.WellTyped.call
+      intro x hx
+      simp only [List.map₁_eq_map (fun e : PredExpr => PredExpr.normalize e itTy c env),
+        List.mem_map] at hx
+      obtain ⟨e', hmem, heq⟩ := hx
+      subst heq
+      exact ih e' hmem (hall e' hmem)
+
 /-- The type checker produces typed expressions that are well-typed after type
 lifting. TODO: move this around after the proof is fixed -/
 theorem typechecked_is_well_typed_after_lifting
@@ -1810,8 +1902,8 @@ theorem typechecked_is_well_typed_after_lifting
           simp only [TypedExpr.liftBoolTypes, CedarType.liftBoolTypes, BoolType.lift]
           exact TypedExpr.WellTyped.all (hᵢ hᵢr)
             (by rw [type_of_after_lifted_is_lifted, hset, CedarType.liftBoolTypes])
-            (typeOfPred_implies_wellTyped hpred)
-            ⟨_, xcap, typc.2, typc.1, hpred, _, hbool⟩
+            (normalize_wellTyped (typeOfPred_implies_wellTyped hpred))
+            ⟨p, _, xcap, typc.2, typc.1, rfl, hpred, _, hbool⟩
       · simp only [err, reduceCtorEq] at h
 
 end Cedar.Thm

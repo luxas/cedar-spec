@@ -170,7 +170,7 @@ theorem type_of_all_inversion {x₁ : Expr} {p : PredExpr} {c₁ c₂ : Capabili
     (h : typeOf (.all x₁ p) c₁ env = .ok (ty, c₂)) :
     c₂ = c₁ ∧ ty.typeOf = .bool .anyBool ∧
     ∃ tyr cr τ, typeOf x₁ c₁ env = .ok (tyr, cr) ∧ tyr.typeOf = .set τ ∧
-      ty = .all tyr p (.bool .anyBool) := by
+      ty = .all tyr (PredExpr.normalize p τ c₁ env) (.bool .anyBool) := by
   simp only [typeOf] at h
   cases hr : typeOf x₁ c₁ env <;> rw [hr] at h <;>
     simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
@@ -182,8 +182,9 @@ theorem type_of_all_inversion {x₁ : Expr} {p : PredExpr} {c₁ c₂ : Capabili
     split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
     rcases h with ⟨h₁, h₂⟩
     subst h₁; subst h₂
-    refine ⟨rfl, by simp only [TypedExpr.typeOf], tyr.fst, tyr.snd, _, ?_, hset, rfl⟩
-    simpa using hr
+    refine ⟨rfl, by simp only [TypedExpr.typeOf], tyr.fst, tyr.snd, _, ?_, hset, ?_⟩
+    · simpa using hr
+    · simp only [hset]
   · simp only [err, reduceCtorEq] at h
 
 /--
