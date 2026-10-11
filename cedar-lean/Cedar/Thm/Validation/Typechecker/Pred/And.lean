@@ -4,6 +4,7 @@
 -/
 
 import Cedar.Thm.Validation.Typechecker.Pred.Basic
+import Cedar.Thm.Validation.Typechecker.Pred.SupportC
 import Cedar.Thm.Validation.Typechecker.And
 
 /-!
@@ -89,90 +90,83 @@ theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it 
   rw [h₅] at ih₁₃
   have ⟨b₁, hb₁⟩ := instance_of_bool_is_bool ih₁₃
   subst hb₁
-  -- A single bool-or-error fact about x₁'s evaluation, reused for value and guard.
-  have hx₁val : evaluatePred x₁ it request entities = .ok (.prim (.bool b₁)) ∨
-      ∃ err, evaluatePred x₁ it request entities = .error err := by
-    rcases ih₁₂ with ⟨err, h⟩ | h
-    · exact Or.inr ⟨err, h⟩
-    · exact Or.inl h
   refine ⟨?_, ?_⟩
   · -- GUARDED CONCLUSION
     intro htrue
-    simp only [evaluatePred, Result.as, Coe.coe, Value.asBool] at htrue
-    rcases hx₁val with hx₁ | ⟨err, hx₁⟩
-    · rw [hx₁] at htrue
-      cases b₁ <;> simp only [Bool.not_false, Bool.not_true, ite_true, ite_false,
-        Except.ok.injEq, reduceCtorEq] at htrue
-      -- b₁ = true ⇒ x₂ evaluates to true
-      cases hx₂ : evaluatePred x₂ it request entities with
-      | error e => rw [hx₂] at htrue; simp only [Except.bind_err, reduceCtorEq] at htrue
-      | ok v₂ =>
-        rw [hx₂] at htrue
-        cases v₂ <;> simp only [Except.bind_ok, reduceCtorEq] at htrue
-        rename_i p; cases p <;> simp only [reduceCtorEq] at htrue
-        rename_i b; cases b <;> simp only [Except.ok.injEq, reduceCtorEq] at htrue
-        -- both true: produce c₂'s invariant from the two IH guarded productions
-        have hprod₁ : CapabilitiesInvariantPred rc₁ it request entities := ig₁ hx₁
-        split at h₆
-        case isTrue hff => exact absurd h₅ (by rw [hff]; exact (ih₁₃ ▸ (by
-          have := instance_of_tt_is_true (by rw [← h₅] at ih₁₃; exact ih₁₃)
-          simp_all)))
-        case isFalse =>
-          replace ⟨bty, bty₂, htx, hty₂, h₆⟩ := h₆
-          have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
-            capability_union_invariant_pred hci hprod₁
-          have ⟨ig₂, _, _, _⟩ := ih₂ hnr hci₂ h₂ hit h₄b
-          have hprod₂ : CapabilitiesInvariantPred rc₂ it request entities := ig₂ hx₂
-          split at h₆ <;> (have ⟨_, hc⟩ := h₆; subst hc)
-          · exact empty_capabilities_invariant_pred it request entities
-          · exact capability_union_invariant_pred hprod₁ hprod₂
-    · rw [hx₁] at htrue; simp only [Except.bind_err, reduceCtorEq] at htrue
+    -- `.and` yields true ⇒ both operands yield true.
+    have ⟨hx₁, hx₂⟩ := pred_and_eval_true_inv htrue
+    have hprod₁ : CapabilitiesInvariantPred rc₁ it request entities := ig₁ hx₁
+    split at h₆
+    case isTrue hff =>
+      -- bty₁ = .ff would make x₁ instance of .ff hence false, contradicting x₁ = true.
+      exfalso
+      subst hff
+      have hb₁eq : evaluatePred x₁ it request entities = .ok (.prim (.bool b₁)) := by
+        rcases ih₁₂ with ⟨err, h⟩ | h
+        · rw [hx₁] at h; simp only [reduceCtorEq] at h
+        · rw [← h, hx₁]
+      rw [hx₁] at hb₁eq
+      simp only [Except.ok.injEq, Value.prim.injEq, Prim.bool.injEq] at hb₁eq
+      subst hb₁eq
+      have := instance_of_ff_is_false ih₁₃
+      simp only [Value.prim.injEq, Prim.bool.injEq, reduceCtorEq] at this
+    case isFalse =>
+      replace ⟨bty, bty₂, htx, hty₂, h₆⟩ := h₆
+      have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
+        capability_union_invariant_pred hci hprod₁
+      have ⟨ig₂, _, _, _⟩ := ih₂ hnr hci₂ h₂ hit h₄b
+      have hprod₂ : CapabilitiesInvariantPred rc₂ it request entities := ig₂ hx₂
+      split at h₆ <;> (have ⟨_, hc⟩ := h₆; subst hc)
+      · exact empty_capabilities_invariant_pred it request entities
+      · exact capability_union_invariant_pred hprod₁ hprod₂
   · -- VALUE + INSTANCE
-    simp only [EvaluatesToPred, evaluatePred, Result.as, Coe.coe, Value.asBool] at ih₁₂ ⊢
     split at h₆
     case isTrue h₇ =>
+      -- bty₁ = .ff: result is x₁ itself (c' = ∅), which evaluates to false or errors.
       subst h₇
       have ⟨hty, hc⟩ := h₆
       subst hty hc
       rw [h₅]
+      -- b₁ must be false (instance of .ff).
       have h₈ := instance_of_ff_is_false ih₁₃
-      simp only [InstanceOfBoolType] at h₈
+      simp only [Value.prim.injEq, Prim.bool.injEq] at h₈
       rcases ih₁₂ with ⟨err, ih₁₂⟩ | ih₁₂
-      · exact ⟨_, EvaluatesToPred.error (by simp only [evaluatePred, Result.as, Coe.coe, Value.asBool, ih₁₂]; rfl), type_is_inhabited_bool.choose_spec⟩
+      · exact ⟨_, EvaluatesToPred.error (pred_and_eval_err₁ ih₁₂), type_is_inhabited_bool.choose_spec⟩
       · subst h₈
-        refine ⟨Value.prim (.bool false), Or.inr ?_, false_is_instance_of_ff⟩
-        simp only [evaluatePred, Result.as, Coe.coe, Value.asBool, ih₁₂]
+        exact ⟨Value.prim (.bool false), Or.inr (pred_and_eval_false₁ ih₁₂), false_is_instance_of_ff⟩
     case isFalse h₇ =>
       replace ⟨bty, bty₂, htx, hty₂, h₆⟩ := h₆
       subst htx
       simp only [TypedExpr.typeOf]
       rcases ih₁₂ with ⟨err, ih₁₂⟩ | ih₁₂
-      · refine ⟨_, EvaluatesToPred.error ?_, type_is_inhabited_bool.choose_spec⟩
-        simp only [evaluatePred, Result.as, Coe.coe, Value.asBool, ih₁₂]
+      · exact ⟨_, EvaluatesToPred.error (pred_and_eval_err₁ ih₁₂), type_is_inhabited_bool.choose_spec⟩
       · cases b₁
         case false =>
-          refine ⟨Value.prim (.bool false), Or.inr ?_, ?_⟩
-          · simp only [evaluatePred, Result.as, Coe.coe, Value.asBool, ih₁₂]
-          · split at h₆ <;> (have ⟨hbty, _⟩ := h₆; subst hbty)
-            case isTrue => exact false_is_instance_of_ff
-            case isFalse => apply instance_of_lubBool; simp [ih₁₃]
+          refine ⟨Value.prim (.bool false), Or.inr (pred_and_eval_false₁ ih₁₂), ?_⟩
+          split at h₆ <;> (have ⟨hbty, _⟩ := h₆; subst hbty)
+          case isTrue => exact false_is_instance_of_ff
+          case isFalse => apply instance_of_lubBool; simp [ih₁₃]
         case true =>
           have hci₂ : CapabilitiesInvariantPred (c₁ ∪ rc₁) it request entities :=
             capability_union_invariant_pred hci (ig₁ ih₁₂)
           have ⟨_, v₂, ih₂₂, ih₂₃⟩ := ih₂ hnr hci₂ h₂ hit h₄b
           rw [hty₂] at ih₂₃
           rcases ih₂₂ with ⟨err₂, ih₂₂⟩ | ih₂₂
-          · refine ⟨_, EvaluatesToPred.error ?_, type_is_inhabited_bool.choose_spec⟩
-            simp only [evaluatePred, Result.as, Coe.coe, Value.asBool, ih₁₂, ih₂₂]
+          · exact ⟨_, EvaluatesToPred.error (pred_and_eval_err₂ ih₁₂ ih₂₂),
+              type_is_inhabited_bool.choose_spec⟩
           · have ⟨b₂, hb₂⟩ := instance_of_bool_is_bool ih₂₃
             subst hb₂
-            refine ⟨Value.prim (.bool b₂), Or.inr ?_, ?_⟩
-            · simp only [evaluatePred, Result.as, Coe.coe, Value.asBool, ih₁₂, ih₂₂]
-            · split at h₆ <;> (have ⟨hbty, _⟩ := h₆; subst hbty)
-              case isTrue hbty₂ =>
-                have h₈ := instance_of_ff_is_false ih₂₃
-                simp only [InstanceOfBoolType] at h₈; subst h₈
-                exact false_is_instance_of_ff
-              case isFalse => apply instance_of_lubBool; simp [ih₂₃]
+            refine ⟨Value.prim (.bool b₂), Or.inr (pred_and_eval_true₁ ih₁₂ ih₂₂), ?_⟩
+            split at h₆
+            case isTrue hbty₂ =>
+              have ⟨hbty, _⟩ := h₆
+              subst hbty hbty₂
+              have h₈ := instance_of_ff_is_false ih₂₃
+              simp only [Value.prim.injEq, Prim.bool.injEq] at h₈; subst h₈
+              exact false_is_instance_of_ff
+            case isFalse =>
+              have ⟨hbty, _⟩ := h₆
+              subst hbty
+              apply instance_of_lubBool; simp [ih₂₃]
 
 end Cedar.Thm
