@@ -38,41 +38,37 @@ theorem type_of_pred_and_inversion {x₁ x₂ : PredExpr} {itTy : CedarType} {c 
         if bty₂ = BoolType.ff
         then bty = BoolType.ff ∧ c' = ∅
         else bty = lubBool bty₁ bty₂ ∧ c' = c₁ ∪ c₂ := by
-  simp [typeOfPred] at h₁
-  cases h₂ : typeOfPred x₁ itTy c env <;> simp [h₂] at *
+  simp only [typeOfPred] at h₁
+  simp_do_let (typeOfPred x₁ itTy c env) as h₂ at h₁
   rename_i res₁
   simp only [typeOfAnd, List.empty_eq] at h₁
-  split at h₁ <;> simp [ok, err] at h₁
+  split at h₁ <;> simp only [ok, err, Except.ok.injEq, reduceCtorEq] at h₁
   case h_1 h₃ =>
     have ⟨ hl₁, hr₁ ⟩ := h₁
     subst hl₁ hr₁
-    exists res₁.fst, BoolType.ff, res₁.snd
+    refine ⟨res₁.fst, BoolType.ff, res₁.snd, h₂, h₃, ?_⟩
+    simp only [↓reduceIte, and_self]
   case h_2 bty₁ h₃ h₄ =>
-    exists res₁.fst, bty₁, res₁.snd
-    simp only [h₄, true_and]
-    split ; contradiction
-    cases h₅ : typeOfPred x₂ itTy (c ∪ res₁.snd) env <;> simp [h₅] at *
+    refine ⟨res₁.fst, bty₁, res₁.snd, h₂, h₄, ?_⟩
+    rw [if_neg h₃]
+    cases h₅ : typeOfPred x₂ itTy (c ∪ res₁.snd) env <;> simp only [h₅, Except.bind_ok,
+      Except.bind_err, reduceCtorEq] at h₁
     rename_i res₂
-    split at h₁ <;> simp at h₁ <;>
+    split at h₁ <;> simp only [ok, err, Except.ok.injEq, reduceCtorEq, Prod.mk.injEq] at h₁ <;>
     have ⟨hty, hc⟩ := h₁ <;> subst hty hc
     case h_1 hty₂ =>
-      exists .ff, res₂.fst
-      apply And.intro (by simp)
-      exists .ff, res₂.snd
+      exact ⟨.ff, res₂.fst, .ff, res₂.snd, rfl, h₅, hty₂, by simp⟩
     case h_2 hty₂ =>
-      exists bty₁, res₂.fst
-      apply And.intro (by simp)
-      exists BoolType.tt, res₂.snd
+      refine ⟨bty₁, res₂.fst, BoolType.tt, res₂.snd, rfl, h₅, hty₂, ?_⟩
       cases bty₁
-      case ff => contradiction
-      all_goals simp [hty₂, lubBool]
+      case ff => exact absurd rfl h₃
+      all_goals simp [lubBool]
     case h_3 bty₂ h₆ h₇ hty₂ =>
-      exists .anyBool, res₂.fst
-      apply And.intro (by simp)
-      exists BoolType.anyBool, res₂.snd
-      have _ : bty₂ = .anyBool := by cases bty₂ <;> simp at h₆ h₇ ⊢
-      subst bty₂
-      cases bty₁ <;> simp [hty₂, lubBool]
+      refine ⟨.anyBool, res₂.fst, bty₂, res₂.snd, rfl, h₅, hty₂, ?_⟩
+      have hbty₂ : bty₂ = .anyBool := by cases bty₂ <;> simp at h₆ h₇ ⊢
+      subst hbty₂
+      rw [if_neg (by simp)]
+      cases bty₁ <;> simp [lubBool]
 
 /-- `.and` predicate soundness (pred twin of `type_of_and_is_sound`), WEAK form. -/
 theorem type_of_pred_and_is_sound {x₁ x₂ : PredExpr} {itTy : CedarType} {it : Value}
