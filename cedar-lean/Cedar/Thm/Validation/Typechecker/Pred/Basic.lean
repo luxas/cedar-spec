@@ -69,6 +69,25 @@ theorem empty_capabilities_invariant_pred (it : Value) (request : Request) (enti
     CapabilitiesInvariantPred ∅ it request entities := by
   constructor <;> intro e k h <;> contradiction
 
+/-- Union of two predicate-invariant capability sets is predicate-invariant (pred twin of `capability_union_invariant`). -/
+theorem capability_union_invariant_pred {c₁ c₂ : Capabilities} {it : Value}
+    {request : Request} {entities : Entities}
+    (h₁ : CapabilitiesInvariantPred c₁ it request entities)
+    (h₂ : CapabilitiesInvariantPred c₂ it request entities) :
+    CapabilitiesInvariantPred (c₁ ∪ c₂) it request entities := by
+  simp only [CapabilitiesInvariantPred, List.mem_union_iff] at *
+  constructor
+  case left =>
+    intro e k h₃ q hq
+    rcases h₃ with h₃ | h₃
+    · exact h₁.left e k h₃ q hq
+    · exact h₂.left e k h₃ q hq
+  case right =>
+    intro e k h₃ q r hq hr
+    rcases h₃ with h₃ | h₃
+    · exact h₁.right e k h₃ q r hq hr
+    · exact h₂.right e k h₃ q r hq hr
+
 /--
 Predicate analogue of `GuardedCapabilitiesInvariant`: the output capabilities
 satisfy `CapabilitiesInvariantPred` provided the predicate evaluates to `true`.
