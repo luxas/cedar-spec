@@ -409,7 +409,152 @@ bottom-up:
   `compile_well_typed` `.all` arm (lift the D-74-interim) so SymCC `.all` **completeness** holds
   honestly; and (D-79) fold `normalize`'s constant-`ite` to the live branch once instead of
   duplicating, now that `normalize_evaluatePred` licenses it. _Satisfies:_ 5.1 (completeness), 6.4
-  (closes the F2 dead-code debt).
+  (closes the F2 dead-code debt). _Status: **DONE** — review R1: NO ACTIONABLE FINDINGS; see `branches/phase9c-anyall-pred-type-soundness/OUTCOMES.md`. (IMPLEMENTED by LEAD worker #3, 2026-10-11) — the real
+  `.all` arm of `compile_well_typed_on_wf_expr` is proved (honest guard `x₁.SymCCSupported &&
+  p.NoItDependentIn`), D-79 landed (static-`ite` branch sharing, D-P9c-13), M6 green: `lake build
+  Cedar` 648 jobs 0 `sorry`; the five named theorems `#print axioms` = `[propext, Classical.choice,
+  Quot.sound]`; `CedarSymTests` 1220/1220 (incl. the SymCCOpt `.all` completeness case); `CedarUnitTests`
+  466/466 + D-99 validator `#guard` regressions; §5.5 mutations (interim-`false` ⇒ Lean build fails;
+  break the `and` fold ⇒ `normalize_wellTyped`/`normalize_evaluatePred` fails) both verified and
+  reverted. DRT fuzzer run deferred (its `build_lean_lib.sh` runs `lake update`, which the shared
+  package cache made unsafe to run from this worktree)._
+  **M0 landed GREEN** (D-97): collision-free `it` capability key (`PredExpr.toCapKey`/`itCapKey`,
+  `typeOfPred` rewired) — `lake build Cedar` 616 jobs, `CedarSymTests` 1216/1216, `CedarUnitTests`
+  466/466; resolves the D-95/D-96 parity bug at the source. **Predicate capability invariant landed:**
+  `CapabilitiesInvariantPred` + full-mirror `TypeOfPredIsSound` (`Pred/Basic.lean`, green). Arms GREEN:
+  `.item`/`.lit`/`.var`/`.unaryApp`/`.record` (record axiom-clean). Arms as near-green red drafts: the
+  capability-`.tt` VALUE case of `.hasAttr`/`.getAttr`/`.extHasAttr`/`.binaryApp`(hasTag/getTag) now
+  closes via `hci`; residual red (2–4 errs each) is ONLY the guarded PRODUCTION side, which needs
+  `toCapKey` injectivity via a `TypeEnv.NoReservedItKey` side condition (PLAN §5.7). `.and` (M3) is a
+  red draft (inversion field-shaping). Remaining: finish the production side + `.and`/`.or`/`.ite` +
+  dispatcher + M4 `normalize_evaluatePred` + M5 wiring + M6. D-74 interim guard still in place.
+  _Satisfies (when complete):_ 5.1 (completeness), 6.4 (F2 dead-code debt).
+  **UPDATE (fresh LEAD worker, 2026-10-11, D-P9c-7 approach A continued):** the ofCapKey invariant
+  closed the production-side ∀q gap. Landed GREEN this run: support lemma (a)
+  `type_of_pred_implies_no_reserved` (well-typed-under-`NoReservedItKey` ⇒ `NoReservedItAccess`,
+  `Pred/Basic.lean`), and the `.record` + `.hasAttr` arms (producer closed via the ofCapKey
+  single-fact invariant — the former ∀q D-95/D-97 gap is GONE). Reduced to sorry-free red drafts:
+  `.getAttr` 6→2 (only the record-receiver optional-attr error-side type-WF, needs
+  `type_of_pred_implies_wf_type`, D-P9c-8), `.extHasAttr` 7→2 (only the ext-has-attr reserved-attr-name
+  exclusion in `ofCapKey`-of-`.getAttr`), `.binaryApp` 4→3 (`.mem`/`.hasTag`/`.getTag` mirror whole
+  Expr proofs). `.and` inversion FIXED (peel the x₂ bind before the typeOfAnd split); its main theorem
+  body is partial (bool-case shaping). All arms sorry-free; `lake build Cedar` still 616 jobs GREEN.
+  Remaining: finish `.and` main theorem + `.or`/`.ite` (reuse the fixed inversion shape), `.call`
+  (102-err restart from Record's shape), the two support lemmas (`type_of_pred_implies_wf_type` for
+  `.getAttr`; ext-has-attr attr-name `NoReservedItAccess` for `.extHasAttr`), the tag arms, dispatcher
+  `type_of_pred_is_sound`, M4, M5, M6.
+  **UPDATE 2 (continuation after the parallel arm wave, 2026-10-11 16:xx):** `SupportA`
+  `type_of_pred_implies_wf_type` (D-P9c-8) is GREEN — the predicate output-type WF lemma + its 11
+  per-helper WF lemmas + the lub_wf mutual block. **D-P9c-10 landed:** `itTy.WellFormed env` is now a
+  premise of `TypeOfPredIsSound`, threaded through every arm (mechanical, like `hnr`). With it,
+  `.getAttr` (record-receiver optional-attr error-side) and `.ite` (then-branch WF on the
+  condition-errors path) are both CLOSED. Pred modules GREEN now: Basic, SupportA/B/C, UnaryApp,
+  Record, HasAttr, GetAttr, BinaryApp, Call, And, Or, Ite (13/14). ONLY `ExtHasAttr` RED (2 spots):
+  the `ofCapKey (.getAttr x₁ a)` reserved-attr-NAME edge (depth-0 fact per D-P9c decision 2; a
+  well-typed ext-has-attr never names the reserved attr, discharged by a typing+NoReservedItKey
+  contradiction — needs the gci inner-induction restructured to carry that side condition). Remaining:
+  close ExtHasAttr, dispatcher `type_of_pred_is_sound` + axioms, quantifier-boundary entry lemma, M4
+  `normalize_evaluatePred`, M5 wiring (store `normalize p₀`, drop the D-74 interim guard, restore the
+  real `compile_well_typed` `.all` arm), D-79, M6 green bar. `lake build Cedar` still 616 jobs GREEN.
+  **UPDATE 3 (continuation, 2026-10-11 16:4x):** ALL 14 Pred arms now GREEN and the dispatcher
+  `type_of_pred_is_sound` (structural recursion, `termination_by sizeOf p`) is GREEN and **axiom-clean**
+  (`#print axioms` = `[propext, Classical.choice, Quot.sound]`). **D-P9c-11 landed** (ExtHasAttr
+  reserved-attr edge): both generalized inner lemmas now carry `NoReservedItKey env` and
+  `hctx : x₁ = .var .context → ty₁.typeOf = .record env.reqty.context`; in the `ofCapKey`-of-`.getAttr`
+  reserved branch, `hctx` + `NoReservedItKey` make `hasAttrInRecord` return `.bool .ff`, contradicting
+  the non-`ff` split (no Spec change). M1–M3 + dispatcher = COMPLETE. **M4** `normalize_evaluatePred`
+  is a sorry-free red draft (`Pred/Normalize.lean`): the two ff/tt eval helpers + 8 structural arms are
+  GREEN, the `.and`/`.or`/`.ite` folds are proved via an eval-case-split with the guarded production
+  threading `(c ∪ c₁)` into the then-branch IH; ~9 residual tactic-shape fiddles (record/call mapM₂
+  congruence, typeOfAnd/If bool extraction, the Result.as closers). Remaining: finish M4, support
+  lemma (b) quantifier-boundary entry, M5 wiring (Spec: `typeOfAll` stores `normalize p₀`, flip
+  `TypedExpr.SymCCSupported (.all …)` off `false`, restore the real `compile_well_typed` `.all` arm;
+  fix `type_of_preserves_evaluation_results` `.all` via M4) + D-79, M6 green bar.
+
+  **UPDATE 4 (fresh LEAD worker #2, 2026-10-11 ~17:30):** **M4 `normalize_evaluatePred` is GREEN and
+  axiom-clean** (`#print axioms` = `[propext, Classical.choice, Quot.sound]`), committed `574fe0f`.
+  Closed all 9 residual spots: `.record`/`.call` fuse the normalized `map₂`/`map₁` through the
+  evaluator's `mapM₂`/`mapM₁` via explicit `map₂_eq_map`/`map₁_eq_map` + `mapM₂_eq_mapM` + `mapM_map`,
+  then `mapM_congr`/`congrArg` + the IH element-wise; `.and`/`.ite` folds reduce by
+  `conv => rhs; rw [evaluatePred]` to unfold the RHS node (plain `simp [evaluatePred]` does NOT unfold —
+  `evaluatePred` is well-founded-recursive), then the bool-value split with `↓reduceIte`; robust
+  `.bool`-type extraction inverts `typeOfAnd`/`typeOfIf` by `split` (bool arms via `assumption`, the
+  err arm via `simp only [err, reduceCtorEq]`).
+
+  **D-P9c-12 (DESIGN FINDING, blocks M5 — the lynchpin `typeOfPred_normalize`):** the PLAN §5 claim
+  that `typeOfPred` "re-types the normalized predicate identically" is TRUE only for the **TYPE**
+  component, NOT capabilities. `normalize` folds a constant `.ite`/`.and`/`.or` (bool-typed) and may
+  do so INSIDE a record/entity-typed operand of a `.getAttr`/`.hasAttr`/`.binaryApp` (e.g.
+  `(.ite const rec1 rec2).getAttr a`), which changes that operand's `toCapKey`, hence the capability
+  that `typeOfGetAttr`/`typeOfHasAttr`/`typeOfBinaryApp` store keyed by it — so the output `c'` CAN
+  differ between source and normalized. The TYPE never depends on `toCapKey` (matches the Phase-6
+  lesson: "expr args affect only Bool annotations + compile success, never the compiled TYPE"), and
+  D-39's `typeOfAll` DROPS the predicate's output caps (returns the outer `c`). The `WellTyped.all`
+  `h₄` and `compilePred_well_typed`'s conclusion both need only `typ.typeOf = .bool b` / the term type,
+  never `c'`. **Therefore the correct, provable lemma to wire M5 is the TYPE-preserving form:**
+  `typeOfPred p₀ itTy c env = .ok (typ,c') → ∃ typ' c'', typeOfPred (PredExpr.normalize p₀ itTy c env)
+  itTy c env = .ok (typ', c'') ∧ typ'.typeOf = typ.typeOf`. A full (type+cap) `typeOfPred_normalize`
+  equality is FALSE and must not be stated. Next worker: prove this type-preserving form (structural,
+  M4-sized; the `.and`/`.or`/`.ite` fold arms use `type_of_pred_is_sound` to pin the folded branch's
+  bool type), then wire §5.4 steps 1–6 against it.
+
+  **UPDATE 5 (LEAD worker #2 cont., 2026-10-11 ~17:45) — D-P9c-12 RESOLVED (D-73b form), M5 steps 1–3
+  landed, step 4 blocker found.** Per the orchestrator decision, D-P9c-12 is settled the D-73b way:
+  do NOT prove any `typeOfPred (normalize p₀) = typeOfPred p₀` bridge. The typed `.all` node STORES
+  `normalize p₀` but every well-typedness fact is indexed by the SOURCE predicate's typing.
+  LANDED (commit 439ca0c + working tree): (1) `typeOfAll` stores `PredExpr.normalize p τ c env`
+  (reordered `normalize` above `typeOfAll` for the forward ref). (2) `TypedExpr.WellTyped.all` `h₄` is
+  now the existential `∃ p₀ itTy c c' typ, p = normalize p₀ … ∧ typeOfPred p₀ … = ok(typ,_) ∧ typ bool`;
+  the `typeOf`-ok⇒WellTyped `.all` case supplies it with `p₀ = source p`, `rfl`, `hpred`. (3)
+  `normalize_wellTyped` (new, GREEN, via `PredExpr.normalize.induct`) discharges `h₃` for the stored
+  normalized predicate. (4) `type_of_all_inversion` conclusion updated to `.all tyr (normalize p τ c) …`;
+  `type_of_all_is_sound` re-greened unchanged (uses `evalAll_bool_or_qerr` for arbitrary `f`). (5)
+  `evalAll_congr` (new, GREEN): `evalAll` is congruent in `f` over the set's own members.
+  **BLOCKER (step 4 — `type_of_preserves_evaluation_results` `.all` case, `Typechecker.lean:~477`):**
+  after the store change the LHS evaluates the SOURCE `p` per element and the RHS the stored
+  `normalize p`; closing it needs `evalAll_congr` + per-element `normalize_evaluatePred`, whose
+  hypotheses include **`NoReservedItKey env`** (consumed by `type_of_pred_is_sound`). That side
+  condition is NOT a hypothesis of `type_of_preserves_evaluation_results` and is NOT derivable from
+  `env.WellFormed` (a schema could declare the reserved `context["__cedar::anyall::it"]` attr; D-P9c-7
+  threads `NoReservedItKey` as an explicit assumption). Its two real callers (`TPE/Policy.lean:78`,
+  `SymCC/WellTyped.lean:375`, both `empty_capabilities_invariant`) don't carry it either. So step 4
+  requires either (A) adding `NoReservedItKey env` as a hypothesis to
+  `type_of_preserves_evaluation_results` + plumbing it to those two callers (and wherever a
+  `NoReservedItKey` fact is sourced — likely a validator-level `env.WellFormed`+schema-reserved-name
+  lemma), OR (B) a validator-level theorem `<schema well-formed> → NoReservedItKey env`. This is a
+  cross-cutting change to a central Validation theorem that sibling branches touch, so it is the exact
+  next step to decide/execute. Also still needed for the SymCC compile arm: the entry lemma (b)
+  `CapabilitiesInvariant c → NoReservedItKey → InstanceOfType env it τ → CapabilitiesInvariantPred c it`
+  (bridge `evaluatePred (ofCapKey e) it = evaluate e` on it-free outer cap-keys), M5 step 3's
+  SymCCSupported flip + real `compile_well_typed` `.all` arm + Pred-module imports, D-79, M6.
+
+  **UPDATE 6 (LEAD worker #2 cont., 2026-10-11 ~17:55) — D-98 LANDED, entry-lemma-(b) soundness fork.**
+  D-98 (option B) is fully implemented and GREEN (commits a5aa021 + d3c90a3): `RequestType.WellFormed`
+  gains `¬ reqty.context.contains "__cedar::anyall::it"`; the executable `validateWellFormed` rejects
+  it and `request_type_validate_well_formed_is_sound` re-proves the enriched Prop; new
+  `wf_env_implies_no_reserved_it_key : env.WellFormed → NoReservedItKey env` (Pred/Basic.lean) sources
+  it from the fact callers already carry; three WF.lean reqty destructurings fixed; CedarUnitTests
+  `#guard` (UnitTest/AnyAll.lean) confirms a reserved-context env is rejected. **`NoReservedItKey` is
+  therefore now derivable at `Typechecker.lean:477` from `h₂` (`InstanceOfWellFormedEnvironment` →
+  `env.WellFormed`).** NEW BLOCKER (deeper than D-98): the entry lemma (b) that constructs
+  `CapabilitiesInvariantPred xcap it` from the outer `CapabilitiesInvariant xcap` is **unsound as a
+  for-ALL-keys statement.** `CapabilitiesInvariantPred` requires, for every `(e,.attr k) ∈ xcap`,
+  `EvaluatesToPred (.hasAttr (PredExpr.ofCapKey e) k) it = true`. `ofCapKey` collapses any `.all`/`.set`
+  subterm of `e` to `.item` (= the bound element `it`) and the reserved context access to `.item`, so
+  for an outer cap-key `e` that CONTAINS an `.all`/`.set` subterm (e.g. a cap earned by
+  `(if s.all(q) then r1 else r2) has a`, which is a legal policy), `evaluatePred (ofCapKey e) it ≠
+  evaluate e` and the bridge fails. Such keys are never actually READ by the predicate (a `PredExpr`
+  is set-/all-free by construction, so its `toCapKey` never matches an `.all`-containing outer key —
+  only request-variable-rooted, `.all`/`.set`-free keys are consulted), but `CapabilitiesInvariantPred`
+  as currently DEFINED (Pred/Basic.lean, used by all 14 proved Pred arms) quantifies over EVERY key in
+  `c`, so it still cannot be constructed for an `.all`-containing `xcap`. Resolution is a formulation
+  decision on `CapabilitiesInvariantPred` / the boundary, each rippling the proved Pred chain:
+  (A) restrict the `∀ (e,k) ∈ c` quantifier to `.all`/`.set`/reserved-free keys (and show the predicate
+  only reads such) — changes the def + re-greens the 14 arms; (B) prove/thread a typechecker invariant
+  that caps reaching an `.all` boundary have `.all`/`.set`-free keys; (C) restate `type_of_pred_is_sound`
+  to take only the keys it reads. This is the exact next decision; everything else for `:477`
+  (`evalAll_congr`, receiver `type_of_is_sound` + `instance_of_set_type_is_set`, `normalize_evaluatePred`,
+  `wf_env_implies_no_reserved_it_key`) is ready.
 - **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
   with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
   `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
@@ -444,3 +589,30 @@ _See:_ `branches/phase9-anyall-completion/PLAN.md`, DECISIONS.md D-70/D-74/D-78/
    evaluator (Phase 2/3) and reuses it for concrete receivers. Until it lands, the TPE `All` arm
    may conservatively residualize, and the non-`anyall` default build is unaffected (3.1), so
    deferring it never blocks an earlier green commit.
+
+  **UPDATE 7 (LEAD worker #2 cont., 2026-10-11 ~18:30) — D-98 + D-99 landed; validation-side
+  soundness chain GREEN & axiom-clean.** `lake build Cedar` = 648 jobs green at commit 6cec01b
+  (the only open goal is now the SymCC compile `.all` arm, below). Landed this session:
+  M4 `normalize_evaluatePred` (574fe0f); `normalize_wellTyped`, `evalAll_congr`; D-98 (validator
+  rejects reserved `__cedar::anyall::it`; `RequestType.WellFormed` conjunct; `wf_env_implies_no_reserved_it_key`;
+  CedarUnitTests `#guard`); D-99 (`Expr.isCleanCapKey`/`Capability.isClean`; `typeOfAll` filters outer
+  caps to clean keys; it-free bridge `evaluatePred_eq_evaluate_toExpr`; `toCapKey_eq_toExpr_of_mentionsIt_false`;
+  entry lemma (b) `entry_capabilities_invariant_pred`); `type_of_preserves_evaluation_results` `.all`
+  CLOSED via `evalAll_congr` + receiver `type_of_is_sound` + `normalize_evaluatePred`; `normalize_validRefs`;
+  `typeOfAll` stores `normalize p`; `WellTyped.all` h₄ D-73b existential; `type_of_all_inversion` updated;
+  all env.WellFormed/reqty ripple re-greened (Residual/Soundness, TPE/WellTyped/Var, SymCC/WellTyped,
+  SymCC/ValidRefs); Pred modules imported into Thm/Validation/Typechecker. `#print axioms` on
+  type_of_preserves_evaluation_results / entry_capabilities_invariant_pred / evaluatePred_eq_evaluate_toExpr
+  / normalize_evaluatePred = [propext, Classical.choice, Quot.sound]. SymCCSupported(.all) flipped to
+  `x₁.SymCCSupported && p.NoItDependentIn` (6cec01b).
+  **REMAINING (open goal + M6):** (1) the real `compile_well_typed` `.all` arm
+  (`WellTyped.lean:2090`, `compile_well_typed_on_wf_expr case all`): build `CompileWellTyped (.all x₁ p ty)`
+  = `∃ t, compile (Expr.all x₁.toExpr p) εnv = ok t ∧ t.typeOf = .option (ofType ty.typeOf)` from
+  the receiver IH (`compile_well_typed_on_wf_expr` on x₁, guard `hnoit : p.NoItDependentIn`) and
+  `compilePred_well_typed` (per-element Bool), tracing `compile`'s `.all` concrete-fold + symbolic
+  branches — no ready compile-success/well-typedness `.all` lemma exists (the interim never needed one),
+  so this is a sizable new SymCC proof. (2) D-79 (fold the constant-`ite` once; re-run normalize_evaluatePred).
+  (3) M6: Opt.lean D-77 completeness lane re-green, Lean validator regression (REJECT
+  `principal has "a" && context.s.all(it.a == 1)` / ACCEPT `... .all(principal.a == it)`), the new `.all`
+  completeness SymTest case, the §5.5 mutations, rebuild the Lean FFI lib + short validation DRT,
+  tasks.md T9c IMPLEMENTED. Everything up to the compile arm is GREEN sorry-free.

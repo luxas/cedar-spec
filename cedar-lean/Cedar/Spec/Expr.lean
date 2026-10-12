@@ -258,6 +258,19 @@ Rust validator's reserved unknown `__cedar::anyall::it` (D-21/D-44).
 public def itExpr : Expr := .var .principal
 
 /--
+Reserved, collision-free capability key for the quantifier element keyword `it`
+(D-97). Mirrors the Rust validator's reserved unknown `__cedar::anyall::it`
+(D-21/D-44): `it`'s capabilities must NOT share a key with any request variable,
+or an outer `principal has "a"` capability `(.var .principal, .attr "a")` would be
+read as justifying `it.a` inside a predicate — a Lean↔Rust validator parity bug
+(D-95/D-96). The key is `context.__cedar::anyall::it`; the reserved attribute name
+cannot be written in policy text and Rust's schema parser refuses `__cedar`
+names, so it is producible by ordinary typing only in a context record type that
+declares it — ruled out by `TypeEnv.NoReservedItKey` (below) where needed.
+-/
+public def itCapKey : Expr := .getAttr (.var .context) "__cedar::anyall::it"
+
+/--
 Reconstruct the `Expr` denoted by a predicate, substituting the element keyword
 `it` with `itExpr`. Used to type a predicate by reusing the ordinary expression
 typing machinery (D-44). The set-free, non-nested shape of `PredExpr` (no `set`,
@@ -286,6 +299,101 @@ decreasing_by
     omega
 
 /--
+Capability-key reconstruction of a predicate (D-97). Agrees with `toExpr` on
+every arm EXCEPT `.item`, which maps to the collision-free `itCapKey` instead of
+`itExpr`. `typeOfPred` passes this (never `toExpr`) as the capability-key argument
+to `typeOfHasAttr`/`typeOfGetAttr`/`typeOfExtHasAttr`/`typeOfBinaryApp`, so an
+`it`-rooted attribute/tag capability can never collide with a request variable's
+key. On an `it`-free predicate `toCapKey = toExpr` (`toCapKey_eq_toExpr_of_mentionsIt_false`).
+-/
+public def PredExpr.toCapKey : PredExpr → Expr
+  | .item               => itCapKey
+  | .lit l              => .lit l
+  | .var v              => .var v
+  | .ite a b c          => .ite a.toCapKey b.toCapKey c.toCapKey
+  | .and a b            => .and a.toCapKey b.toCapKey
+  | .or a b             => .or a.toCapKey b.toCapKey
+  | .unaryApp op a      => .unaryApp op a.toCapKey
+  | .binaryApp op a b   => .binaryApp op a.toCapKey b.toCapKey
+  | .getAttr a attr     => .getAttr a.toCapKey attr
+  | .hasAttr a attr     => .hasAttr a.toCapKey attr
+  | .extHasAttr a attr attrs => .extHasAttr a.toCapKey attr attrs
+  | .record axs         => .record $ axs.map₂ (λ ⟨(a, e), _⟩ => (a, e.toCapKey))
+  | .call f xs          => .call f $ xs.map₁ (λ ⟨e, _⟩ => e.toCapKey)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
+/--
+Does the predicate contain the reserved `it` capability-key access
+`context["__cedar::anyall::it"]` (`PredExpr.getAttr (.var .context)
+"__cedar::anyall::it"`)?  This is the ONLY `PredExpr` shape whose `toCapKey`
+collides with `itCapKey` (which `.item` also produces), so `toCapKey` is
+injective exactly on predicates for which this is `false` (D-P9c-7). A predicate
+well-typed under `TypeEnv.NoReservedItKey` never contains it.
+-/
+public def PredExpr.NoReservedItAccess : PredExpr → Bool
+  | .item                    => true
+  | .lit _                   => true
+  | .var _                   => true
+  | .ite c t e               => c.NoReservedItAccess && t.NoReservedItAccess && e.NoReservedItAccess
+  | .and a b                 => a.NoReservedItAccess && b.NoReservedItAccess
+  | .or a b                  => a.NoReservedItAccess && b.NoReservedItAccess
+  | .unaryApp _ e            => e.NoReservedItAccess
+  | .binaryApp _ a b         => a.NoReservedItAccess && b.NoReservedItAccess
+  | .getAttr (.var .context) attr => attr ≠ "__cedar::anyall::it"
+  | .getAttr e _             => e.NoReservedItAccess
+  | .hasAttr e _             => e.NoReservedItAccess
+  | .extHasAttr e _ _        => e.NoReservedItAccess
+  | .record axs              => axs.attach₂.all (λ x => x.val.snd.NoReservedItAccess)
+  | .call _ xs               => xs.attach.all (λ x => have := List.sizeOf_lt_of_mem x.property; x.val.NoReservedItAccess)
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    try simp at h
+    try replace h := List.sizeOf_lt_of_mem h
+    omega
+
+/--
+Total structural inverse of `toCapKey` (D-P9c-7, approach A). Maps `itCapKey`
+(`context["__cedar::anyall::it"]`) back to `.item`, recurses structurally on
+every other shape, and sends the two `Expr` shapes `PredExpr` lacks (`.set`,
+`.all`) to a harmless `.item` placeholder (unreachable on real capability keys,
+which are always `toCapKey` images). `ofCapKey (q.toCapKey) = q` for every `q`
+with `q.NoReservedItAccess` (`ofCapKey_toCapKey`).
+-/
+public def PredExpr.ofCapKey : Expr → PredExpr
+  | .lit l              => .lit l
+  | .var v              => .var v
+  | .ite a b c          => .ite (ofCapKey a) (ofCapKey b) (ofCapKey c)
+  | .and a b            => .and (ofCapKey a) (ofCapKey b)
+  | .or a b             => .or (ofCapKey a) (ofCapKey b)
+  | .unaryApp op a      => .unaryApp op (ofCapKey a)
+  | .binaryApp op a b   => .binaryApp op (ofCapKey a) (ofCapKey b)
+  | .getAttr a attr     =>
+    if a = Expr.var Var.context ∧ attr = "__cedar::anyall::it" then .item
+    else .getAttr (ofCapKey a) attr
+  | .hasAttr a attr     => .hasAttr (ofCapKey a) attr
+  | .extHasAttr a attr attrs => .extHasAttr (ofCapKey a) attr attrs
+  | .record axs         => .record $ axs.map₂ (λ ⟨(a, e), _⟩ => (a, ofCapKey e))
+  | .call f xs          => .call f $ xs.map₁ (λ ⟨e, _⟩ => ofCapKey e)
+  | .set _              => .item
+  | .all _ _            => .item
+decreasing_by
+  all_goals (simp_wf ; try omega)
+  all_goals
+    rename_i h
+    first
+      | (replace h := List.sizeOf_lt_of_mem h; omega)
+      | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
+      | omega
+
+/--
 Does the predicate syntactically mention the current set element `it`
 (`PredExpr.item`)?  SymCC uses this to keep the quantifier footprint `it`-free.
 -/
@@ -310,6 +418,18 @@ decreasing_by
     try simp at h
     try replace h := List.sizeOf_lt_of_mem h
     omega
+
+/--
+D-99: a capability key `e` is "clean" iff it is in the image of `PredExpr.toCapKey`
+(`(ofCapKey e).toCapKey = e`) AND its preimage predicate is `it`-free. A clean key is
+therefore free of set, all, and reserved-key nodes, so `evaluatePred (ofCapKey e) it =
+evaluate e` regardless of `it`. `typeOfAll` filters the OUTER capabilities to the clean
+ones before typing the predicate; acceptance-preserving because a `PredExpr`'s own
+`toCapKey` (all it ever consults) is always clean, so no usable capability is dropped
+(Rust does not filter but accepts identically — D-99; validation-DRT parity).
+-/
+public def Expr.isCleanCapKey (e : Expr) : Bool :=
+  decide ((PredExpr.ofCapKey e).toCapKey = e) && !(PredExpr.ofCapKey e).mentionsIt
 
 /--
 `p` applies no `in` (ancestors) to an `it`-dependent left operand: every

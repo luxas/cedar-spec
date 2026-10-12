@@ -42,7 +42,7 @@ open Batteries Data Spec SymCC Factory
 
 ---------- Compile is well-formed ----------
 
-private def CompileWF (x : Expr)  : Prop :=
+public def CompileWF (x : Expr)  : Prop :=
   ∀ {εnv : SymEnv} {t : Term},
     εnv.WellFormedFor x →
     compile x εnv = .ok t →
@@ -1195,7 +1195,7 @@ public theorem compile_all_symbolic_inner_wf {p : PredExpr} {εnv : SymEnv} {t�
   have hnota : (Factory.not (isSome pt)).anyAllItTyped elemTy = true := anyAllItTyped_not (anyAllItTyped_isSome hpta)
   exact wf_set_all hgt.left hgt.right hgp.left hpbool hnotw.left hnotw.right hgpn hnotn hgpa hnota
 
-private theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
+public theorem compile_all_wf {x₁ : Expr} {p : PredExpr} {εnv : SymEnv} {t : Term}
   (hwf : SymEnv.WellFormedFor εnv (Expr.all x₁ p))
   (hok : compile (Expr.all x₁ p) εnv = Except.ok t)
   (ih₁ : CompileWF x₁) :

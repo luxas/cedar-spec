@@ -472,26 +472,29 @@ theorem request_type_validate_well_formed_is_sound
   rotate_left
   · contradiction
   rename_i entry hfind
-  exists entry
-  simp only [hfind, true_and]
   -- Check that the principal matches the action
   split at hok
   rotate_left
   · contradiction
   rename_i hprinc
-  simp only [Set.contains_prop_bool_equiv.mp hprinc, true_and]
   -- Check that the resource matches the action
   split at hok
   rotate_left
   · contradiction
   rename_i hres
-  simp only [Set.contains_prop_bool_equiv.mp hres, true_and]
   -- Check that the context type is correct
   split at hok
   rotate_left
   · contradiction
   rename_i hctx
-  exact beq_iff_eq.mp hctx
+  -- D-98: the context must not declare the reserved attribute
+  split at hok
+  · contradiction
+  rename_i hnrit
+  refine ⟨⟨entry, hfind, ?_, ?_, beq_iff_eq.mp hctx⟩, ?_⟩
+  · exact Set.contains_prop_bool_equiv.mp hprinc
+  · exact Set.contains_prop_bool_equiv.mp hres
+  · simp only [Bool.not_eq_true] at hnrit; simp [hnrit]
 
 theorem env_validate_well_formed_is_sound
   {env : TypeEnv}

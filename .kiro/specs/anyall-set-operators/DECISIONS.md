@@ -189,3 +189,212 @@ whole SymTest suite 2422/2422. The optimized SymCCOpt path still rejects `.all` 
 (All.lean:59) fails; (b) drop the encoder `set.all` quantifierError filter → `AnyAll.e2e` model
 validation fails; (c) compiler fold `and`→`or` → `compile_all_fold_result_wf` (WF.lean:1258) fails.
 Details in `members/default/phase5b/m5-prep-2026-10-09.md`.
+
+## D-94 (2026-10-11, Phase 9c) — predicate type soundness is WEAK (no capability invariant)
+
+`type_of_pred_is_sound` (D-74 option A) is stated as **weak soundness**:
+
+> well-typed predicate + element value of the static element type ⇒ evaluation
+> yields a value that is an instance of the result type, OR **any** error.
+
+`EvaluatesToPred` admits any error (`∃ err, evaluatePred … = .error err`), and
+`TypeOfPredIsSound` carries **no** `CapabilitiesInvariant` hypothesis and **no**
+`GuardedCapabilitiesInvariant` conclusion — unlike the expression
+`type_of_is_sound`, which rules out `attrDoesNotExist`/`typeError` via the
+capability invariant.
+
+**Why this is enough.** Every downstream D-74-A consumer needs only value-level
+facts: `normalize_evaluatePred`'s `.and`/ff→left (and `.or`/tt, `.ite`) folds need
+"a `.bool .ff`-typed sub-predicate evaluates to `false` or errors (never `true`)",
+which `instance_of_ff_is_false` + any-error soundness delivers; the real
+`compile_well_typed` `.all` arm needs `compilePred_well_typed` (already proved) +
+the normalized form; D-79 needs the same ff/tt facts; and Part-A
+`type_of_all_is_sound` already admits `quantifierError` via `evalAll`'s dynamic
+`.as Bool` cast, so it is unchanged. Resolves **D-P9c-5** option (c).
+
+## D-95 (2026-10-11, Phase 9c) — OPEN follow-up: `itExpr` capability collision (Lean↔Rust parity) — RESOLVED-BY D-97
+
+Strong (capability-tracking) predicate soundness is **false as the spec stands**,
+because `itExpr := .var .principal` (`Cedar/Spec/Expr.lean`) and `typeOfAll`
+passes the OUTER capabilities `c` into `typeOfPred`. So a capability
+`(principal, "a")` established by `principal has "a"` OUTSIDE the quantifier is
+consulted for `it.a` INSIDE the predicate (because `it.toExpr = principal`), and
+dually an `it has "a"` capability inside is keyed `(principal, "a")`. The Rust
+validator keys `it` as the reserved unknown `__cedar::anyall::it` (D-21/D-44),
+which cannot collide — so Lean (accepts) and Rust (rejects) can **disagree** on
+e.g. `principal has "a" && context.s.all(it.a == 1)`.
+
+This is a Lean-spec precision/parity bug surfaced by the proof attempt, **not**
+fixed in 9c (D-94 sidesteps it with weak soundness). **Recommended fix for a
+later branch:** make `itExpr` collision-free (e.g.
+`.getAttr (.var .context) "__cedar::anyall::it"` (an attribute name in the `__cedar` namespace, which
+Rust reserves; note Rust refuses `namespace __cedar {…}` declarations but does NOT reject a bare
+attribute literally named `__cedar::anyall::it`, see D-98) — NOT a string-literal extension arg, since
+`typeOfCall` parses those), and add the shape to the Phase-6 generator. See the
+D-95 validator check outcome recorded alongside this entry.
+
+**D-95 validator check (2026-10-11).** Confirmed the disagreement at the
+key/code level (cheaper and more decisive than a dual schema harness, which needs
+a multi-minute `cargo` build):
+
+- **Rust** keys `it` as the reserved **`Unknown`** named `IT_SENTINEL =
+  "__cedar::anyall::it"` (`cedar/cedar-policy-core/src/ast/pred.rs:53`,
+  `is_it_sentinel`). A `principal has "a"` capability is keyed by the `principal`
+  expression, which is a DIFFERENT key from the `it` unknown, so it cannot satisfy
+  `it.a`. For the policy `principal has "a" && context.s.all(it.a == 1)` with `a`
+  OPTIONAL on the element entity type, Rust's typecheck of `it.a` sees no
+  capability for the `it` unknown ⇒ **reject** (optional attr read without
+  capability).
+- **Lean** keys `it` as `itExpr = .var .principal`
+  (`cedar-lean/Cedar/Spec/Expr.lean`), the SAME expression as `principal`. The
+  outer capability `(.var .principal, .attr "a")` from `principal has "a"` IS
+  `(itExpr, .attr "a")`, so `typeOfPred (.getAttr .item "a")` finds the capability
+  and the read typechecks ⇒ **accept**.
+- **Verdict: the two validators DISAGREE** on this shape (Lean accepts, Rust
+  rejects). This is the parity bug D-95 names. Confirmed by source inspection of
+  both key schemes rather than a built dual harness; the recommended fix
+  (collision-free `itExpr`) is deferred to a later branch and NOT implemented in
+  9c, which uses weak soundness (D-94) and does not depend on capability parity.
+
+## D-96 (2026-10-11, Phase 9c) — BLOCKER: weak soundness does NOT discharge the capability-`.tt` attr/tag arms — RESOLVED-BY D-97
+
+Found while proving the `.hasAttr`/`.getAttr`/`.extHasAttr`/`.binaryApp .hasTag`/
+`.binaryApp .getTag` arms of `type_of_pred_is_sound` under D-94 weak soundness.
+
+Weak soundness admits any **error**, but when evaluation **succeeds** the value
+must still be an instance of the result **type** — and that type can be a
+*precise* `.bool .tt` / `.bool .ff` driven by a **capability**, not just the
+schema:
+
+- `hasAttrInRecord` (`Cedar/Validation/Typechecker.lean:243`) returns
+  `.bool .tt` when `(x, .attr a) ∈ c` — a capability. So
+  `typeOfPred (.hasAttr .item a) itTy c env` types as `.bool .tt` whenever
+  `(itExpr, .attr a) = (.var .principal, .attr a) ∈ c` (e.g. an outer
+  `principal has "a"` before the quantifier). But the runtime element `it` is an
+  arbitrary set member that may lack `a`, so `hasAttr it a = .ok false` —
+  **`false` is NOT an instance of `.bool .tt`**. The arm is therefore **FALSE**
+  as stated, and weak soundness (which still constrains the success value) does
+  not rescue it.
+- `typeOfHasTag`/`typeOfGetTag` (`:189`/`:200`) have the identical shape over tag
+  capabilities (`(x, .tag t) ∈ c`), so `.binaryApp .hasTag`/`.getTag` hit the same
+  wall.
+- SOUND arms (no capability-driven precise type): `.item`, `.lit`, `.var`,
+  `.unaryApp`, `.binaryApp` {eq, less, lessEq, add, sub, mul, contains,
+  containsAll, containsAny, mem}, `.call`, and `.record` (its per-attr types come
+  from `typeOfPred` on the sub-exprs, not a `hasAttr` capability). `.and`/`.or`/
+  `.ite` are sound in structure but recurse into the attr arms, so the dispatcher
+  cannot close while those are open.
+
+**Consequence.** `type_of_pred_is_sound` (and hence `normalize_evaluatePred` and
+the honest `compile_well_typed` `.all` arm) **cannot be completed in 9c** under
+the current spec, for the SAME root cause as D-95: `itExpr := .var .principal`
+collides with request-var capability keys. Weak soundness was expected to sidestep
+this (D-94) but only sidesteps the *attrDoesNotExist-as-error* half; the
+*capability-forced-precise-type* half remains.
+
+**Resolution (escalated — needs the D-95 fix, which is a one-line spec change but
+out of 9c's declared scope).** The clean fix is exactly D-95's: make `itExpr`
+collision-free so `typeOfPred (.hasAttr .item a)` can never pick up a
+request-rooted `(x, .attr a)` capability and thus never types `it.a`/`it has a`
+as a capability-driven `.tt`. With a collision-free `itExpr`, `hasAttrInRecord`'s
+`(x, .attr a) ∈ c` branch is unreachable for `it`-rooted keys, the attr/tag arms
+become `.ff`/`.anyBool`-only (schema-driven, sound), and weak soundness closes.
+This is the recommended path for completing D-74 A; it should be done in a
+dedicated change (it touches `itExpr` and must re-green the whole SymCC `.all`
+chain that depends on `itExpr`'s identity, D-21/D-44), NOT bolted onto 9c, whose
+brief explicitly said "do NOT implement the itExpr change in 9c".
+
+## D-97 (2026-10-11, Phase 9c) — RESOLVES D-95/D-96: collision-free `it` capability key + predicate capability invariant
+
+Supersedes D-94's weak-only approach (which D-96 showed is insufficient) and
+closes the D-95 parity bug at its source, IN 9c (the earlier "do not touch
+`itExpr` in 9c" guidance is withdrawn).
+
+**(a) Collision-free capability key (M0, landed green).** The root cause of
+D-95/D-96 is that `it`'s capabilities shared a key with request variables
+(`itExpr = .var .principal`). Fix: `PredExpr.toCapKey` (`Cedar/Spec/Expr.lean`),
+identical to `toExpr` except `.item ↦ itCapKey = .getAttr (.var .context)
+"__cedar::anyall::it"` (the `__cedar`-namespace name Rust uses for its `IT_SENTINEL` unknown; Rust
+does not reject an attribute so named, see D-98). `typeOfPred` now passes `toCapKey` (never `toExpr`) as the
+capability-key argument to `typeOfHasAttr`/`typeOfGetAttr`/`typeOfExtHasAttr`/
+`typeOfBinaryApp`. An `it`-rooted attr/tag capability therefore can never collide
+with `(principal, …)`, so `principal has "a" && context.s.all(it.a == 1)` no
+longer types `it.a` as a capability-`.tt` — Lean now rejects it (optional attr
+read with no `it`-rooted capability), matching Rust. `itExpr` and the
+`toExpr`-based typed-AST reconstruction are UNCHANGED, so the SymCC `.all` chain
+is untouched except two mechanical fixes in `compilePred_well_typed`
+(`WellTyped.lean`: the extHasAttr key arg, and `predExpr_toCapKey_eq_lit` for the
+binaryApp lit side conditions). `lake build Cedar` green (616 jobs);
+`CedarSymTests` 1216/1216; `CedarUnitTests` 466/466.
+
+**Side condition.** The reserved key is producible by ordinary typing only if the
+context record type declares an attribute literally named
+`__cedar::anyall::it`. A decidable `TypeEnv` well-formedness predicate ruling that
+out is taken as a hypothesis where the capability-invariant bridge needs it; Lean
+schemas are a spec and the DRT generator never emits reserved names.
+
+**(b) Predicate capability invariant (option b).** `TypeOfPredIsSound` becomes the
+true mirror of `TypeOfIsSound`: it takes `CapabilitiesInvariantPred c it request
+entities` (the `it`-bound analogue of `CapabilitiesInvariant`, over `evaluatePred`
+and `toCapKey` keys) and concludes `EvaluatesToPred` (keeping D-94's any-error
+admission — free, and keeps the `attrDoesNotExist` half out) AND the
+capability-production half `CapabilitiesInvariantPred (c ∪ c') it …` when the
+value is `true`. For an `it`-free sub-predicate `q`, `evaluatePred q it =
+evaluate q.toExpr` and `q.toCapKey = q.toExpr`, so the outer `CapabilitiesInvariant`
+implies the predicate one at the quantifier boundary (given the side condition),
+which is how `typeOfAll` discharges it. The attr/tag arms re-prove with the
+invariant (mirroring `capability_implies_{entity,record}_attribute`); D-94's
+value-only weak form is subsumed.
+
+
+## D-98 (2026-10-11, Phase 9c) — RESOLVES the M5 `NoReservedItKey` sourcing (option B)
+
+**Decision (orchestrator).** M5 step 4 (`type_of_preserves_evaluation_results`'s
+`.all` case) needs `NoReservedItKey env` to apply `normalize_evaluatePred` per set
+element, but that side condition was neither a hypothesis of the theorem nor
+derivable from `env.WellFormed`. Chosen fix = **option B**: the Lean environment
+validator now REJECTS a request-context attribute literally named `__cedar::anyall::it`, the one
+fact the `.all` chain relies on. **Parity note (review R1 NIT-1):** Rust reserves the `__cedar`
+namespace (`namespace __cedar {…}` is refused) but its schema parser does NOT reject an attribute
+merely named `__cedar::anyall::it`; after this change the Lean environment validator is strictly
+stricter than Rust on that single attribute name. This is the safe direction (Lean rejects, never
+mis-accepts), is not observable by the DRT generators (0 validation mismatches over 107k executions in
+review), and is recorded here as a known, deliberate divergence.
+
+Concretely:
+- `RequestType.WellFormed` (`Thm/Validation/Typechecker/WF.lean`) gains the
+  conjunct `¬ reqty.context.contains "__cedar::anyall::it"` — exactly
+  `NoReservedItKey env` for `env.reqty`.
+- The executable `RequestType.validateWellFormed`
+  (`Validation/EnvironmentValidator.lean`) rejects a context declaring that
+  reserved attribute, and `request_type_validate_well_formed_is_sound`
+  (`Thm/Validation/EnvironmentValidation.lean`) re-proves the enriched Prop.
+- New `wf_env_implies_no_reserved_it_key : env.WellFormed → NoReservedItKey env`
+  (`Thm/Validation/Typechecker/Pred/Basic.lean`) lets callers SOURCE
+  `NoReservedItKey` from the `InstanceOfWellFormedEnvironment` / `env.WellFormed`
+  fact they already carry.
+
+Deliberately NOT done: adding `NoReservedItKey` as a new hypothesis to
+`type_of_preserves_evaluation_results` or its TPE/SymCC callers (they get it from
+`env.WellFormed`). Regression: a CedarUnitTests case asserts a schema whose
+context declares `__cedar::anyall::it` is rejected by the environment validator.
+
+## D-99 (2026-10-11, Phase 9c) — RESOLVES the entry-lemma-(b) quantifier boundary (filter clean keys)
+
+**Decision (orchestrator).** The quantifier-boundary entry lemma — building
+`CapabilitiesInvariantPred` for a set element from the outer `CapabilitiesInvariant` —
+is unsound as a for-ALL-keys statement, because `PredExpr.ofCapKey` collapses `.all`/`.set`
+subterms (and the reserved access) of an outer cap key to `.item`, so the bridge
+`evaluatePred (ofCapKey e) it = evaluate e` fails on such keys. Chosen fix: FILTER at the
+boundary, leaving the proved 14-arm Pred chain and `CapabilitiesInvariantPred` untouched.
+
+- `Expr.isCleanCapKey e := (ofCapKey e).toCapKey == e && ¬ (ofCapKey e).mentionsIt` and
+  `Capability.isClean (e,k) := e.isCleanCapKey && (k is .tag x → x.isCleanCapKey)`.
+- `typeOfAll` types and normalizes the predicate under `c.filter Capability.isClean`;
+  the stored predicate is `normalize p τ (c.filter clean) env`; returned caps stay `c` (D-39).
+- Acceptance-preserving: a `PredExpr` is set-/all-free and (under `NoReservedItKey`) reserved-
+  free, so its own `toCapKey` — all it ever consults — is always clean; no usable capability
+  is dropped. Rust does not filter but accepts identically; the validation DRT confirms parity.
+- Entry lemma `entry_capabilities_invariant_pred` proved via the it-free bridge
+  `evaluatePred_eq_evaluate_toExpr` on clean keys. `type_of_preserves_evaluation_results` `.all`
+  now closes (GREEN, axiom-clean); `lake build Cedar` 648 jobs.

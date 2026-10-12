@@ -76,7 +76,7 @@ InstanceOfType env v (Residual.var var ty).typeOf
     rcases h₁ with ⟨hwf, ⟨_, h₁, _, _⟩, _⟩
     rw [h₁]
     have : InstanceOfEntityType env.reqty.action env.reqty.action.ty env := by
-      have ⟨_, _, ⟨_, hwf_act, _⟩⟩ := hwf
+      have ⟨_, _, ⟨⟨_, hwf_act, _, _, _⟩, _⟩⟩ := hwf
       simp [
         InstanceOfEntityType, EntityUID.WellFormed,
         ActionSchema.contains, hwf_act,

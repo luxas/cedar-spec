@@ -140,7 +140,7 @@ theorem substitute_action_preserves_valid_refs
   entities.ValidRefsFor expr ↔ entities.ValidRefsFor (substituteAction request.action expr)
 := by
   have ⟨hwf_Γ, _, ⟨_, hinst_sch⟩⟩ := hinst
-  have ⟨_, _, ⟨act_entry, hfind_act, _⟩⟩ := hwf_Γ
+  have ⟨_, _, ⟨⟨act_entry, hfind_act, _, _, _⟩, _⟩⟩ := hwf_Γ
   have heq_act : Γ.reqty.action = request.action := by
     have ⟨_, ⟨_, h, _⟩, _⟩ := hinst
     simp [h]

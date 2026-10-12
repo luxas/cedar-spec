@@ -194,7 +194,14 @@ def tests : List (TestSuite SolverM) :=
         -- itself (unsat / equivalent), and differs from `all(it>0)` (sat / non-equivalent) — `any`
         -- is existential, `all` universal.
         mkEquiv "any(it>0) ≡ any(it>0) [lowered !all(!p)]" anyXsGt0 anyXsGt0 .unsat,
-        mkEquiv "any(it>0) ≢ all(it>0)" anyXsGt0 (.all xs pGt0) .sat ] } ]
+        mkEquiv "any(it>0) ≢ all(it>0)" anyXsGt0 (.all xs pGt0) .sat ]
+      -- Phase 9c completeness (M6): a well-typed `.all` policy with NO it-dependent `in` now
+      -- compiles AND verifies through the OPTIMIZED SymCCOpt verbs (verifyEquivalentOpt), which the
+      -- D-74 interim refused. `testVerifyEquivalent` runs BOTH the unoptimized and the optimized
+      -- path; the optimized case is the completeness witness. `all(it>0) ≡ all(it>0)` is unsat
+      -- (equivalent); `all(it>0) ≢ all(it>=0)` is sat (not equivalent) — a non-vacuous pair.
+      ++ testVerifyEquivalent "all(it>0) ≡ all(it>0) [SymCCOpt]" (.all xs pGt0) (.all xs pGt0) Γ .unsat
+      ++ testVerifyEquivalent "all(it>0) ≢ all(it>=0) [SymCCOpt]" (.all xs pGt0) (.all xs pGe0) Γ .sat } ]
 
 /-! D-78 end-to-end logic selection: capture the SMTLib `(set-logic …)` line that
 `Encoder.encode` emits (via a buffer-backed solver that performs no solving) and

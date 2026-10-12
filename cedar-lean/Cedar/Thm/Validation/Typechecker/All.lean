@@ -40,6 +40,20 @@ open Cedar.Data
 open Cedar.Spec
 open Cedar.Validation
 
+/-- `evalAll` only ever applies its per-element function to members of `s`, so
+two functions agreeing on every member of `s` yield the same `evalAll`. Used to
+swap the stored (normalized) predicate for the source predicate under `evalAll`
+in `type_of_preserves_evaluation_results` (D-74 A). -/
+theorem evalAll_congr {s : Set Value} {f g : Value → Result Value}
+    (h : ∀ v ∈ s, f v = g v) :
+    evalAll s f = evalAll s g := by
+  simp only [evalAll]
+  have hmap : s.toList.mapM (fun v => (f v).as Bool) = s.toList.mapM (fun v => (g v).as Bool) := by
+    apply List.mapM_congr
+    intro v hv
+    rw [h v ((Cedar.Data.Set.mem_elts_iff_mem_set v s).mp hv)]
+  rw [hmap]
+
 /--
 **L4.** `evalAll` always yields `ok (bool _)` or `error quantifierError`, for any
 per-element function. The `.as Bool` coercion inside `evalAll` turns every
@@ -170,20 +184,21 @@ theorem type_of_all_inversion {x₁ : Expr} {p : PredExpr} {c₁ c₂ : Capabili
     (h : typeOf (.all x₁ p) c₁ env = .ok (ty, c₂)) :
     c₂ = c₁ ∧ ty.typeOf = .bool .anyBool ∧
     ∃ tyr cr τ, typeOf x₁ c₁ env = .ok (tyr, cr) ∧ tyr.typeOf = .set τ ∧
-      ty = .all tyr p (.bool .anyBool) := by
+      ty = .all tyr (PredExpr.normalize p τ (c₁.filter (Capability.isClean)) env) (.bool .anyBool) := by
   simp only [typeOf] at h
   cases hr : typeOf x₁ c₁ env <;> rw [hr] at h <;>
     simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
   rename_i tyr
   simp only [typeOfAll] at h
   split at h <;> rename_i hset
-  · cases hpred : typeOfPred p _ c₁ env <;> rw [hpred] at h <;>
+  · cases hpred : typeOfPred p _ (c₁.filter (Capability.isClean)) env <;> rw [hpred] at h <;>
       simp only [Except.bind_ok, Except.bind_err, reduceCtorEq] at h
     split at h <;> simp only [ok, err, Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h
     rcases h with ⟨h₁, h₂⟩
     subst h₁; subst h₂
-    refine ⟨rfl, by simp only [TypedExpr.typeOf], tyr.fst, tyr.snd, _, ?_, hset, rfl⟩
-    simpa using hr
+    refine ⟨rfl, by simp only [TypedExpr.typeOf], tyr.fst, tyr.snd, _, ?_, hset, ?_⟩
+    · simpa using hr
+    · simp only [hset]
   · simp only [err, reduceCtorEq] at h
 
 /--

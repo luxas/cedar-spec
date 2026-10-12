@@ -79,7 +79,7 @@ theorem partial_eval_well_typed_var {env : TypeEnv} {v : Var} {ty : CedarType} {
     cases h₄ with | action =>
     rcases h_wf with ⟨hwf, ⟨_, h_action, _, _⟩, _⟩
     have : InstanceOfEntityType env.reqty.action env.reqty.action.ty env := by
-      have ⟨_, _, _, hwf_act, _⟩ := hwf
+      have ⟨_, _, ⟨⟨_, hwf_act, _, _, _⟩, _⟩⟩ := hwf
       simp [InstanceOfEntityType, EntityUID.WellFormed, ActionSchema.contains, hwf_act]
     rw [←h_av, h_action]
     exact well_typed_entity this

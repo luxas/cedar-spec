@@ -45,6 +45,15 @@ public abbrev Capabilities := List (Expr × Key)
 
 public def Capabilities.singleton (e : Expr) (k : Key) : Capabilities := [(e, k)]
 
+/-- D-99: a capability entry `(e, k)` is "clean" iff its entity key `e` is clean
+and, for a tag capability `.tag x`, the tag-key expression `x` is clean too. Only
+clean entries survive the `typeOfAll` boundary filter, so the quantifier-boundary
+entry lemma only has to bridge keys for which `evaluatePred (ofCapKey ·) it` agrees
+with `evaluate`. A predicate's own `toCapKey`/`toExpr` are always clean, so no
+capability the predicate consults is dropped. -/
+public def Capability.isClean (ek : Expr × Key) : Bool :=
+  ek.fst.isCleanCapKey && (match ek.snd with | .tag x => x.isCleanCapKey | .attr _ => true)
+
 public abbrev ResultType := Except TypeError (TypedExpr × Capabilities)
 
 public def ResultType.typeOf : ResultType -> Except TypeError (CedarType × Capabilities) :=
@@ -413,17 +422,17 @@ public def typeOfPred (p : PredExpr) (itTy : CedarType) (c : Capabilities) (env 
   | .binaryApp op₂ x₁ x₂ => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
     let (ty₂, _) ← typeOfPred x₂ itTy c env
-    typeOfBinaryApp op₂ ty₁ ty₂ x₁.toExpr x₂.toExpr c env
+    typeOfBinaryApp op₂ ty₁ ty₂ x₁.toCapKey x₂.toCapKey c env
   | .hasAttr x₁ a => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
-    typeOfHasAttr ty₁ x₁.toExpr a c env
+    typeOfHasAttr ty₁ x₁.toCapKey a c env
   | .extHasAttr x₁ a as => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
-    let (bty, c') ← typeOfExtHasAttr ty₁ x₁.toExpr (a :: as) c env
+    let (bty, c') ← typeOfExtHasAttr ty₁ x₁.toCapKey (a :: as) c env
     ok (TypedExpr.extHasAttr ty₁ a as (.bool bty)) c'
   | .getAttr x₁ a => do
     let (ty₁, _) ← typeOfPred x₁ itTy c env
-    typeOfGetAttr ty₁ x₁.toExpr a c env
+    typeOfGetAttr ty₁ x₁.toCapKey a c env
   | .record axs => do
     let atys ← axs.mapM₂ (λ ⟨(a₁, x₁), _⟩ => (typeOfPred x₁ itTy c env).map (λ (ty, _) => (a₁, ty)))
     ok (.record atys (.record (Map.make (atys.map (λ (a, ty) => (a, .required ty.typeOf))))))
@@ -435,23 +444,6 @@ decreasing_by
   all_goals simp_wf
   all_goals (try omega)
   all_goals (rename_i h; try (replace h := List.sizeOf_lt_of_mem h); omega)
-
-/--
-Type rule for `.all` (req 6.1-6.3, D-44). The receiver `tyr` must be a set
-`.set τ`; the predicate is typed with `it : τ` and must be boolean (a non-bool
-predicate is a type error at validation, matching Rust / D-16). The result is
-`.bool .anyBool`; capabilities learned inside the predicate are dropped, so the
-enclosing capabilities `c` pass through unchanged (D-39) — `it has a` cannot
-establish a capability about the outside world.
--/
-public def typeOfAll (tyr : TypedExpr) (p : PredExpr) (c : Capabilities) (env : TypeEnv) : ResultType :=
-  match tyr.typeOf with
-  | .set τ => do
-    let (typ, _) ← typeOfPred p τ c env
-    match typ.typeOf with
-    | .bool _ => ok (TypedExpr.all tyr p (.bool .anyBool)) c
-    | _       => err (.unexpectedType typ.typeOf)
-  | ty => err (.unexpectedType ty)
 
 /--
 D-73 option B: normalize a predicate so no dead `.and`/`.or`/`.ite` branch survives that
@@ -474,8 +466,12 @@ public def PredExpr.normalize (p : PredExpr) (itTy : CedarType) (c : Capabilitie
     match typeOfPred cond itTy c env with
     | .ok (tyc, c₁) =>
       match tyc.typeOf with
-      | .bool .tt => .ite cond' (PredExpr.normalize t itTy (c ∪ c₁) env) (PredExpr.normalize t itTy (c ∪ c₁) env)
-      | .bool .ff => .ite cond' (PredExpr.normalize e itTy c env) (PredExpr.normalize e itTy c env)
+      -- D-79: a statically-constant condition keeps `cond'` (an erroring condition
+      -- must still error, D-73a) but the live branch is computed ONCE and shared, so
+      -- `normalize` does not recompute it twice (the source of the exponential blow-up).
+      -- The emitted term is definitionally `.ite cond' t' t'`, unchanged for proofs.
+      | .bool .tt => let t' := PredExpr.normalize t itTy (c ∪ c₁) env; .ite cond' t' t'
+      | .bool .ff => let e' := PredExpr.normalize e itTy c env; .ite cond' e' e'
       | _         => .ite cond' (PredExpr.normalize t itTy (c ∪ c₁) env) (PredExpr.normalize e itTy c env)
     | .error _ => .ite cond' (PredExpr.normalize t itTy c env) (PredExpr.normalize e itTy c env)
   | .and a b =>
@@ -511,6 +507,33 @@ decreasing_by
        | (replace h := List.sizeOf_lt_of_mem h; omega)
        | (replace h := List.sizeOf_snd_lt_sizeOf_list h; omega)
        | omega)
+
+/--
+Type rule for `.all` (req 6.1-6.3, D-44). The receiver `tyr` must be a set
+`.set τ`; the predicate is typed with `it : τ` and must be boolean (a non-bool
+predicate is a type error at validation, matching Rust / D-16). The result is
+`.bool .anyBool`; capabilities learned inside the predicate are dropped, so the
+enclosing capabilities `c` pass through unchanged (D-39) — `it has a` cannot
+establish a capability about the outside world.
+-/
+public def typeOfAll (tyr : TypedExpr) (p : PredExpr) (c : Capabilities) (env : TypeEnv) : ResultType :=
+  match tyr.typeOf with
+  | .set τ => do
+    -- D-99: type and normalize the predicate under the OUTER capabilities filtered to the
+    -- "clean" keys (in `toCapKey`'s image and `it`-free). A `PredExpr`'s own `toCapKey` is always
+    -- clean, so no capability the predicate could consult is dropped — acceptance is unchanged —
+    -- while the quantifier-boundary entry lemma (b) only has to bridge clean keys. Returned
+    -- capabilities stay the unfiltered `c` (D-39: the predicate's output caps are dropped).
+    let cPred := c.filter (Capability.isClean)
+    let (typ, _) ← typeOfPred p τ cPred env
+    match typ.typeOf with
+    -- D-74 option A / D-73b: TYPE the source predicate `p`, but STORE its normalization in the
+    -- `.all` node. `compilePred_well_typed` compiles `normalize p` under `p`'s (source) typing, so
+    -- the stored predicate must be `normalize p`. The node's well-typedness is indexed by the SOURCE
+    -- `p` (D-73b existential premise), never by re-typing `normalize p` (that bridge is false — D-P9c-12).
+    | .bool _ => ok (TypedExpr.all tyr (PredExpr.normalize p τ cPred env) (.bool .anyBool)) c
+    | _       => err (.unexpectedType typ.typeOf)
+  | ty => err (.unexpectedType ty)
 
 /--
 D-73 option B: `Normal p itTy c env` holds iff every `.and`/`.or`/`.ite` node in `p` has

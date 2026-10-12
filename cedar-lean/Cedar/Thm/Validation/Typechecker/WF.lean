@@ -155,11 +155,17 @@ def ActionSchema.WellFormed (env : TypeEnv) (acts : ActionSchema) : Prop :=
   acts.TransitiveActionHierarchy
 
 def RequestType.WellFormed (env : TypeEnv) (reqty : RequestType) : Prop :=
-  ∃ entry, env.acts.find? reqty.action = some entry ∧
+  (∃ entry, env.acts.find? reqty.action = some entry ∧
     -- Enforce that principal/resource/context are valid for the action
     reqty.principal ∈ entry.appliesToPrincipal ∧
     reqty.resource ∈ entry.appliesToResource ∧
-    reqty.context = entry.context
+    reqty.context = entry.context) ∧
+  -- D-98 (option B): the context record type must not declare the reserved
+  -- quantifier-element capability-key attribute `__cedar::anyall::it`. This is
+  -- exactly `NoReservedItKey env` for `env.reqty`; it mirrors the Rust schema
+  -- parser's refusal of the `__cedar` namespace, which the Lean model must encode
+  -- for the `.all` predicate-soundness chain (D-74 A / D-P9c-7) to apply.
+  ¬ reqty.context.contains "__cedar::anyall::it"
   -- Other properties, such as the well-formedness of principal/resource/context
   -- follows from the above and the well-formedness of `env.ets` and `env.acts`.
 
@@ -310,7 +316,7 @@ theorem wf_env_implies_action_wf {env : TypeEnv}
   EntityUID.WellFormed env env.reqty.action
 := by
   have ⟨_, _, hwf_req⟩ := hwf
-  have ⟨_, hact, _⟩ := hwf_req
+  have ⟨⟨_, hact, _⟩, _⟩ := hwf_req
   apply Or.inr
   simp [ActionSchema.contains, hact]
 
@@ -340,7 +346,7 @@ theorem wf_env_implies_wf_request
   EntityType.WellFormed env env.reqty.resource ∧
   (CedarType.record env.reqty.context).WellFormed env
 := by
-  have ⟨_, hwf_acts, ⟨entry, hwf_act, hwf_princ, hwf_res, hwf_ctx⟩⟩ := hwf
+  have ⟨_, hwf_acts, ⟨⟨entry, hwf_act, hwf_princ, hwf_res, hwf_ctx⟩, _⟩⟩ := hwf
   have ⟨_, hwf_acts, _⟩ := hwf_acts
   have hwf_act_entry := hwf_acts env.reqty.action entry hwf_act
   have ⟨_, _, _, hwf_app_to_princ, hwf_app_to_res, _, hwf_ctx_ty⟩ := hwf_act_entry
@@ -362,7 +368,7 @@ theorem wf_env_implies_ctx_lifted
   (hwf : env.WellFormed) :
   (CedarType.record env.reqty.context).IsLifted
 := by
-  have ⟨_, hwf_acts, ⟨entry, hwf_act, _, _, hwf_ctx⟩⟩ := hwf
+  have ⟨_, hwf_acts, ⟨⟨entry, hwf_act, _, _, hwf_ctx⟩, _⟩⟩ := hwf
   have ⟨_, hwf_acts, _⟩ := hwf_acts
   have hwf_act_entry := hwf_acts env.reqty.action entry hwf_act
   have ⟨_, _, _, _, _, _, hwf_ctx_ty⟩ := hwf_act_entry
