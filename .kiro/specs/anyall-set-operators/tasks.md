@@ -397,6 +397,12 @@ bottom-up:
   TPE per-element residual refinement: a new residual shape (`AllPartial`) that keeps only the
   undecided elements of a concrete-receiver `.all` while preserving the 2.8 no-short-circuit +
   deterministic QuantifierError semantics. Lean stays conservative (D-81).
+  _Status:_ DONE (review R1: NO ACTIONABLE FINDINGS; `branches/phase9b-anyall-tpe-refinement/OUTCOMES.md`; cedar `88763028`, `bf5c09b3`; `AllPartial{decided_false,pending}` per
+  D-92/FORK-3, idempotent re-interpret arm, re-expansion `[<pending>,!decided_false].all(it)`
+  D-P9b-1; parity + 3 deterministic mutation checks, each verified to turn the real fold red;
+  feature matrix green — core whole-lib `tpe,anyall` 1743 / default 1564 / `anyall` 1625 / `tpe`
+  1660 / all-features 1864; non-anyall `tpe::` byte-unchanged 93; `clippy --all-features --lib`
+  clean). Review follows.
 - **T9c — D-74 option A + D-79** (`phase9c-anyall-pred-type-soundness`, L–XL, critical path). Build
   `type_of_pred_is_sound` (predicate type soundness over `PredExpr`/`evaluatePred`), then
   `normalize_evaluatePred`; wire `typeOfAll` to store `PredExpr.normalize p₀`; restore the real
