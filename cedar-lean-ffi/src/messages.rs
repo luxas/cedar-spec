@@ -381,6 +381,25 @@ pub mod tpe {
                         out.fn_name = Some(cedar_policy::proto::models::Name::from(fn_name));
                         out.children = args.iter().map(child).collect();
                     }
+                    // A `.all` / `.any` TPE residual has no `proto::residual::Kind`
+                    // representation: the protobuf schema shared with the Lean
+                    // backend predates the set-quantifier operators, and the
+                    // Lean-coupled TPE `.all` items are deferred (D-75). This
+                    // proto mapper only feeds the TPE-is-authorized abstract
+                    // differential, whose inputs are a fixed set of quantifier-free
+                    // policies over a schema with no set attributes, so a `.all`
+                    // residual can never reach this arm. If a future target does
+                    // drive a `.all` residual here, it must first gain a proto
+                    // `Kind::All` + Lean decoder (Phase 9 Lean-coupled follow-up),
+                    // not be silently mis-serialized -- hence an explicit panic.
+                    #[cfg(feature = "anyall")]
+                    K::All { .. } => {
+                        unreachable!(
+                            "serializing a `.all`/`.any` TPE residual to the Lean proto is \
+                             unsupported (no `Kind::All`, deferred per D-75); no current fuzz \
+                             target can produce one here"
+                        )
+                    }
                 },
             }
             out
