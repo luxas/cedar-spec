@@ -1,0 +1,16 @@
+; D-70 B probe 1: single-level set.filter grounding of acyclicity + element-vs-named-term
+; Entities of type E are an abstract sort; ancestors UF: anc : E -> (Set E)
+(set-logic HO_ALL)
+(declare-sort E 0)
+(declare-fun anc (E) (Set E))        ; ancestors-of-type function (the uuf)
+(declare-const S (Set E))            ; the symbolic receiver set (footprint SET entry)
+(declare-const c E)                  ; a named footprint term (entity literal/var)
+; acyclicity over S: every element x in S satisfies (not (member x (anc x)))
+; grounded as: filter(lambda x. not(member x (anc x)), S) = S
+(assert (= (set.filter (lambda ((x E)) (not (set.member x (anc x)))) S) S))
+; element-vs-term transitivity: for every x in S, if c in anc(x) then anc(c) subset anc(x)
+(assert (= (set.filter (lambda ((x E)) (=> (set.member c (anc x)) (set.subset (anc c) (anc x)))) S) S))
+; a concrete probe: force S nonempty and ask whether some element can be its own ancestor (should be excluded)
+(declare-const e E)
+(assert (set.member e S))
+(check-sat)

@@ -32,6 +32,7 @@ decisions that may need the owner's attention are in `DECISIONS.md`.
 | 6.5 | `phase6.5-anyall-tpe` | DONE — review converged (2 rounds: R1 3 findings fixed, R2 NO ACTIONABLE FINDINGS + 1 nit hardened). W1–W4 (cedar `71c6912`) + R1 fixes `004c032`/`821313c`/`4b365ea` + R2 hardening `9dc62e8`: `ResidualKind::All`, concrete-receiver fold (re-implemented over `Residual`, parity-tested vs Phase-3), residual passthrough, central stray-`it` backstop (closes D-32). tpe tests 93→109 (+16 anyall-gated), whole-lib 1737; non-anyall byte-unchanged; full feature matrix + clippy green. D-80 (corrected)/D-81/D-82/D-83. Lean refinement skipped (D-81). **Rebase onto Phase 6's final tip pending.** |
 | 7 | `phase7-anyall-docs` | DONE — review converged (R1: 2 findings fixed, docsrs badge + a local path; R2: NO ACTIONABLE FINDINGS); see `branches/phase7-anyall-docs/OUTCOMES.md`. A1–E1 done: rustdoc (`anyall` in both `lib.rs`, enriched `Expr::all`/`any`, runnable gated doctest on `SetTermInQuantifier`), CHANGELOGs (`cedar-policy` + `cedar-policy-symcc`; core has none), Lean doc comments verified (already complete), `cedar-drt` README `anyall` section, paste-ready `docs/language-reference-anyall.md` + `docs/CEDAR-DOCS-HANDOFF.md`, design.md Phase-7 feature-summary/open-items section, OQ-1 cross-link. D-84/85/86. Doctests 34→35; rustdoc adds no new diagnostics (pre-existing repo doc-lint debt only). |
 | 8 | `phase8-anyall-cvc5-benchmarks` | DONE — review converged (R1: 2 LOW fixed; R2: 2 provenance fixed; R3: NO ACTIONABLE FINDINGS); see `branches/phase8-anyall-cvc5-benchmarks/OUTCOMES.md`. harness `cedar-drt/fuzz/fuzz_targets/anyall_symcc_bench.rs` (`anyall`-gated `bench=false` bin, un-opt verbs, D-P8-nonvac `set.filter`/`HO_ALL` gate). Full sweep: 117 rows, 0 vacuous, repeats=3, wall ≈25 s (D-87 cap 5400 s not exhausted). Set-size is the only steep axis (7→1049 ms, N=0→64); cliff at N≈128→192 where the 1 GiB cap OOMs (`data/cliff-setsize.json`). Other six dimensions flat (≤15 ms). Smoke=27 rows in ~1 s. See `branches/phase8-anyall-cvc5-benchmarks/{PLAN,RESULTS}.md` + `data/`. Prereq: fixed `cedar-lean-ffi` proto mapper's missing `.all` TPE-residual arm. |
+| 9 | `phase9-anyall-completion` | IN PROGRESS — completion phase (D-74 A + D-70 B + req 7.3 + D-78 + D-79); see `branches/phase9-anyall-completion/PLAN.md`. Four stacked sub-branches: `phase9a-anyall-ho-all-logic` (D-78, XS) **IMPLEMENTED** (review follows), `phase9b-anyall-tpe-refinement` (req 7.3/D-80, M, Rust-only), `phase9c-anyall-pred-type-soundness` (D-74 A + D-79, L–XL, critical path), `phase9d-anyall-set-footprint` (D-70 B, L, stacked on 9c). D-70 B decidability **settled GO** by a raw-cvc5 1.4.1 probe (nested `set.filter` transitivity decides sat/unsat in ms; `branches/phase9-anyall-completion/probe/d70b/`). Decisions D-89..D-93. |
 
 ---
 
@@ -369,23 +370,55 @@ times cvc5 on each verb.
   _Satisfies:_ 5.4 (documents the practical analyzability envelope).
 
 
-## Phase 9 — Enforcer set-footprint extension (D-70 option B) — PLANNED-LATER (not in current stack)
+## Phase 9 — `.all`/`.any` completion — PLANNED
 
-Follow-up to D-70 (RESOLVED 2026-10-09: option A shipped in Phase 5B; option B deferred to here).
-The user placed this at **Phase 9**, the very end of the stack, AFTER Phase 8 benchmarks. This is now
-the concrete meaning of "Phase 9" — superseding the historical "phase 9 = end of the branch stack"
-reading in D-01 (there is no separate abstract Phase 9; this is it).
+The final phase. It lands the five items earlier phases deferred, closing the honest narrowings
+left behind by Phase 5B (SymCC `.all` completeness) and the TPE/footprint restrictions. Full plan +
+sub-branch split + green bars: `branches/phase9-anyall-completion/PLAN.md`. Decisions D-89..D-93.
 
-Phase 5B option A keeps the quantifier footprint `it`-free by having `compile` reject `.all`
-predicates that apply `in` (the ancestors UF) to an `it`-dependent left operand. Phase 9 lifts that
-restriction by extending the Enforcer with SET-TYPED footprint entries (the receiver set itself),
-grounding the hierarchy assumptions via `set.filter` instead of only over finitely-many named entity
-Terms, and extending `SameOn` to grant ancestor agreement over the filtered set. Scope: acyclicity for
-a set entry is one `set.filter`; element-vs-footprint-term transitivity is one `set.filter`;
-element-vs-element transitivity is a `set.filter` NESTED over the same set — whose SMT decidability
-(does cvc5's `ALL`/`set.filter` fragment stay decidable under the nested quantifier?) is the open
-question this phase must settle before committing to the encoding. Status: PLANNED-LATER.
-_See:_ `branches/phase9-anyall-set-footprint/PLAN.md`, DECISIONS.md D-70.
+Branches: cedar-spec `phase9-anyall-completion` cut from `phase8-anyall-cvc5-benchmarks`; nested
+cedar `phase9-anyall-completion` cut from `phase7-anyall-docs`. Four stacked sub-branches, merge
+bottom-up:
+
+- **T9a — D-78** (`phase9a-anyall-ho-all-logic`, XS, independent) — **DONE** (review R1: NO ACTIONABLE FINDINGS; see `branches/phase9a-anyall-ho-all-logic/OUTCOMES.md`).
+  Select SMT logic `HO_ALL` only
+  when the asserted terms contain a `set.all` term; keep the first-order logic otherwise (Lean
+  encoder; Rust encoder byte-matches per D-36). Lean `Term.containsSetAll` + `encode` logic
+  selection (`Cedar/SymCC/Encoder.lean`); identical Rust `Term::contains_set_all` + `logic_for`
+  helper at both `set_logic` call sites (`cedar-policy-symcc/src/symcc/{term,symcc}.rs`). First-order
+  literal confirmed `ALL` by git blame (pre-Phase-5B, 82b32d4). Green: `lake build Cedar SymCC
+  SymTest`; `CedarSymTests` 1216/1216 unchanged; `cargo test -p cedar-policy-symcc --features anyall
+  --lib` 145/145 + cvc5 `--test anyall` 3/3. Non-vacuity: per-engine deterministic logic-selection
+  checks (Lean build-time `#eval` + `#guard`s in `SymTest/AnyAll.lean`; Rust
+  `d78_logic_selection_ho_all_only_for_set_all` unit test). Mutations caught per engine (force
+  `needsHO` true/false; force `logic_for` → one constant). Differential: `symcc-smt-script-drt`
+  (60044 runs) and `symcc-cex-drt` (41996 runs) byte-match after rebuilding the Lean FFI static lib.
+- **T9b — req 7.3 / D-80 full** (`phase9b-anyall-tpe-refinement`, M, Rust-only, independent). Rust
+  TPE per-element residual refinement: a new residual shape (`AllPartial`) that keeps only the
+  undecided elements of a concrete-receiver `.all` while preserving the 2.8 no-short-circuit +
+  deterministic QuantifierError semantics. Lean stays conservative (D-81).
+- **T9c — D-74 option A + D-79** (`phase9c-anyall-pred-type-soundness`, L–XL, critical path). Build
+  `type_of_pred_is_sound` (predicate type soundness over `PredExpr`/`evaluatePred`), then
+  `normalize_evaluatePred`; wire `typeOfAll` to store `PredExpr.normalize p₀`; restore the real
+  `compile_well_typed` `.all` arm (lift the D-74-interim) so SymCC `.all` **completeness** holds
+  honestly; and (D-79) fold `normalize`'s constant-`ite` to the live branch once instead of
+  duplicating, now that `normalize_evaluatePred` licenses it. _Satisfies:_ 5.1 (completeness), 6.4
+  (closes the F2 dead-code debt).
+- **T9d — D-70 option B** (`phase9d-anyall-set-footprint`, L, stacked on 9c). Extend the Enforcer
+  with set-typed footprint entries (the receiver set), grounding acyclicity/transitivity via
+  `set.filter`, and extend `SymEntities.SameOn`/`SymEnv.SameOn` to grant ancestor agreement over the
+  set's elements; drop the option-A `it`-dependent-`in` guard from `compile`'s `.all` arm. The
+  element-vs-element transitivity nested-`set.filter` decidability question is **settled GO** by a
+  raw-cvc5 1.4.1 probe (`branches/phase9-anyall-completion/probe/d70b/` — decides sat/unsat in ms, no
+  `unknown`). Rust `cedar-policy-symcc` enforcer mirrors the grounding for the `symcc-*` differential.
+  _Satisfies:_ 5.1/5.3 for `it`-dependent `in`.
+
+Motivation and background for D-70 B (carried from the superseded stub): Phase 5B's option A keeps
+the quantifier footprint `it`-free by rejecting a predicate whose `in` applies to an `it`-dependent
+left operand; option B lifts that by naming the receiver set as a footprint entry and grounding the
+hierarchy assumptions over it via `set.filter`. See DECISIONS.md D-70, D-89, D-90.
+Status: PLANNED.
+_See:_ `branches/phase9-anyall-completion/PLAN.md`, DECISIONS.md D-70/D-74/D-78/D-79/D-80 and D-89..D-93.
 
 ---
 

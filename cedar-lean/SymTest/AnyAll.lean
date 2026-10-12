@@ -77,6 +77,23 @@ private def In (nval : BitVec 64) : Interpretation :=
 #guard allN.interpret (In 0) == Term.some (Term.prim (.bool true))
 #guard allN.interpret (In 1) == Term.some (Term.prim (.bool false))
 
+/-! D-78 logic selection, term level: `Term.containsSetAll` detects a `set.all`
+node structurally (true), and is false on a `set.all`-free term, so `encode`
+emits the higher-order `HO_ALL` logic exactly when some asserted term carries a
+`set.all` and the first-order `ALL` otherwise. Pure, build-time guards. -/
+#guard (allT [1, 2]).containsSetAll == true
+#guard (allErr [1, 7]).containsSetAll == true
+-- a `set.all` nested under other structure is still found.
+#guard (Factory.someOf (allT [1, 2])).containsSetAll == true
+#guard (Term.set (Set.mk [allT [1, 2]]) (.option .bool)).containsSetAll == true
+-- the predicate value/err bodies (no `set.all` node) and a plain term are false.
+#guard predT.containsSetAll == false
+#guard errT.containsSetAll == false
+#guard (lit 7).containsSetAll == false
+#guard (Factory.bvslt (0 : BitVec 64) it).containsSetAll == false
+-- mutation sentinel: a non-`set.all` app does not spuriously report true.
+#guard (mkset [1, 2]).containsSetAll == false
+
 end SymTest.AnyAll
 
 /-! End-to-end symbolic `.all` tests through the encoder + cvc5. -/
@@ -178,5 +195,55 @@ def tests : List (TestSuite SolverM) :=
         -- is existential, `all` universal.
         mkEquiv "any(it>0) ≡ any(it>0) [lowered !all(!p)]" anyXsGt0 anyXsGt0 .unsat,
         mkEquiv "any(it>0) ≢ all(it>0)" anyXsGt0 (.all xs pGt0) .sat ] } ]
+
+/-! D-78 end-to-end logic selection: capture the SMTLib `(set-logic …)` line that
+`Encoder.encode` emits (via a buffer-backed solver that performs no solving) and
+assert a `.all` query emits `(set-logic HO_ALL)` while a `.all`-free query emits
+`(set-logic ALL)`. Build-time `#eval` assertions (they panic on mismatch during
+`lake build SymTest`), so they do NOT change the runtime `CedarSymTests` count.
+
+Mutation coverage: forcing `needsHO := true` always ⇒ the `.all`-free assertion
+below fails (would read `HO_ALL`); forcing `needsHO := false` always ⇒ the `.all`
+assertion fails (would read `ALL`), and separately a real `.all` query then
+parse-errors under `ALL`, caught by the cvc5-backed `AnyAll.e2e` suite above. -/
+
+private def Γenv : SymEnv := SymEnv.ofTypeEnv Γ
+
+-- Extract the `(set-logic …)` line emitted by `encode` for the given asserts.
+private def emittedSetLogic (asserts : Asserts) : IO String := do
+  let buffer ← IO.mkRef ⟨ByteArray.empty, 0⟩
+  let _ ← (Encoder.encode asserts Γenv (produceModels := true)) |>.run (← Solver.bufferWriter buffer)
+  let script := (String.fromUTF8? (← ST.Ref.get buffer).data).getD ""
+  match (script.splitOn "\n").find? (·.startsWith "(set-logic ") with
+  | some line => return line
+  | none      => return "<no set-logic emitted>"
+
+-- Compile a single `.all` expression to its symbolic `Term` (carries an
+-- `Op.set.all` node, D-68) and a single `.all`-free boolean expression (no such
+-- node). Asserting these directly drives `encode`'s logic selection over the
+-- exact compiled shapes — more robust than a policy-equivalence VC, which can
+-- simplify the quantifier away. `panic!` on an unexpected compile error so the
+-- build fails loudly rather than silently selecting `ALL` on an empty list.
+private def allAsserts : Asserts :=
+  match compile (.all xs pGt0) Γenv with
+  | .ok t    => [t]
+  | .error e => panic! s!"D-78 test setup: compiling `.all` failed: {reprStr e}"
+private def plainAsserts : Asserts :=
+  match compile (.binaryApp .less (.lit (.int 0)) nAttr) Γenv with
+  | .ok t    => [t]
+  | .error e => panic! s!"D-78 test setup: compiling `.all`-free expr failed: {reprStr e}"
+
+#eval do
+  -- sanity: the setup asserts are shaped as intended before asserting the logic.
+  if !(allAsserts.any (fun t => Term.containsSetAll t)) then
+    throw (IO.userError "D-78 test setup: `.all` asserts unexpectedly contain no set.all node")
+  if plainAsserts.any (fun t => Term.containsSetAll t) then
+    throw (IO.userError "D-78 test setup: `.all`-free asserts unexpectedly contain a set.all node")
+  let hoLine ← emittedSetLogic allAsserts
+  if hoLine != "(set-logic HO_ALL)" then
+    throw (IO.userError s!"D-78: expected `(set-logic HO_ALL)` for a `.all` query, got `{hoLine}`")
+  let foLine ← emittedSetLogic plainAsserts
+  if foLine != "(set-logic ALL)" then
+    throw (IO.userError s!"D-78: expected `(set-logic ALL)` for a `.all`-free query, got `{foLine}`")
 
 end SymTest.AnyAll.E2E
