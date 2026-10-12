@@ -712,3 +712,16 @@ name = "partial-request-consistency-drt"
 path = "fuzz_targets/partial-request-consistency-drt.rs"
 test = false
 doc = false
+
+# Phase 8 (anyall-set-operators): cvc5 runtime benchmark harness. Not a
+# libfuzzer target — a fixed parameterized sweep driven by `main()`. Gated
+# behind `anyall` and excluded from the default build/test/bench/doc paths
+# (mirrors the `symcc-check-*-ok` bins), so a plain `cargo test` never builds
+# or runs it.
+[[bin]]
+name = "anyall_symcc_bench"
+path = "fuzz_targets/anyall_symcc_bench.rs"
+test = false
+doc = false
+bench = false
+required-features = ["anyall"]
