@@ -87,3 +87,21 @@ tar xzf corpus-tests.tar.gz
 cd ../../cedar-drt
 cargo test --features "integration-testing"
 ```
+
+## Experimental: the `anyall` feature
+
+The non-nested set quantifiers `.all` / `.any` (spec `anyall-set-operators`) are gated behind
+the off-by-default `anyall` cargo feature on every surface. In the DRT, building with
+`--features anyall` turns on the generator arm (via `ABACSettings::enable_anyall`, which the
+fuzz targets set from `cfg!(feature = "anyall")`); with the feature off, no `.all`/`.any` node
+is ever generated, so the Rust and Lean engines are compared only on the shared language
+fragment.
+
+- The generator (`cedar-policy-generators`) emits `ExprKind::All` nodes with a set-typed
+  receiver and a freshly generated **set-free, non-nested** predicate over `it`. It also emits
+  the lowered `.any` shape (`!all(!p)`) so the `.any` surface and its lowering identity are
+  actually exercised, and — at a low weight — a SymCC-unsupported shape (a predicate whose `in`
+  has an element-dependent left operand), which both engines must reject in lockstep.
+- Build with `LD_PRELOAD` **unset** (the preload is only for *running* Lean-linked binaries;
+  it breaks the linuxbrew `protoc` at build time).
+
